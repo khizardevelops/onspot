@@ -14,6 +14,7 @@ import { synthesizeFrench } from '$lib/adapters/tts/service';
  */
 const cache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
+const MAX_WORD_CACHE = 48;
 let current: HTMLAudioElement | null = null;
 let playToken = 0;
 
@@ -46,6 +47,13 @@ async function synthesize(word: string): Promise<string> {
 		openaiApiKey: get(openaiApiKey) || undefined
 	})
 		.then((speech) => {
+			if (cache.size >= MAX_WORD_CACHE) {
+				const oldest = cache.entries().next().value as [string, string] | undefined;
+				if (oldest) {
+					cache.delete(oldest[0]);
+					URL.revokeObjectURL(oldest[1]);
+				}
+			}
 			cache.set(key, speech.url);
 			inflight.delete(key);
 			return speech.url;

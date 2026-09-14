@@ -1,49 +1,58 @@
 # Last Session
 
 ## Outcome
-Built a standalone, **1:1 interactive** sandbox of the chat-history UI under
-`src/routes/ui-sandbox/`, per the revised `docs/prompts/ui-capture.md`, with production untouched.
+Redesigned the live product UI around shadcn-svelte primitives, fixed deletion feedback semantics,
+made the card conveyor visually explicit, and moved/capped costly local-model work so interaction
+stays responsive. A follow-up made the complete Coach notes pane collapsible and phone-first.
 
-### Approach: clone and clean, keep interactivity
-- The earlier "flattened / peak-clutter" sandbox (all `{#if}` removed, all disclosures forced
-  open) was replaced. The revised brief asks for the opposite: preserve state logic and
-  progressive disclosure so the UI behaves like the real product.
-- Production `AttemptStream.svelte`, `AttemptCard.svelte` and `stores/practice.ts` remain
-  unmodified.
-- New self-contained `Mock*` files under `src/routes/ui-sandbox/components/`:
-  - `MockTranscript.svelte` — token split, correction tagging, hover tooltips, click/​keyboard
-    selection. `playWord()` replaced with local simulated playback state.
-  - `MockAttemptCard.svelte` — all translation state and `{#if}` blocks kept (menu, variants,
-    breakdown, segments, voice selector). Store/TTS/LLM calls replaced with local state
-    (simulated spinners/playback).
-  - `MockAttemptStream.svelte` — explicit card selection, deterministic 1050ms lift, compositor
-    conveyor, floor spacer and `ResizeObserver` kept. Practice store replaced with bindable local
-    state.
-  - `MockFeedbackPanel.svelte` — the correction sidebar (linked transcript marks, read-back
-    buttons, session stats), ported out of `+page.svelte` into its own interactive mock.
-  - `+page.svelte` — hardcoded realistic live session and bindable active attempt/correction state.
+## UI and interaction
+- Installed shadcn Tabs, Dropdown Menu, Collapsible, Progress, Separator, Tooltip, Select and
+  Alert Dialog primitives; `components.json` now uses the supported `nova` style.
+- Replaced all seven native Settings selects with labelled shadcn Select popovers.
+- Rebuilt Practice, AttemptCard and the extracted FeedbackPanel with layered glass surfaces,
+  gradient accents, smoother state transitions and accessible primitive-based controls.
+- Feedback now reads `7 All / 2 Errors / 3 Warnings / 2 Suggestions`; Grammar, Register, Fillers
+  and Style live in the hamburger menu with counts.
+- Deletions (`original` nonempty, `replacement` empty) show a struck original and **Remove** badge,
+  never an arrow. The prompt now defines the empty-replacement contract and asks for concrete,
+  nonredundant labels; `correctionTitle()` cleans legacy/redundant labels.
+- The conveyor uses scroll-driven 3D rotation/translation/fade with an unsupported-browser rAF
+  fallback. All motion disables under `prefers-reduced-motion`.
+- At <=640px the rail becomes a bottom navigation bar. The full requested feedback labels remain
+  visible at 390x844 without horizontal overflow.
+- Coach notes now opens and closes through a labelled shadcn Collapsible trigger. Desktop reduces
+  it to a 64px icon/count rail; phones start with a 58px bar and gain the screen space for attempts.
+  Opening uses a 42%-height scrollable review pane, and choosing transcript feedback reopens it.
 
-### Hardcoded "live" data
-- A French proverb (`Petit à petit, l'oiseau fait son nid`) with idiomatic + two idiomatic
-  variants + literal + word-for-word and an ordered word breakdown.
-- Four attempts, 15 inline corrections across grammar/register/filler/style with exam status and
-  formal alternatives.
-
-### Repomix
-- `package.json`: `"bundle:ui": "npx repomix --include \"src/routes/ui-sandbox/**/*.svelte\"
-  --output \"repomix/ui-sandbox-bundle.xml\""`.
-- Output lives in the gitignored `repomix/` folder, not the repo root. The root is kept clean.
-- Bundle: 5 files, ~16.3k tokens. No product files included.
+## Performance
+- New `tts.worker.ts` + `WorkerPiperAdapter.ts`: Piper config download, G2P and ONNX inference are
+  lazy/off-main-thread; requests serialize, PCM transfers, one voice stays resident, and models
+  dispose after 90 seconds idle.
+- Whisper threads cap at two on capable machines and one elsewhere; Whisper also disposes after
+  90 seconds idle.
+- Reworked Piper weight caching to stream to Cache Storage and one growable inference buffer,
+  avoiding multiple full model copies.
+- Reduced broad reactive churn: 25Hz mic level, 4Hz elapsed timer, separate audio activity store,
+  bounded/revoked blob URLs, parallel correction DB reads, one observed stream card, and
+  `content-visibility` for old cards.
+- Font imports are Latin-only rather than every language subset.
 
 ## Verification
-- `npm run check`: 0 errors and 0 warnings.
-- `npm run build`: clean static build.
-- Headless Chrome `/ui-sandbox/`: menu starts closed and translations hidden; clicking Translate
-  opens the menu; "Compare all three" reveals idiomatic + word-for-word; alternatives/breakdown
-  controls; segment panel toggles; voice selector only on the active card; clicking a feedback
-  correction highlights the transcript mark and vice versa; clicking a card moves the active
-  index and updates the feedback panel; no page errors.
+- `npm run check`: 0 errors, 0 warnings.
+- `npm run build`: successful static production build.
+- Headless Chrome seeded five attempts and seven corrections: severity tabs/counts, category menu,
+  deletion strike-through, cleaned labels, animated disclosure, conveyor transform, reduced motion,
+  and 390px responsive layout all passed with no runtime/console errors.
+- The same browser suite verifies Coach notes close/reopen on desktop, its 440px→64px animated
+  column change, closed-first 390px layout, 58px→329px mobile expansion, linked-correction reopen,
+  reduced motion and zero horizontal overflow.
+- Settings has zero native selects, seven labelled shadcn Select triggers, working option changes,
+  user-facing selected labels, and no horizontal overflow at 390px.
+- Cold Piper Tom runtime test on a fresh origin: downloaded 64MB and generated 2.94s of speech in
+  44.9s while the page delivered 2,688 animation frames; maximum sampled main-thread gap was 87ms.
 
-## Limits and next work
-- Phase 3 BYOC sync is still next (see `memory/tasks.md`).
-- The sandbox is dev tooling only; not linked from the product nav.
+## Next work
+- Phase 3 BYOC sync remains the next feature phase.
+- A complete Whisper-small + configured LLM practice run and Piper Tom EQ/loudness pass remain.
+- Automated axe/visual regression coverage and true virtualization for extreme histories remain
+  worthwhile follow-ups.

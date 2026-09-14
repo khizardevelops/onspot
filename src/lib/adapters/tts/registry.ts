@@ -1,5 +1,6 @@
 import type { ITTSAdapter } from './BaseTTSAdapter';
 import { PiperAdapter } from './PiperAdapter';
+import { PIPER_VOICES } from './voices';
 import type { ModelProgress, TtsModelConfig, TtsSynthesis } from '../../types';
 
 /**
@@ -32,13 +33,7 @@ class TTSRegistry {
     // One card per download. A card's config only covers choices that reuse the
     // same weights (speaker within a multi-speaker voice); a different Piper
     // voice is a different download, so it stays its own card.
-    const piperVoices: Array<[string, string, string, string]> = [
-      ['piper-tom-medium', 'Piper Tom (M, medium)', 'fr/fr_FR/tom/medium/fr_FR-tom-medium.onnx', '~64 MB · 44 kHz'],
-      ['piper-upmc-medium', 'Piper UPMC (medium)', 'fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx', '~77 MB · 22 kHz · 2 speakers'],
-      ['piper-siwis-medium', 'Piper Siwis (F, medium)', 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx', '~63 MB · 22 kHz'],
-      ['piper-mls-medium', 'Piper MLS (medium)', 'fr/fr_FR/mls/medium/fr_FR-mls-medium.onnx', '~77 MB · 22 kHz · 125 speakers'],
-    ];
-    for (const [id, name, voicePath, downloadSize] of piperVoices) {
+    for (const { id, name, voicePath, downloadSize } of PIPER_VOICES) {
       const a = new PiperAdapter({ id, name, voicePath, downloadSize });
       this.adapters.set(a.config.id, a);
     }
@@ -76,6 +71,19 @@ class TTSRegistry {
     if (!adapter) throw new Error(`TTS adapter "${id}" not found`);
     if (adapter.status !== 'ready') await adapter.load();
     return adapter.synthesize(text);
+  }
+
+  /** Keep no more than one 63–77 MB voice session resident at a time. */
+  public async disposeOthers(activeId: string): Promise<void> {
+    for (const [id, adapter] of this.adapters) {
+      if (id !== activeId && adapter.status === 'ready') await adapter.dispose();
+    }
+  }
+
+  public async disposeAll(): Promise<void> {
+    for (const adapter of this.adapters.values()) {
+      if (adapter.status !== 'unloaded') await adapter.dispose();
+    }
   }
 }
 

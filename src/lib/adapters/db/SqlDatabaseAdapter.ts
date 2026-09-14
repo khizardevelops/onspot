@@ -275,7 +275,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 		const db = await this.sql();
 		const rows = await db.select<Row & { formalAlternatives: string | null }>(
 			`SELECT id, attempt_id AS attemptId, category, severity, label, original, replacement,
-			        replacement_translation AS replacementTranslation, explanation,
+			        replacement_translation AS replacementTranslation,
+			        start_index AS startIndex, end_index AS endIndex, explanation,
 			        speak_text AS speakText, exam_status AS examStatus,
 			        formal_alternatives AS formalAlternatives, sort_order AS sortOrder,
 			        created_at AS createdAt
@@ -289,7 +290,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 		const db = await this.sql();
 		const rows = await db.select<Row & { formalAlternatives: string | null }>(
 			`SELECT id, attempt_id AS attemptId, category, severity, label, original, replacement,
-			        replacement_translation AS replacementTranslation, explanation,
+			        replacement_translation AS replacementTranslation,
+			        start_index AS startIndex, end_index AS endIndex, explanation,
 			        speak_text AS speakText, exam_status AS examStatus,
 			        formal_alternatives AS formalAlternatives, sort_order AS sortOrder,
 			        created_at AS createdAt
@@ -309,9 +311,9 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 			await db.execute(
 				`INSERT INTO corrections
 					(id, attempt_id, category, severity, label, original, replacement,
-					 replacement_translation, explanation, speak_text, exam_status,
-					 formal_alternatives, sort_order, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					 replacement_translation, start_index, end_index, explanation, speak_text,
+					 exam_status, formal_alternatives, sort_order, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				[
 					c.id,
 					attemptId,
@@ -321,6 +323,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 					c.original,
 					c.replacement,
 					c.replacementTranslation,
+					c.start,
+					c.end,
 					c.explanation,
 					c.speakText,
 					c.examStatus satisfies ExamStatus | null,
@@ -538,6 +542,8 @@ function mapCorrection(row: Row & { formalAlternatives: string | null }): Correc
 		original: String(row.original),
 		replacement: String(row.replacement),
 		replacementTranslation: (row.replacementTranslation as string | null) ?? null,
+		start: typeof row.startIndex === 'number' ? row.startIndex : null,
+		end: typeof row.endIndex === 'number' ? row.endIndex : null,
 		explanation: String(row.explanation),
 		speakText: (row.speakText as string | null) ?? null,
 		examStatus: (row.examStatus as ExamStatus | null) ?? null,

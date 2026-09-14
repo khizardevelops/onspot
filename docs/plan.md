@@ -1,7 +1,7 @@
 # Adding a model: what to check before you spend time on it
 
 Written after a session where several promising models turned out to be dead ends. Check
-[`approved-tech.md`](./approved-tech.md) first — if your candidate is on the Rejected list, stop.
+[`benchmarks/`](./benchmarks/README.md) first — if your candidate is on the Rejected list, stop.
 
 ---
 
@@ -38,9 +38,9 @@ Then answer these four questions:
 
 ## Approved / Rejected verdicts
 
-Moved to [`approved-tech.md`](./approved-tech.md) — the full list of what works, what doesn't,
-and the evidence for each, kept there so it doesn't drift out of sync with a second copy here.
-Check it before spending time on a candidate.
+Moved to [`benchmarks/`](./benchmarks/README.md) — the full list of what works, what doesn't, and
+the measured evidence for each, kept there so it doesn't drift out of sync with a second copy
+here. Check it before spending time on a candidate.
 
 ---
 
@@ -52,22 +52,14 @@ refuses the same file. **Only a browser run counts.** Test headful, with a cold 
 
 ### 2. Quantization is a download lever, not a speed one
 Browser WASM has no INT8 SIMD path (no VNNI, no ARM dot-product), so ORT-Web dequantizes back
-to float on every matmul.
-
-| | fp32 | q8 |
-|---|---|---|
-| MMS-TTS French | **rtf 0.53** | rtf 2.68 |
+to float on every matmul. Measured examples:
+[`benchmarks/runtime.md`](./benchmarks/runtime.md#quantization-is-a-bandwidth-lever-never-a-speed-one).
 
 **fp32 on WASM. fp16 only on WebGPU. 8-bit only to save bandwidth.**
 
 ### 3. Downloads are bigger than the spec sheet, because embeddings stay fp32
-`q4` quantizes MatMul weights and leaves `embed_tokens` alone.
-
-| | whisper-base | whisper-small |
-|---|---|---|
-| embed_tokens at fp32 | 106 MB | **159 MB** |
-| actual q4 total | 142 MB | 299 MB |
-| what a "4-bit" table predicts | ~60-75 MB | ~180-220 MB |
+`q4` quantizes MatMul weights and leaves `embed_tokens` alone. Full table:
+[`benchmarks/runtime.md`](./benchmarks/runtime.md#downloads-are-bigger-than-the-spec-sheet-q4-keeps-embeddings-in-fp32).
 
 For whisper-small, **53% of the download is one fp32 embedding table**. The encoder, which has
 no embeddings, *is* properly 4-bit: 352.8 MB → 66.2 MB.
@@ -87,12 +79,7 @@ client-side. Call it with the input as a JSON **array** — a bare object aborts
 emscripten pointer and no stderr.
 
 ### 5. One eval clip will rank models wrong
-It already did:
-
-| model | set1 only | across 3 clips |
-|---|---|---|
-| whisper-base fp32 | 4.8% | **9.9%** |
-| whisper-small-cv11-french | **2.4%** | **21.7%** |
+It already did: [`benchmarks/stt.md`](./benchmarks/stt.md#one-clip-trap).
 
 The "best" model on one clip was the worst overall. **345 words is still small** — one word is
 ~0.29% WER. Aggregate WER is total-errors / total-words, never a mean of per-clip rates.
@@ -103,11 +90,12 @@ The "best" model on one clip was the worst overall. **345 words is still small**
 
 1. Check `onnx-community/<model>` exists and has a **q4** build.
 2. Compute the real download: `encoder_model_q4` + `decoder_model_merged_q4`.
-3. Add a card in `src/lib/adapters/registry.ts` with an explicit `dtype`.
+3. Add a card in `src/lib/adapters/stt/registry.ts` with an explicit `dtype`.
 4. **Load it in a browser before trusting it.** Confirm the card reaches `Ready`, and that the
    progress bar shows real MB.
 5. Benchmark against **every** clip in `eval/`, not just one.
-6. Compare to the incumbent: `whisper-small q4`, **5.5% aggregate**, 299 MB, rtf 1.48.
+6. Compare to the incumbent: `whisper-small q4` — see
+   [`benchmarks/stt.md`](./benchmarks/stt.md#decision-table-aggregate-345-words).
 7. If it loses, record why in `known-issues.md` so nobody retries it.
 
 ## Adding a TTS model — checklist
@@ -135,17 +123,34 @@ The "best" model on one clip was the worst overall. **345 words is still small**
   separate model caches, so switching re-downloads everything.
 - **`/tmp` is tmpfs (RAM-backed).** Test browser profiles holding model weights cost real
   memory — over a gigabyte, easily.
-- **After a fresh clone**, restore the gitignored phonemizer assets:
-  `cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} public/piper-wasm/`
-- **WebGPU is not a free win.** It is available here and builds sessions, but returns 92% WER
-  at q4 versus 9.6% on WASM. Re-test per machine; do not assume.
+- **After a fresh clone**, restore the gitignored phonemizer assets into `static/`, not `public/`:
+  `cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/`
+- **WebGPU is not a free win.** It is available here and builds sessions, but its quantized
+  numerics are wrong. See
+  [`benchmarks/runtime.md`](./benchmarks/runtime.md#device-wasm-not-webgpu). Re-test per machine;
+  do not assume.
 
 ---
 
 ## Where the details live
 
-- `docs/approved-tech.md` — the model/library verdicts and their evidence
+- `docs/benchmarks/` — every measured number (STT, TTS, runtime, LLM providers)
 - `.agents/handoff/references/known-issues.md` — exact errors and re-test triggers
 - `.agents/handoff/references/bugs.md` — what was fixed and why
 - `.agents/handoff/memory/decisions.md` — settled calls and their evidence
 - `.agents/handoff/rules/constraints.md` — the hard rules
+
+## A pattern worth naming: plausible-sounding explanations aren't evidence
+
+Twice this project, a confident, technical-sounding explanation for *why* something failed turned
+out to be wrong in a checkable way:
+
+- "Use `onnx-community` instead of `Xenova`, it's patched" — checked the commit history;
+  `onnx-community`'s broken files are the same 2024 vintage, never updated.
+- "`optimum-cli export onnx --quantize q4` re-exports it correctly" — checked the documented CLI
+  flags; `--quantize` doesn't exist on that subcommand.
+
+Both explanations *sounded* right and cited real, correct background facts (native ORT tolerating
+malformed scales where ORT-Web doesn't is a real mechanism). The specific fix each prescribed just
+hadn't been checked. Treat a plausible root cause the same as a plausible model: verify it before
+repeating it.

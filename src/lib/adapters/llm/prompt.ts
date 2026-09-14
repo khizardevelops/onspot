@@ -14,9 +14,9 @@ const SCHEMA = `{
     {
       "category": "grammar" | "register" | "filler" | "style",
       "severity": "error" | "warning" | "suggestion",
-      "label": string,            // short name, e.g. "Elision", "Agreement", "Filler word"
+      "label": string,            // specific issue, e.g. "Greeting used for someone else"; never repeat category/severity
       "original": string,         // the exact substring to change
-      "replacement": string,      // what it should be
+      "replacement": string,      // what it should be; EXACTLY "" when original should simply be removed
       "replacementTranslation": string, // English meaning of the replacement
       "explanation": string,      // why, in English, aimed at a learner
       "speakText": string,        // OPTIONAL: one corrected sentence to read aloud
@@ -40,6 +40,8 @@ const RULES = `Rules:
 - Connectors: prefer connectors that are appropriate for spoken French and, in exam mode, formal (e.g. "par conséquent", "en réalité", "cependant"). Do not suggest written-only connectors the learner cannot say.
 - Vocabulary: suggest at most 3 upgrades that a fluent speaker would plausibly use. If there is nothing worth changing, return [].
 - Corrections must use "original" exactly as it appears in the transcript.
+- If a word or phrase should be omitted, put it in "original" and set "replacement" to the empty string. Do not use arrows, dashes, "remove", or explanatory text as a replacement.
+- Make "label" name the concrete learning issue. Do not repeat its category or severity (bad: "Register inappropriate"; good: "Greeting used for someone else").
 - When the learner made no mistakes, return an empty "corrections" array and say so in "summary".
 - "summary": at most two short sentences. State the main issue and the fix; never pad or repeat what the corrections already say.
 ${TRANSLATION_RULES}

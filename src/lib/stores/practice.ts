@@ -11,6 +11,7 @@ import {
 import { appSettings, setSetting } from './settings';
 import { groqApiKey, openaiApiKey } from './secrets';
 import { resolveLlmEndpoint } from './llm';
+import { playTrack, setAudioLoading } from './audio';
 import { VoiceRecorder, type Recording } from '$lib/utils/recorder';
 import { transcribeFrench } from '$lib/adapters/stt/service';
 import { evaluateAttempt, generateTranslations, type EvaluationResult } from '$lib/adapters/llm';
@@ -78,7 +79,6 @@ let db: IDatabaseAdapter | null = null;
 let prompts: Prompt[] = [];
 let recorder: VoiceRecorder | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
-let audio: HTMLAudioElement | null = null;
 const translationJobs = new Map<string, Promise<TranslationSet>>();
 
 function newId(prefix: string): string {
@@ -163,7 +163,7 @@ export async function startRecording(): Promise<void> {
 		const elapsed = (performance.now() - startedAt) / 1000;
 		update({ elapsed });
 		if (elapsed >= MAX_RECORDING_SEC) void stopAndAnalyze();
-	}, 100);
+	}, 250);
 }
 
 export function cancelRecording(): void {
@@ -285,7 +285,7 @@ async function persistAttempt(
 	};
 	await database.putAttempt(attempt);
 
-	const corrections = buildCorrections(attemptId, evaluation, now);
+	const corrections = buildCorrections(attemptId, transcript, evaluation, now);
 	await database.replaceCorrections(attemptId, corrections);
 
 	try {
@@ -327,6 +327,7 @@ async function persistAttempt(
  */
 function buildCorrections(
 	attemptId: string,
+	transcript: string,
 	evaluation: EvaluationResult,
 	createdAt: string
 ): Correction[] {
@@ -343,6 +344,8 @@ function buildCorrections(
 			original: correction.original,
 			replacement: correction.replacement,
 			replacementTranslation: correction.replacementTranslation ?? null,
+			start: null,
+			end: null,
 			explanation: correction.explanation,
 			speakText: correction.speakText ?? null,
 			examStatus: correction.examStatus ?? null,
@@ -362,6 +365,8 @@ function buildCorrections(
 			original: vocab.original,
 			replacement: vocab.suggestion,
 			replacementTranslation: null,
+			start: null,
+			end: null,
 			explanation: vocab.why,
 			speakText: null,
 			examStatus: null,
@@ -381,6 +386,8 @@ function buildCorrections(
 			original: connector.insteadOf ?? '',
 			replacement: connector.connector,
 			replacementTranslation: null,
+			start: null,
+			end: null,
 			explanation: connector.why,
 			speakText: null,
 			examStatus: null,
@@ -388,6 +395,33 @@ function buildCorrections(
 			sortOrder: order++,
 			createdAt
 		});
+	}
+
+	// Resolve each `original` to a character range in the transcript, claiming
+	// distinct occurrences so a repeated phrase is not marked twice and overlaps
+	// are avoided. Falls back to null when the text is not found verbatim
+	// (e.g. filler sounds the recogniser dropped).
+	const used: Array<[number, number]> = [];
+	for (const row of rows) {
+		if (!row.original) continue;
+		let from = 0;
+		let chosen: [number, number] | null = null;
+		for (;;) {
+			const at = transcript.indexOf(row.original, from);
+			if (at === -1) break;
+			const range: [number, number] = [at, at + row.original.length];
+			const overlaps = used.some(([start, end]) => range[0] < end && range[1] > start);
+			if (!overlaps) {
+				chosen = range;
+				break;
+			}
+			from = at + row.original.length;
+		}
+		if (chosen) {
+			row.start = chosen[0];
+			row.end = chosen[1];
+			used.push(chosen);
+		}
 	}
 
 	return rows;
@@ -456,30 +490,47 @@ export function ensureAttemptTranslations(
 export async function playAttempt(id: string): Promise<void> {
 	const attempt = get(store).attempts.find((a) => a.id === id);
 	if (!attempt) return;
-	await playAttemptText(attempt, attempt.naturalSpeech || attempt.correctedText);
+	await playAttemptText(attempt, attempt.naturalSpeech || attempt.correctedText, 'attempt');
 }
 
 /** Plays one sentence/segment of an attempt with that attempt's voice. */
-export async function playSegment(id: string, text: string): Promise<void> {
+export async function playSegment(id: string, text: string, index: number): Promise<void> {
 	const attempt = get(store).attempts.find((a) => a.id === id);
-	await playAttemptText(attempt, text);
+	await playAttemptText(attempt, text, 'segment', index);
 }
 
-async function playAttemptText(attempt: AttemptView | undefined, text: string): Promise<void> {
-	if (!text.trim()) return;
-	audio?.pause();
+async function playAttemptText(
+	attempt: AttemptView | undefined,
+	text: string,
+	kind: 'attempt' | 'segment',
+	index?: number
+): Promise<void> {
+	if (!attempt || !text.trim()) return;
 	const settings = get(appSettings);
+	setAudioLoading(true, {
+		attemptId: attempt.id,
+		kind,
+		segmentIndex: index,
+		label: kind === 'segment' ? text : 'Corrected audio',
+		url: ''
+	});
 	try {
 		const speech = await synthesizeFrench({
 			text,
 			mode: settings.ttsMode,
-			voice: attempt?.ttsVoice ?? settings.ttsVoice,
+			voice: attempt.ttsVoice ?? settings.ttsVoice,
 			openaiApiKey: get(openaiApiKey) || undefined,
-			attemptId: attempt?.id
+			attemptId: attempt.id
 		});
-		audio = new Audio(speech.url);
-		await audio.play();
+		playTrack({
+			attemptId: attempt.id,
+			kind,
+			segmentIndex: index,
+			label: kind === 'segment' ? text : 'Corrected audio',
+			url: speech.url
+		});
 	} catch (error) {
+		setAudioLoading(false);
 		console.error('[practice] speech failed', error);
 		update({ error: error instanceof Error ? error.message : 'Speech playback failed.' });
 	}
@@ -512,9 +563,7 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 				a.id === attemptId ? { ...a, ttsVoice: voice } : a
 			)
 		});
-		audio?.pause();
-		audio = new Audio(speech.url);
-		await audio.play();
+		playTrack({ attemptId, kind: 'attempt', label: 'Corrected audio', url: speech.url });
 	} catch (error) {
 		toast(error instanceof Error ? error.message : 'Could not re-render audio.');
 	}
@@ -523,8 +572,8 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 /** Synthesizes and plays arbitrary French text (used for correction read-back). */
 export async function speakText(text: string): Promise<void> {
 	if (!text.trim()) return;
-	audio?.pause();
 	const settings = get(appSettings);
+	setAudioLoading(true, { attemptId: '', kind: 'correction', label: text, url: '' });
 	try {
 		const speech = await synthesizeFrench({
 			text,
@@ -532,9 +581,9 @@ export async function speakText(text: string): Promise<void> {
 			voice: settings.ttsVoice,
 			openaiApiKey: get(openaiApiKey) || undefined
 		});
-		audio = new Audio(speech.url);
-		await audio.play();
+		playTrack({ attemptId: '', kind: 'correction', label: text, url: speech.url });
 	} catch (error) {
+		setAudioLoading(false);
 		console.error('[practice] speech failed', error);
 		update({
 			error: error instanceof Error ? error.message : 'Speech playback failed.'
@@ -555,10 +604,13 @@ export async function playStoredAudio(attemptId: string): Promise<void> {
 		toast('No audio stored for this attempt.');
 		return;
 	}
-	audio?.pause();
 	const blob = base64ToBlob(stored.dataBase64, stored.mime);
-	audio = new Audio(URL.createObjectURL(blob));
-	await audio.play().catch(() => {});
+	playTrack({
+		attemptId,
+		kind: 'recording',
+		label: 'Your recording',
+		url: URL.createObjectURL(blob)
+	});
 }
 
 /** Renames a session. */
@@ -602,9 +654,11 @@ export async function openSession(sessionId: string): Promise<void> {
 		db.listAttempts(sessionId)
 	]);
 
-	const views: AttemptView[] = [];
-	for (const attempt of attempts) {
-		views.push({
+	const correctionLists = await Promise.all(
+		attempts.map((attempt) => db!.listCorrections(attempt.id))
+	);
+	const views: AttemptView[] = attempts.map((attempt, index) => {
+		return {
 			id: attempt.id,
 			transcript: attempt.transcript,
 			correctedText: attempt.correctedText ?? '',
@@ -612,14 +666,14 @@ export async function openSession(sessionId: string): Promise<void> {
 			translation: attempt.translation ?? '',
 			translations: attempt.translations,
 			summary: attempt.summary ?? '',
-			corrections: await db.listCorrections(attempt.id),
+			corrections: correctionLists[index],
 			durationSec: attempt.durationSec,
 			wordCount: attempt.wordCount,
 			createdAt: attempt.createdAt,
 			audioUrl: null,
 			ttsVoice: attempt.ttsVoice
-		});
-	}
+		};
+	});
 
 	const latest = views.at(-1)?.id ?? null;
 	update({

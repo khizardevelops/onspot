@@ -108,6 +108,9 @@ export interface Correction {
 	replacement: string;
 	/** English translation of the suggested replacement. */
 	replacementTranslation: string | null;
+	/** Character offsets of `original` in the attempt transcript, when known. */
+	start: number | null;
+	end: number | null;
 	explanation: string;
 	/** Sentence to read back through TTS, when the correction warrants one. */
 	speakText: string | null;

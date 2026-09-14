@@ -2,13 +2,14 @@
 
 ## Current State
 The **onspot** product UI and core practice pipeline are implemented. The current Practice view
-uses a free-scrolling attempt conveyor, explicit card selection, per-attempt translation controls,
-and strict versioned translation output with progressively disclosed alternatives and word detail.
+uses an Apple-inspired glass-and-gradient shell, a free-scrolling 3D attempt conveyor, explicit
+card selection, compact severity filters, and progressively disclosed feedback/translation detail.
+Local Whisper, SQLite, and now Piper TTS all run in workers; the UI thread is kept for interaction.
 Phase 3 BYOC sync is the next product phase; a real local Whisper + LLM end-to-end proof and the
 Piper Tom EQ/loudness pass remain verification/polish work.
 
 The earlier model-selection lab is complete. Its approved STT/TTS choices and evidence live in
-`docs/approved-tech.md`; do not re-litigate them without new evidence.
+`docs/benchmarks/`; do not re-litigate them without new evidence.
 
 ## Product shape (from `docs/prompts/inception.md`)
 - SvelteKit + `@sveltejs/adapter-static` (`fallback: 'index.html'`) → pure client-side SPA.
@@ -23,7 +24,7 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 
 ## Decided models carried into the product
 - **STT: `onnx-community/whisper-small` q4, 299 MB, 5.5% aggregate WER** (WASM). WASM, not
-  WebGPU. Whole reasoning in `memory/decisions.md` and `docs/approved-tech.md`.
+  WebGPU. Whole reasoning in `memory/decisions.md` and `docs/benchmarks/stt.md`.
 - **TTS: Piper Tom (M, medium)**, 64 MB, 44 kHz. `Piper UPMC` (jessica/pierre) and
   `Piper Siwis` are the alternates. Listening-test decision, 2026-09-13.
 - Cloud fallbacks per inception: Groq `whisper-large-v3-turbo`, OpenAI-compatible LLMs.
@@ -32,8 +33,8 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 - [x] **Phase 1 — scaffold, headers, DB abstraction.** Done and browser-verified.
 - [x] **Phase 2 — speech + AI pipeline.** Mic capture, STT Web Worker, cloud adapters, LLM
   evaluation, TTS read-back and the record→transcribe→evaluate→persist orchestration.
-  Worker plumbing browser-verified; a full local transcription + evaluation still needs the
-  299 MB download and an LLM key.
+  STT and Piper worker plumbing are browser-verified; a full local transcription + evaluation
+  still needs the 299 MB download and an LLM key.
 - [ ] Phase 3 — BYOC sync
 - [x] Phase 4 — product UI. Practice, Settings, History (search + regex/case, replay, rename,
   delete), Insights, toasts, click-to-pronounce, session-locked mode, per-attempt translation
@@ -42,7 +43,9 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 
 ### Current attempt-card UX
 - `AttemptStream.svelte` is a flat oldest→newest scroll list. Cards roll over the top edge with a
-  CSS scroll-driven 3D conveyor transform; scrolling back to older attempts reverses the motion.
+  pronounced CSS scroll-driven 3D conveyor transform; scrolling back to older attempts reverses
+  the motion. Unsupported webviews get a requestAnimationFrame fallback and reduced-motion gets
+  neither implementation.
 - New attempts rise to the top over 1050ms with deterministic eased scrolling plus a light card
   arrival transform. The component stays mounted when the list is empty so the first attempt also
   animates. Wheel, touch, or pointer input cancels programmatic motion immediately.
@@ -58,6 +61,24 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   regeneration is a secondary action inside the Translate menu.
 - Scrolling the conveyor does not change `activeAttemptId`; selection is explicit via card click,
   or adding a new attempt. There are no previous/next buttons or floating attempt counter.
+- Historical cards use `content-visibility: auto`; only the stream container and newest card are
+  observed for floor-space sizing.
+
+### Current feedback and shell UX
+- `FeedbackPanel.svelte` uses shadcn Tabs for **All / Errors / Warnings / Suggestions**, with the
+  count over each label, and a shadcn Dropdown Menu for Grammar / Register / Fillers / Style.
+- Coach notes is itself a shadcn Collapsible. Desktop closes it into a 64px review rail; viewports
+  below 1024px start with a 58px summary bar and expand it to 42% of the available app height.
+  Choosing an inline transcript correction reopens the panel automatically.
+- Empty replacements are deletions: the original is struck through and labelled **Remove**. No
+  misleading arrow is rendered. The LLM prompt explicitly requires `replacement: ""` for this
+  case, and `correctionTitle()` removes redundant category/severity labels.
+- Corrections are shadcn Collapsibles with animated explanations; AttemptCard uses shadcn Card,
+  Badge, Button, Dropdown Menu, Collapsible, Separator and Tooltip primitives.
+- Settings uses shadcn Select for all seven choices; the native `<select>` controls are gone and
+  each trigger has a programmatic accessible name.
+- The app rail becomes a full-width bottom navigation bar at 640px and below, leaving enough room
+  for the feedback labels at a 390px viewport.
 
 ### Phase 1 implemented
 
@@ -129,8 +150,9 @@ prototype's insight columns keep working without new categories.
   `BaseSTTAdapter` contract. `dispose()` terminates the worker.
 - `src/lib/adapters/stt/service.ts` — `transcribeFrench()` chooses local worker or Groq;
   `preloadLocalSTT()`; `sttDiagnostics()` (the worker `ping`).
-- `src/lib/adapters/tts/service.ts` — `synthesizeFrench()` (Piper or OpenAI) → WAV URL;
-  `listLocalVoices()`.
+- `src/lib/adapters/tts/service.ts` — `synthesizeFrench()` (worker-hosted Piper or OpenAI) → WAV
+  URL; `listLocalVoices()`. Piper loads lazily in `tts.worker.ts`, serializes inference, transfers
+  PCM without copying, keeps one voice resident, and disposes sessions after 90 seconds idle.
 - `src/lib/utils/recorder.ts` — `VoiceRecorder`: MediaRecorder + live RMS level for the
   waveform, decode to 16 kHz mono on stop.
 - `src/lib/utils/wav.ts`, `src/lib/utils/base64.ts` — WAV encoding and audio (de)serialisation.
@@ -157,7 +179,9 @@ prototype's insight columns keep working without new categories.
 - shadcn-svelte components installed under `src/lib/components/ui/` (button, card, input,
   label, textarea, badge). The registry imports `$lib/utils`; `src/lib/utils/index.ts` re-exports
   `cn` plus the registry's `WithElementRef`/`WithoutChildren` helper types.
-- `src/lib/utils/highlight.ts` — escapes then wraps correction originals for the transcript.
+- `src/lib/components/Transcript.svelte` — tokenizes the transcript and tags each word with its
+  correction, so marks link to the feedback panel and every word is individually pronounceable.
+  (Replaces the earlier, deleted `utils/highlight.ts` string-wrapping approach.)
 
 ### UI sandbox (dev tooling, production untouched)
 - `src/routes/ui-sandbox/` is a standalone, **1:1 interactive** clone of the chat-history UI for
@@ -170,8 +194,9 @@ prototype's insight columns keep working without new categories.
   bindable active-attempt/correction state.
 - `AttemptStream.svelte`, `AttemptCard.svelte` and `stores/practice.ts` are **unmodified**; the
   sandbox imports nothing from them. `npm run bundle:ui` (repomix) packs only
-  `src/routes/ui-sandbox/**/*.svelte` to `repomix/ui-sandbox-bundle.xml` (the `repomix/` folder is
-  gitignored, so generated output never lands in the repo root).
+  `src/routes/ui-sandbox/**/*.svelte` to `repomix/ui-sandbox-bundle.xml`. The `repomix/` folder is
+  tracked (kept by `repomix/.gitkeep`); only the generated `repomix/*-bundle.*` output is
+  gitignored, so nothing lands in the repo root and the folder persists after a clone.
 
 ## Invariants (carried over, still true)
 - All local inference is client-side. Device resolved at load time, never hardcoded. WASM default.

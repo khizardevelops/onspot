@@ -61,9 +61,12 @@ async function getEngine(): Promise<Transformers> {
       // isolated (vite.config.ts sets the COOP/COEP headers that enable it).
       const wasmBackend = (mod.env.backends?.onnx as any)?.wasm;
       if (wasmBackend) {
-        wasmBackend.numThreads = self.crossOriginIsolated
-          ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1))
-          : 1;
+        const cores = navigator.hardwareConcurrency || 2;
+        const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+        // Preserve capacity for rendering, audio, the database worker and the
+        // rest of the OS. Four inference threads made modest machines feel
+        // saturated; two is the deliberate responsiveness ceiling.
+        wasmBackend.numThreads = self.crossOriginIsolated && cores >= 6 && memory >= 6 ? 2 : 1;
       }
       return mod;
     });

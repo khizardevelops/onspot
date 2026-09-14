@@ -10,7 +10,7 @@ corrected phrasing read back naturally.
 
 ## Lineage
 This repo began as a **model-selection lab** for the speech stack. That work is done; the choices
-and their evidence are in `docs/approved-tech.md`. The product now consumes those choices:
+and their evidence are in `docs/benchmarks/`. The product now consumes those choices:
 `whisper-small q4` for local STT, Piper Tom for local TTS.
 
 ## Goals

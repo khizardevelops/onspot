@@ -36,7 +36,12 @@ interface PingRequest {
 	type: 'ping';
 }
 
-type Request = LoadRequest | TranscribeRequest | PingRequest;
+interface ReleaseRequest {
+	id: number;
+	type: 'release';
+}
+
+type Request = LoadRequest | TranscribeRequest | PingRequest | ReleaseRequest;
 
 type Response =
 	| {
@@ -49,6 +54,7 @@ type Response =
 	| { id: number; type: 'progress'; status: string; progress: number }
 	| { id: number; type: 'ready'; device: string; dtype: string }
 	| { id: number; type: 'text'; text: string }
+	| { id: number; type: 'released' }
 	| { id: number; type: 'error'; message: string };
 
 const TARGET_SAMPLE_RATE = 16000;
@@ -58,12 +64,16 @@ let loadedModel = '';
 let activeLoadId: number | null = null;
 let resolvedDevice = 'wasm';
 let resolvedDtype = 'q4';
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+const IDLE_RELEASE_MS = 90_000;
 
 function post(message: Response, transfer?: Transferable[]) {
 	(self as unknown as Worker).postMessage(message, transfer ?? []);
 }
 
 async function loadPipeline(model: string, dtype: string, loadId: number): Promise<void> {
+	if (idleTimer) clearTimeout(idleTimer);
+	idleTimer = null;
 	activeLoadId = loadId;
 	resolvedDevice = 'wasm';
 	resolvedDtype = dtype;
@@ -84,11 +94,31 @@ async function loadPipeline(model: string, dtype: string, loadId: number): Promi
 	}
 }
 
+async function releasePipeline(id: number): Promise<void> {
+	if (idleTimer) clearTimeout(idleTimer);
+	idleTimer = null;
+	const pipeline = transcriber as { dispose?: () => Promise<void> | void } | null;
+	if (pipeline?.dispose) await pipeline.dispose();
+	transcriber = null;
+	loadedModel = '';
+	post({ id, type: 'released' });
+}
+
+function scheduleIdleRelease(): void {
+	if (idleTimer) clearTimeout(idleTimer);
+	idleTimer = setTimeout(() => void releasePipeline(0), IDLE_RELEASE_MS);
+}
+
 self.onmessage = async (event: MessageEvent<Request>) => {
 	const request = event.data;
 
 	try {
 		switch (request.type) {
+			case 'release': {
+				await releasePipeline(request.id);
+				return;
+			}
+
 			case 'ping': {
 				post({
 					id: request.id,
@@ -112,6 +142,8 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			}
 
 			case 'transcribe': {
+				if (idleTimer) clearTimeout(idleTimer);
+				idleTimer = null;
 				if (!transcriber) {
 					throw new Error('STT worker has no model loaded. Send a load request first.');
 				}
@@ -125,6 +157,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 					language: request.language ?? 'french'
 				});
 				post({ id: request.id, type: 'text', text });
+				scheduleIdleRelease();
 				return;
 			}
 		}

@@ -2,7 +2,7 @@
 
 How data flows through onspot. The lab's benchmark pipeline (eval clips, WER scoring) is retired
 with the lab UI but its audio handling is reused in the STT adapter; its details are preserved in
-`references/bugs.md` and `docs/approved-tech.md`.
+`references/bugs.md` and `docs/benchmarks/`.
 
 ## Practice loop (product)
 
@@ -35,7 +35,8 @@ Correction rows (DB) + correctedText on the Attempt
       |
       v
 TTS feedback
-  +-- local: Piper (Tom / UPMC / Siwis) via onnxruntime-web + French G2P
+  +-- local: Piper worker (Tom / UPMC / Siwis) via onnxruntime-web + French G2P
+  |           one resident voice, transferred PCM, release after 90s idle
   +-- cloud: OpenAI/Groq TTS (BYOK)
       |
       v
@@ -72,14 +73,16 @@ Desktop (Tauri v2)                    Web SPA
 ## Weight loading (carried from the lab, still true)
 
 ```
-Transformers.js models          Piper voices
-  createPipeline()                cachedFetch()
-  -> detectDevice()               -> caches.match(url)      hit: instant
-  -> transformers-cache           -> stream + progress      miss: download
-  -> createDownloadProgress()     -> caches.put()
+Transformers.js models             Piper voices (TTS worker)
+  createPipeline()                   cachedFetch()
+  -> detectDevice()                  -> caches.match(url)      hit: instant
+  -> transformers-cache              -> response.body.tee()    miss: download
+  -> createDownloadProgress()        -> one stream to cache, one growable inference buffer
        aggregates bytes across weight files (>=1MB),
        no monotonic clamp, reports MB and a status string
 ```
 
 Both caches are **per-origin**. Serving the app on a different port means a cold cache.
-Piper and Transformers.js keep **separate** ONNX Runtime instances (see `known-issues.md`).
+Piper and Transformers.js keep **separate** ONNX Runtime instances (see `known-issues.md`). Both
+large local models are lazy and worker-hosted; Whisper uses at most two WASM threads on capable
+machines (otherwise one), and both model sessions release after 90 seconds without work.

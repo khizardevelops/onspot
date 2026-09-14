@@ -15,7 +15,13 @@
  */
 const WASM_BASE = '/piper-wasm/';
 
-let modulePromise: Promise<any> | null = null;
+type PiperFactory = (options: {
+  print: (line: string) => void;
+  printErr: (message: string) => void;
+  locateFile: (url: string) => string;
+}) => Promise<{ callMain(args: string[]): number }>;
+
+let modulePromise: Promise<PiperFactory> | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -28,11 +34,19 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-async function getFactory(): Promise<any> {
+async function getFactory(): Promise<PiperFactory> {
   if (!modulePromise) {
-    modulePromise = loadScript(WASM_BASE + 'piper_phonemize.js').then(
-      () => (window as any).createPiperPhonemize
-    );
+    if (typeof document === 'undefined') {
+      // In the local-TTS worker, let Vite wrap the package's CommonJS export.
+      // This keeps both eSpeak and ONNX inference off the UI thread.
+      modulePromise = import('@diffusionstudio/piper-wasm').then(
+        (module) => module.default as PiperFactory
+      );
+    } else {
+      modulePromise = loadScript(WASM_BASE + 'piper_phonemize.js').then(
+        () => (window as unknown as { createPiperPhonemize: PiperFactory }).createPiperPhonemize
+      );
+    }
   }
   return modulePromise;
 }

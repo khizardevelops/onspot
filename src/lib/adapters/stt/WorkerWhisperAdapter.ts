@@ -10,7 +10,7 @@ interface Pending {
 
 interface WorkerMessage {
 	id: number;
-	type: 'progress' | 'ready' | 'text' | 'error' | 'pong';
+	type: 'progress' | 'ready' | 'text' | 'error' | 'pong' | 'released';
 	status?: string;
 	progress?: number;
 	device?: string;
@@ -66,6 +66,13 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 	}
 
 	private handle(message: WorkerMessage): void {
+		// Idle-release notifications are unsolicited (id 0), so handle them
+		// before looking for a pending request.
+		if (message.type === 'released') {
+			this.setStatus('unloaded');
+			this.progress = null;
+			return;
+		}
 		const entry = this.pending.get(message.id);
 		if (!entry) return;
 

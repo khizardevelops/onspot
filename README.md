@@ -36,7 +36,7 @@ See `.agents/handoff/references/commands.md` for the full command and environmen
 ## Why these models
 
 The speech models were chosen by measurement, in this repository, before the product was built.
-The verdicts and their evidence are in [`docs/approved-tech.md`](./docs/approved-tech.md);
+The collected numbers and verdicts are in [`docs/benchmarks/`](./docs/benchmarks/README.md);
 the methodology is in [`docs/plan.md`](./docs/plan.md).
 
 ## License

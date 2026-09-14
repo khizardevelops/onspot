@@ -41,5 +41,7 @@ static/piper-wasm/
 *.sqlite3
 *.db
 
-# Generated repomix bundles (npm run bundle:ui)
-repomix/
+# Generated repomix UI bundle (npm run bundle:ui). The repomix/ folder itself is
+# tracked; only the generated output is ignored.
+repomix/*-bundle.*
+archive/lab-ui-2026-09-13/

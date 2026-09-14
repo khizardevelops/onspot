@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Correction, CorrectionCategory } from '$lib/adapters/db';
+	import type { Correction, CorrectionSeverity } from '$lib/adapters/db';
 	import { playWord } from '$lib/stores/pronunciation';
 
 	interface Props {
@@ -23,91 +23,97 @@
 	interface Token {
 		text: string;
 		word: boolean;
-		category?: CorrectionCategory;
+		start: number;
+		end: number;
+		severity?: CorrectionSeverity;
 		correctionId?: string;
+		deletion?: boolean;
 	}
 
 	const TOKEN_RE = /([\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*)|(\s+)|([^\s])/gu;
 
-	const CATEGORY_CLASS: Record<CorrectionCategory, string> = {
-		grammar: 'text-[var(--error)] underline decoration-dotted decoration-1',
-		register: 'text-[var(--warn)] underline decoration-dotted decoration-1',
-		filler: 'text-[var(--warn)] underline decoration-dotted decoration-1',
-		style: 'text-[var(--good)] underline decoration-dotted decoration-1'
+	/**
+	 * Colour signals severity, not category — a `register` correction of
+	 * severity `error` must read as an error. Category is shown separately in the
+	 * feedback panel.
+	 */
+	const SEVERITY_CLASS: Record<CorrectionSeverity, string> = {
+		error: 'text-[var(--error)]',
+		warning: 'text-[var(--warn)]',
+		suggestion: 'text-[var(--brand)]'
 	};
 
-	/**
-	 * Splits the text into word/whitespace/punctuation tokens and tags the words
-	 * covered by a correction. Tagging tokens (rather than wrapping substrings in
-	 * markup) keeps every word individually hoverable for pronunciation, and lets
-	 * a click select the correction.
-	 */
+	/** Resolves a correction to a character range, preferring stored offsets. */
+	function rangeFor(correction: Correction, claimed: Array<[number, number]>): [number, number] | null {
+		if (correction.start != null && correction.end != null && correction.end > correction.start) {
+			return [correction.start, correction.end];
+		}
+		if (!correction.original) return null;
+		// Legacy rows (no offsets): claim the first unclaimed occurrence.
+		let from = 0;
+		for (;;) {
+			const at = text.indexOf(correction.original, from);
+			if (at === -1) return null;
+			const range: [number, number] = [at, at + correction.original.length];
+			const overlaps = claimed.some(([start, end]) => range[0] < end && range[1] > start);
+			if (!overlaps) return range;
+			from = at + correction.original.length;
+		}
+	}
+
+	/** Tokenises the text and tags tokens covered by a correction range. */
 	const tokens = $derived.by<Token[]>(() => {
 		const list: Token[] = [];
 		for (const match of text.matchAll(TOKEN_RE)) {
-			list.push({ text: match[0], word: Boolean(match[1]) });
+			const start = match.index ?? 0;
+			list.push({ text: match[0], word: Boolean(match[1]), start, end: start + match[0].length });
 		}
 
+		const claimed: Array<[number, number]> = [];
 		for (const correction of corrections) {
-			if (!correction.original) continue;
-			let from = 0;
-			for (;;) {
-				const at = text.indexOf(correction.original, from);
-				if (at === -1) break;
-				const to = at + correction.original.length;
-
-				let cursor = 0;
-				for (const token of list) {
-					const start = cursor;
-					const end = cursor + token.text.length;
-					if (token.word && start < to && end > at) {
-						token.category = correction.category;
-						token.correctionId ??= correction.id;
-					}
-					cursor = end;
+			const range = rangeFor(correction, claimed);
+			if (!range) continue;
+			claimed.push(range);
+			for (const token of list) {
+				if (token.word && token.start < range[1] && token.end > range[0]) {
+					token.severity = correction.severity;
+					token.correctionId ??= correction.id;
+					token.deletion = Boolean(correction.original.trim()) && !correction.replacement.trim();
 				}
-				from = to;
 			}
 		}
 		return list;
 	});
-
-	function activate(token: Token) {
-		if (token.correctionId && onSelect) {
-			onSelect(token.correctionId);
-			return;
-		}
-		// No correction here: clicking is a manual pronunciation trigger.
-		playWord(token.text);
-	}
 </script>
 
 <span class={className} style="white-space: pre-wrap">
 	{#each tokens as token, index (index)}
-		{#if token.word}
-			<span
-				role="button"
-				tabindex="-1"
-				title={token.correctionId ? 'Click to see the correction' : 'Click to hear this word'}
-				class="cursor-pointer rounded px-0.5 transition-colors {token.correctionId ===
+		{#if token.word && token.correctionId}
+			<button
+				type="button"
+				title="Show this correction"
+				class="cursor-pointer rounded px-0.5 underline decoration-dotted decoration-1 transition-colors {token.correctionId ===
 				activeCorrectionId
 					? 'bg-[var(--brand-soft)] ring-1 ring-[var(--brand)] ring-inset'
-					: 'hover:bg-[var(--surface-2)]'} {token.category ? CATEGORY_CLASS[token.category] : ''}"
+					: 'hover:bg-[var(--surface-2)]'} {token.deletion
+					? 'line-through decoration-[var(--error)] decoration-2 underline-offset-4'
+					: ''} {SEVERITY_CLASS[token.severity ?? 'suggestion']}"
 				onclick={(event) => {
-					// The transcript lives inside the attempt's select button; without
-					// this, selecting a correction immediately re-selects the attempt
-					// and clears the selection.
 					event.stopPropagation();
-					activate(token);
+					onSelect?.(token.correctionId as string);
 				}}
-				onkeydown={(event) => {
-					if (event.key === 'Enter' || event.key === ' ') {
-						event.preventDefault();
-						event.stopPropagation();
-						activate(token);
-					}
-				}}
-			>{token.text}</span>
+			>{token.text}</button>
+		{:else if token.word}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<span
+				title="Click to hear this word"
+				class="cursor-pointer rounded px-0.5 transition-colors hover:bg-[var(--surface-2)]"
+				onclick={(event) => {
+					event.stopPropagation();
+					playWord(token.text);
+				}}>{token.text}</span
+			>
 		{:else}{token.text}{/if}
 	{/each}
 </span>

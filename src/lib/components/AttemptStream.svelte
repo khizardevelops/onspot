@@ -23,6 +23,10 @@
 	let scrollRafId = 0;
 	let scrollTargetId: string | null = null;
 	let resizeObserver: ResizeObserver | null = null;
+	let fallbackRafId = 0;
+	let nativeTimeline = true;
+	let reducedMotion = false;
+	let reducedMotionQuery: MediaQueryList | null = null;
 
 	/**
 	 * Sizes the floor spacer so the newest card settles at the top of the viewport
@@ -43,9 +47,11 @@
 		if (!resizeObserver || !container) return;
 		resizeObserver.disconnect();
 		resizeObserver.observe(container);
-		for (const card of container.querySelectorAll<HTMLElement>('[data-attempt-id]')) {
-			resizeObserver.observe(card);
-		}
+		// The spacer depends only on the viewport and newest card. Observing every
+		// historical card made every disclosure change fan out through one shared
+		// observer for no benefit.
+		const last = [...container.querySelectorAll<HTMLElement>('[data-attempt-id]')].at(-1);
+		if (last) resizeObserver.observe(last);
 	}
 
 	function cancelAnimatedScroll() {
@@ -101,7 +107,7 @@
 
 	function animateArrival(card: HTMLElement) {
 		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-		const surface = card.querySelector<HTMLElement>(':scope > article');
+		const surface = card.querySelector<HTMLElement>(':scope > [data-card-surface]');
 		if (!surface) return;
 		const distance = Math.max(
 			56,
@@ -117,6 +123,36 @@
 				easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
 			}
 		);
+	}
+
+	/** Lightweight fallback for webviews without CSS view timelines. */
+	function updateFallbackConveyor() {
+		fallbackRafId = 0;
+		if (nativeTimeline || !container) return;
+		if (reducedMotion) {
+			for (const card of container.querySelectorAll<HTMLElement>('[data-attempt-id]')) {
+				card.style.removeProperty('transform');
+				card.style.removeProperty('opacity');
+			}
+			return;
+		}
+		for (const card of container.querySelectorAll<HTMLElement>('[data-attempt-id]')) {
+			const relativeTop = card.offsetTop - container.scrollTop;
+			const progress = Math.max(0, Math.min(1, -relativeTop / 170));
+			if (progress === 0) {
+				card.style.removeProperty('transform');
+				card.style.removeProperty('opacity');
+				continue;
+			}
+			const eased = 1 - Math.pow(1 - progress, 2);
+			card.style.transform = `perspective(900px) translate3d(0, ${-48 * eased}px, 0) rotateX(${58 * eased}deg) scale(${1 - 0.08 * eased})`;
+			card.style.opacity = String(1 - 0.94 * eased);
+		}
+	}
+
+	function scheduleFallbackConveyor() {
+		if (nativeTimeline || reducedMotion || fallbackRafId) return;
+		fallbackRafId = requestAnimationFrame(updateFallbackConveyor);
 	}
 
 	async function settleAttempt(attemptId: string, animate: boolean) {
@@ -151,6 +187,14 @@
 	}
 
 	onMount(() => {
+		nativeTimeline = CSS.supports('animation-timeline: view()');
+		reducedMotionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+		reducedMotion = reducedMotionQuery.matches;
+		const handleMotionPreference = (event: MediaQueryListEvent) => {
+			reducedMotion = event.matches;
+			updateFallbackConveyor();
+		};
+		reducedMotionQuery.addEventListener('change', handleMotionPreference);
 		resizeObserver = new ResizeObserver(measure);
 		observeCards();
 		knownSessionId = $practice.sessionId;
@@ -159,8 +203,10 @@
 		if (latestId) void settleAttempt(latestId, false).then(() => (initialized = true));
 		else initialized = true;
 		return () => {
+			reducedMotionQuery?.removeEventListener('change', handleMotionPreference);
 			resizeObserver?.disconnect();
 			cancelAnimatedScroll();
+			if (fallbackRafId) cancelAnimationFrame(fallbackRafId);
 		};
 	});
 
@@ -187,23 +233,30 @@
 
 <div class="relative h-full" role="group" aria-label="Attempt history">
 	<div
-		class="h-full overflow-x-hidden overflow-y-auto px-8 py-6"
+		class="attempt-scroll h-full overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-7 sm:py-6"
 		role="region"
 		aria-label="Attempts"
 		bind:this={container}
 		onwheel={() => cancelAnimatedScroll()}
 		onpointerdown={() => cancelAnimatedScroll()}
 		ontouchstart={() => cancelAnimatedScroll()}
+		onscroll={scheduleFallbackConveyor}
 	>
 		<div class="relative min-w-0">
 			{#each attempts as attempt, index (attempt.id)}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<div
 					data-attempt-id={attempt.id}
-					class="attempt-slot mb-3 min-w-0 cursor-pointer"
+					class="attempt-slot mb-4 min-w-0 cursor-pointer rounded-[22px] outline-none focus-visible:ring-3 focus-visible:ring-[var(--brand)]/45"
+					role="button"
+					tabindex="0"
+					aria-label="Attempt {index + 1}, select and bring to the top"
 					onclick={(event) => selectCard(event, attempt.id)}
 					onkeydown={(event) => {
-						if (event.key === 'Enter') selectCard(event as unknown as MouseEvent, attempt.id);
+						if (event.key === 'Enter' || event.key === ' ') {
+							event.preventDefault();
+							selectCard(event as unknown as MouseEvent, attempt.id);
+						}
 					}}
 				>
 					<AttemptCard
@@ -236,8 +289,19 @@
 			animation-range: exit 0% exit 100%;
 			transform-origin: top center;
 			backface-visibility: hidden;
-			will-change: transform, opacity;
 		}
+	}
+
+	.attempt-scroll {
+		perspective: 1050px;
+		overscroll-behavior: contain;
+		scrollbar-gutter: stable;
+	}
+
+	.attempt-slot {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 240px;
+		transform-origin: top center;
 	}
 
 	@keyframes conveyor-exit {
@@ -245,17 +309,32 @@
 			transform: perspective(1100px) translateY(0) rotateX(0deg) scale(1);
 			opacity: 1;
 		}
-		45% {
-			transform: perspective(1100px) translateY(-8px) rotateX(12deg) scale(0.995);
-			opacity: 0.84;
+		55% {
+			transform: perspective(950px) translate3d(0, -10px, 0) rotateX(13deg) scale(0.992);
+			opacity: 0.82;
 		}
 		to {
-			transform: perspective(1100px) translateY(-52px) rotateX(62deg) scale(0.94);
-			opacity: 0.08;
+			transform: perspective(950px) translate3d(0, -48px, 0) rotateX(58deg) scale(0.92);
+			opacity: 0.06;
 		}
 	}
 
 	.conveyor-lip {
-		background: linear-gradient(to bottom, var(--background) 0%, color-mix(in srgb, var(--background) 72%, transparent) 45%, transparent 100%);
+		background: linear-gradient(
+			to bottom,
+			color-mix(in srgb, var(--background) 96%, transparent) 0%,
+			color-mix(in srgb, var(--background) 76%, transparent) 58%,
+			transparent 100%
+		);
+	}
+
+	/* Respect the user's motion preference: no conveyor, no lip. */
+	@media (prefers-reduced-motion: reduce) {
+		.attempt-slot {
+			animation: none !important;
+		}
+		.conveyor-lip {
+			display: none;
+		}
 	}
 </style>

@@ -10,8 +10,9 @@
 - `npm run check` — `svelte-kit sync` + `svelte-check`.
 - `npm run bundle:ui` — pack the isolated `src/routes/ui-sandbox/` UI with
   `npx repomix --include "src/routes/ui-sandbox/**/*.svelte" --output "repomix/ui-sandbox-bundle.xml"`.
-  Output stays in the gitignored `repomix/` folder (never the repo root) and includes no product
-  code. The first run needs network so npx can fetch repomix.
+  Output stays in `repomix/` (never the repo root). The folder is tracked via `repomix/.gitkeep`;
+  only the generated `repomix/*-bundle.*` file is gitignored. It includes no product code. The
+  first run needs network so npx can fetch repomix.
 - `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
 - `npm run tauri build` — package the desktop app.
 

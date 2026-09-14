@@ -1,6 +1,7 @@
 # Decisions
 
-Settled calls and the evidence behind them. Reversing one needs new evidence, not a hunch.
+Settled calls and the evidence behind them. Reversing one needs new evidence, not a hunch. Raw
+measurements live in `docs/benchmarks/`; the summaries below link there rather than repeat tables.
 
 ## STT model: `whisper-small q4` (299 MB)
 5.5% aggregate WER over three clips, stable across them (4.5-6.8%). The alternatives:
@@ -24,13 +25,13 @@ int8/uint8/q8 all fail to build a session — one broken export under three name
 
 ## TTS voice: `Piper Tom (M, medium)`, decided by listening test
 STT-style benchmarks (rtf, round-trip WER) measure speed and intelligibility, not how a voice
-sounds — so the TTS choice was made by ear, not by the numbers `docs/approved-tech.md` tracks.
+sounds — so the TTS choice was made by ear, not by the numbers `docs/benchmarks/tts.md` tracks.
 Ranked 2026-09-13: 1) Piper Tom (M, medium) — needs an EQ boost in the high end and more
 loudness; 2) Piper UPMC, jessica (#0); 3) Piper Siwis (F, medium); 4) Piper UPMC, pierre (#1).
 `Piper MLS (medium)` (125 speakers) kept unranked for later individual auditioning. Removed
 from the registry entirely (not just unranked): `Piper Siwis (F, low)`, MMS-TTS French at all
 three precisions, Audio8 TTS 0.6B (remote), Web Speech API — each lost the listening test or a
-technical gate. Their evidence stays in `docs/approved-tech.md`.
+technical gate. Their evidence stays in `docs/benchmarks/tts.md`.
 
 ## Rejected: `whisper-small-cv11-french`
 Best single-clip score of any model (2.4% on set1) and the worst aggregate (21.7%). Truncates,
@@ -229,8 +230,9 @@ answer can contain is what tripped low output-tokens-per-minute provider limits 
 ### Groq account model probe (2026-09-14)
 One `max_tokens: 1` chat completion was sent to every model the key lists, to populate dashboard
 metrics and read the `x-ratelimit-*` headers. Full results live in
-[`docs/groq-models.md`](../../../docs/groq-models.md) — that doc is authoritative; do not copy
-its table here. Headlines: the gpt-oss/qwen tier is **8 000 TPM** (one evaluation approaches it);
+[`docs/benchmarks/llm-providers.md`](../../../docs/benchmarks/llm-providers.md) — that file is
+authoritative; do not copy its table here. Headlines: the gpt-oss/qwen tier is **8 000 TPM** (one
+evaluation approaches it);
 Llama 3.1/3.3 are Enterprise-only and absent from the account; `whisper-*` are STT, `orpheus-*`
 are TTS (terms required), `prompt-guard` is a classifier. The key was read from a local file and
 never printed.
@@ -335,3 +337,76 @@ component state (simulated playback, simulated generation/spinners). `npm run bu
 only `src/routes/ui-sandbox/**/*.svelte`, so the bundle can never leak product code or become a
 refactor target for files the product depends on. The sandbox is self-contained and can stay in
 the repo indefinitely.
+
+### External UI critique applied to the real components (2026-09-14)
+The `ui-sandbox/` mock is only a repomix bundle for external UX review; the fixes were applied to
+the live components, not the mock.
+- **Active card state**: `AttemptCard` gets `border-[var(--brand)] ring-2 ring-[var(--brand-soft)]`
+  when active; inactive gets a hover border.
+- **Severity vs category colour**: `Transcript` colours marks by `severity`
+  (error/warning/suggestion), not category; the feedback panel shows category as a neutral badge
+  and severity as a coloured dot.
+- **Offset-based corrections**: `Correction` gained `start`/`end` (migration **v5**), computed in
+  `buildCorrections` when claiming distinct occurrences (no double-marking, no overlap); the
+  transcript tags tokens by offset and falls back to claiming occurrences for legacy rows.
+- **Real audio player**: new `stores/audio.ts` + `components/AudioBar.svelte` (play/pause, seek,
+  speed 0.75/1/1.25×, loop, active segment). All practice playback routes through it; the old
+  fire-and-forget `new Audio()` calls are gone. Segment rows show a pause icon while playing.
+- **Responsive split**: page grid is `grid-cols-1 lg:grid-cols-[minmax(0,1fr)_clamp(320px,30vw,420px)]`;
+  the feedback panel is below on small screens with a max-height.
+- **Feedback panel**: severity summary, category/severity filters, an accordion per correction
+  (explanation, `formalAlternatives` chips, exam badge, Hear it), sorted by `sortOrder`. The
+  duplicate "Session stats" heading is gone; a single compact one-line summary remains.
+- **Card header**: only Play + Translate stay visible; replay recording, sentence mode and voice
+  moved into an overflow `…` menu. Nested rounded panels replaced with `border-t` separators.
+- **#11 motion**: the conveyor was kept per the user's explicit request but softened
+  (`rotateX 34deg`, opacity 0.2) and disabled under `prefers-reduced-motion`.
+- **A11y**: card slots are focusable (`role=button`, Enter/Space), transcript corrections are real
+  buttons (only those are tab stops), icon buttons have `aria-label`s, translation/audio async
+  states are `aria-live`, menus close on Escape.
+
+Still open from the critique: design-token sweep (#6), replacing the JS spacer/ResizeObserver
+with CSS (#12), arrow-key menu navigation + 44px touch targets + contrast pass (#13), removing
+the redundant `attempt.translation` field (#21), list virtualization (#23), container queries
+(#25), and automated a11y/visual tests (#26).
+
+### Apple-inspired interaction and responsiveness pass (2026-09-15)
+- Added shadcn-svelte Tabs, Dropdown Menu, Collapsible, Progress, Separator, Tooltip, Select and
+  Alert Dialog primitives. Production Practice/Attempt/Feedback interactions and all seven
+  Settings choices use these instead of custom menus, native selects, prompt/confirm dialogs, and
+  ad-hoc disclosure controls.
+- The visual language is restrained glass, layered neutral surfaces and a teal→violet gradient;
+  phase changes, disclosures, filtering, translation detail, theme changes and route changes now
+  animate. `prefers-reduced-motion` remains authoritative.
+- Feedback summary is severity-only and count-over-label; category is secondary and lives in the
+  hamburger. Empty replacements are semantic deletions and render as strike-through + Remove.
+- The conveyor remains compositor-driven but now exits decisively at 58deg/0.06 opacity. A
+  requestAnimationFrame fallback is used only where view timelines are unsupported.
+- Mobile navigation moves from the side rail to a 60px bottom bar at <=640px. This prevents the
+  requested feedback labels from truncating at a 390px viewport.
+
+### Local-model resource policy (2026-09-15)
+- Piper moved completely into a lazy module worker; French G2P and ONNX inference no longer block
+  the main thread. Requests serialize, PCM is transferred, only one voice remains loaded, and all
+  voice sessions release after 90 seconds idle.
+- Whisper remains worker-hosted but now caps ORT WASM at two threads only on >=6-core, >=6GB,
+  cross-origin-isolated devices; all other devices use one. Its pipeline also releases after 90
+  seconds idle.
+- Piper downloads use `ReadableStream.tee()`: Cache Storage consumes one branch while inference
+  consumes one growable `Uint8Array`. This removes the former multi-copy 64–77MB memory spike.
+- Audio time updates no longer invalidate every AttemptCard; the cards subscribe to a separate
+  low-frequency playback-identity store. Replaced blob URLs are revoked, pronunciation URLs are
+  bounded to 48, the mic meter is capped at 25Hz, and the visible timer at 4Hz.
+- `openSession()` loads correction lists in parallel; offscreen cards use `content-visibility`,
+  and the stream observes only its viewport plus newest card. Font imports are Latin-only.
+- Browser evidence on a cold fresh origin: Piper Tom downloaded 64MB and generated 2.94 seconds
+  of speech in 44.9 seconds while requestAnimationFrame continued at ~60fps (2,688 frames), with
+  an 87ms maximum sampled timer gap. No page or console errors.
+
+### Coach notes responsive disclosure (2026-09-15)
+- Coach notes is one shadcn Collapsible, not a second custom toggle system. The state is owned by
+  Practice and bound into FeedbackPanel so the parent grid and panel content animate together.
+- Desktop defaults open and collapses the feedback column from up to 440px to a 64px icon/count
+  rail. Below 1024px it defaults closed as a 58px horizontal bar and opens to 42% of app height.
+- Selecting a marked transcript word always reopens Coach notes so linked feedback is never hidden.
+  Motion follows `prefers-reduced-motion` and the 390px view has no horizontal overflow.

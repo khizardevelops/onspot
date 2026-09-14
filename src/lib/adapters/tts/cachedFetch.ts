@@ -38,36 +38,37 @@ export async function cachedFetch(url: string, onProgress?: DownloadProgress): P
   if (!response.ok) throw new Error(`Download failed (HTTP ${response.status}) for ${url}`);
 
   const total = Number(response.headers.get('content-length')) || 0;
-  const reader = response.body!.getReader();
-  const chunks: Uint8Array[] = [];
+  let readable = response.body!;
+
+  // Cache Storage consumes one stream branch directly. The old path retained
+  // every chunk, joined those into a second 64–77 MB allocation, and copied
+  // that again into a Response—an avoidable memory spike during model load.
+  if (cache) {
+    const [readBranch, cacheBranch] = readable.tee();
+    readable = readBranch;
+    void cache
+      .put(url, new Response(cacheBranch, { headers: response.headers }))
+      .catch((error) => console.warn(`[tts] could not cache ${url}:`, error));
+  }
+
+  const reader = readable.getReader();
+  let bytes = new Uint8Array(total || 1024 * 1024);
   let loaded = 0;
 
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value);
+    if (loaded + value.length > bytes.length) {
+      const grown = new Uint8Array(Math.max(loaded + value.length, bytes.length * 2));
+      grown.set(bytes);
+      bytes = grown;
+    }
+    bytes.set(value, loaded);
     loaded += value.length;
     onProgress?.(loaded, total);
   }
 
-  const bytes = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  // Store a copy so the next load is instant. A failure here (quota, private
-  // mode) must not fail the download that already succeeded.
-  try {
-    await cache?.put(url, new Response(bytes, {
-      headers: { 'content-length': String(bytes.length), 'content-type': 'application/octet-stream' },
-    }));
-  } catch (err) {
-    console.warn(`[tts] could not cache ${url}:`, err);
-  }
-
-  return bytes.buffer;
+  return loaded === bytes.length ? bytes.buffer : bytes.slice(0, loaded).buffer;
 }
 
 /** True when `url` is already stored, so the UI can say "cached". */

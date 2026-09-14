@@ -60,23 +60,17 @@ own. Verified that both coexist in one page with no console errors.
 ### WASM quantization is a download-size lever, never a speed one
 
 Browser WASM has no INT8 SIMD path (no VNNI / ARM dot-product), so ORT-Web dequantizes back to
-float on every matmul. Measured on MMS-TTS French: **fp32 rtf 0.53, q8 rtf 2.68** — the 8-bit
-build is 5x slower for a third of the download. Same pattern as the Whisper findings. Use fp32
-on WASM, fp16 only on WebGPU.
+float on every matmul. The 8-bit build is ~5x slower for a third of the download. Measurements:
+[`docs/benchmarks/runtime.md`](../../../docs/benchmarks/runtime.md#quantization-is-a-bandwidth-lever-never-a-speed-one).
+Use fp32 on WASM, fp16 only on WebGPU.
 
 ## Whisper Quantization: q4 Works, int8 Does Not
 
-Measured in headful Chrome against `eval/set1` (63s French conversation), on an Intel
-gen-12lp adapter with `shader-f16`. fp32 baseline is 7.2% WER / 2.4% CER / rtf 0.21.
-
-| repo | dtype | device | result |
-|---|---|---|---|
-| onnx-community/whisper-base | q4 | wasm | **9.6% WER, 4.6% CER, rtf 0.387, 142MB — usable** |
-| onnx-community/whisper-base | q4 | webgpu | loads, 92.0% WER — nonsense |
-| onnx-community/whisper-base | int8 | wasm | will not build a session |
-| onnx-community/whisper-base | int8 | webgpu | loads, 68.8% WER, rtf 2.675 — wrong *and* 12x slower |
-| onnx-community/whisper-base-ONNX | int8 | wasm | will not build a session (identical error) |
-| onnx-community/whisper-small | q4 | wasm | **8.0% WER, 2.9% CER, rtf 1.769, 299MB — usable but slower than real time** |
+The full q4/int8 WASM-vs-WebGPU matrix is in
+[`docs/benchmarks/stt.md`](../../../docs/benchmarks/stt.md#quantization-matrix-set1-only) and
+[`docs/benchmarks/runtime.md`](../../../docs/benchmarks/runtime.md#precision-support-matrix).
+Summary: q4 builds and is usable on WASM; int8/uint8/q8 will not build; WebGPU builds but returns
+nonsense.
 
 ### Why int8 fails
 
@@ -102,12 +96,12 @@ that exposes the session map. Do it in a browser with a cold cache.
 
 ### Why WebGPU stays off
 
-WebGPU is available on this machine and builds sessions for both quantized precisions, but
-the numerics are wrong: 92% WER at q4 and 68.8% at int8, versus 9.6% for the same q4 weights
-on WASM. It is also slower for int8 (rtf 2.675 vs 0.387). `DEFAULT_DEVICE` therefore stays
-WASM; `VITE_STT_DEVICE=webgpu` is available for re-testing on other hardware. Because every
-run is scored against `eval/set1`, a regression like this shows up as a WER number rather
-than as a plausible-looking transcript.
+WebGPU is available on this machine and builds sessions for both quantized precisions, but its
+numerics are wrong for quantized weights (see
+[`docs/benchmarks/runtime.md`](../../../docs/benchmarks/runtime.md#device-wasm-not-webgpu)).
+`DEFAULT_DEVICE` therefore stays WASM; `VITE_STT_DEVICE=webgpu` is available for re-testing on
+other hardware. Because every run is scored against `eval/set1`, a regression like this shows up
+as a WER number rather than as a plausible-looking transcript.
 
 ## Moonshine Tiny FR Quality
 - **Issue**: `onnx-community/moonshine-tiny-fr-ONNX` (27M params) produces very poor transcriptions on real-world microphone audio. The model card states it is a "proof of concept" with WER of 21.8% on clean audiobook data, but real-world performance is far worse.

@@ -110,15 +110,25 @@ export class VoiceRecorder {
 			this.source.connect(this.analyser);
 
 			const data = new Uint8Array(this.analyser.fftSize);
+			let lastReport = 0;
+			let smoothed = 0;
 			const tick = () => {
 				if (!this.analyser) return;
-				this.analyser.getByteTimeDomainData(data);
-				let sum = 0;
-				for (let i = 0; i < data.length; i++) {
-					const centered = (data[i] - 128) / 128;
-					sum += centered * centered;
+				const now = performance.now();
+				// The meter is decorative. Updating the global practice store at the
+				// display refresh rate made every subscriber do unnecessary work.
+				if (now - lastReport >= 40) {
+					this.analyser.getByteTimeDomainData(data);
+					let sum = 0;
+					for (let i = 0; i < data.length; i++) {
+						const centered = (data[i] - 128) / 128;
+						sum += centered * centered;
+					}
+					const level = Math.min(1, Math.sqrt(sum / data.length) * 3);
+					smoothed = smoothed * 0.58 + level * 0.42;
+					this.onLevel?.(smoothed);
+					lastReport = now;
 				}
-				this.onLevel?.(Math.min(1, Math.sqrt(sum / data.length) * 3));
 				this.frame = requestAnimationFrame(tick);
 			};
 			this.frame = requestAnimationFrame(tick);

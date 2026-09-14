@@ -6,7 +6,7 @@
  * append-only: bump `SCHEMA_VERSION` and add a new entry to `MIGRATIONS`.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS: Record<number, string> = {
 	1: `
@@ -104,5 +104,12 @@ export const MIGRATIONS: Record<number, string> = {
 		ALTER TABLE attempts ADD COLUMN translations TEXT;
 		ALTER TABLE attempts ADD COLUMN tts_voice TEXT;
 		ALTER TABLE corrections ADD COLUMN replacement_translation TEXT;
+	`,
+
+	// Character offsets of each correction's `original` in the transcript, so the
+	// transcript renders by position instead of searching for the substring.
+	5: `
+		ALTER TABLE corrections ADD COLUMN start_index INTEGER;
+		ALTER TABLE corrections ADD COLUMN end_index INTEGER;
 	`
 };

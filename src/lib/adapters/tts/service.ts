@@ -1,5 +1,6 @@
-import { ttsRegistry } from './registry';
 import { OpenAITtsAdapter } from './OpenAITtsAdapter';
+import { WorkerPiperAdapter } from './WorkerPiperAdapter';
+import { localVoiceChoices } from './voices';
 import { pcmToWavUrl } from './roundTrip';
 import { getDatabaseAdapter } from '$lib/adapters/db';
 import { base64ToBlob, blobToBase64 } from '$lib/utils/base64';
@@ -29,11 +30,14 @@ export interface SpeechResult {
 
 /** Local Piper voices available to the product, ranked by the listening test. */
 export function listLocalVoices(): TtsChoice[] {
-	return ttsRegistry.getAllConfigs().map((config) => ({
-		id: config.id,
-		label: config.name,
-		note: config.downloadSize
-	}));
+	return localVoiceChoices();
+}
+
+let localPiper: WorkerPiperAdapter | null = null;
+
+function getLocalPiper(): WorkerPiperAdapter {
+	localPiper ??= new WorkerPiperAdapter();
+	return localPiper;
 }
 
 /** FNV-1a plus length: short, stable, collision-resistant enough for a cache key. */
@@ -108,10 +112,7 @@ async function generate(
 		};
 	}
 
-	const adapter = ttsRegistry.getAdapter(voice);
-	if (!adapter) throw new Error(`Unknown local voice "${voice}".`);
-
-	const synthesis = await ttsRegistry.synthesize(voice, options.text);
+	const synthesis = await getLocalPiper().synthesize(voice, options.text, options.onProgress);
 	if (synthesis.peak < 0.001) {
 		throw new Error('The voice returned silence.');
 	}

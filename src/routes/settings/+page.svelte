@@ -17,6 +17,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import * as Select from '$lib/components/ui/select';
 	import { AlertTriangle, Check, Download, Loader2, RefreshCw } from '@lucide/svelte';
 
 	const levels = ['A2', 'B1', 'B2', 'C1'];
@@ -70,8 +71,8 @@
 		return $customApiKey;
 	}
 
-	function onProviderChange(event: Event) {
-		const provider = (event.target as HTMLSelectElement).value as LlmProviderId;
+	function onProviderChange(value: string) {
+		const provider = value as LlmProviderId;
 		setSetting('llmProvider', provider);
 		remoteModels = [];
 		refreshMessage = '';
@@ -139,26 +140,22 @@
 			<h2 class="mb-4 text-xs font-semibold tracking-widest text-faint uppercase">Language</h2>
 			<div class="flex items-center justify-between gap-6 py-2">
 				<Label for="level">Your level</Label>
-				<select
-					id="level"
-					class="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-					value={$appSettings.level}
-					onchange={(event) => setSetting('level', (event.target as HTMLSelectElement).value)}
-				>
-					{#each levels as level (level)}<option value={level}>{level}</option>{/each}
-				</select>
+				<Select.Root type="single" items={levels.map((level) => ({ value: level, label: level }))} value={$appSettings.level} onValueChange={(value) => setSetting('level', value)}>
+					<Select.Trigger id="level" aria-label="Your level" class="h-9 min-w-48 bg-background"><Select.Value /></Select.Trigger>
+					<Select.Content>
+						{#each levels as level (level)}<Select.Item value={level} label={level} />{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 			<div class="flex items-center justify-between gap-6 py-2">
-				<Label>Default mode</Label>
-				<select
-					class="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-					value={$appSettings.mode}
-					onchange={(event) =>
-						setSetting('mode', (event.target as HTMLSelectElement).value as 'exam' | 'casual')}
-				>
-					<option value="exam">Exam</option>
-					<option value="casual">Casual</option>
-				</select>
+				<Label for="defaultMode">Default mode</Label>
+				<Select.Root type="single" items={[{ value: 'exam', label: 'Exam' }, { value: 'casual', label: 'Casual' }]} value={$appSettings.mode} onValueChange={(value) => setSetting('mode', value as 'exam' | 'casual')}>
+					<Select.Trigger id="defaultMode" aria-label="Default mode" class="h-9 min-w-48 bg-background"><Select.Value /></Select.Trigger>
+					<Select.Content>
+						<Select.Item value="exam" label="Exam" />
+						<Select.Item value="casual" label="Casual" />
+					</Select.Content>
+				</Select.Root>
 			</div>
 		</section>
 
@@ -167,16 +164,15 @@
 				AI provider (BYOK)
 			</h2>
 			<div class="flex items-center justify-between gap-6 py-2">
-				<Label>Provider</Label>
-				<select
-					class="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-					value={$appSettings.llmProvider}
-					onchange={onProviderChange}
-				>
-					{#each Object.values(LLM_PROVIDERS) as provider (provider.id)}
-						<option value={provider.id}>{provider.name}</option>
-					{/each}
-				</select>
+				<Label for="provider">Provider</Label>
+				<Select.Root type="single" items={Object.values(LLM_PROVIDERS).map((provider) => ({ value: provider.id, label: provider.name }))} value={$appSettings.llmProvider} onValueChange={onProviderChange}>
+					<Select.Trigger id="provider" aria-label="Provider" class="h-9 min-w-48 bg-background"><Select.Value /></Select.Trigger>
+					<Select.Content>
+						{#each Object.values(LLM_PROVIDERS) as provider (provider.id)}
+							<Select.Item value={provider.id} label={provider.name} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 
 			{#if $appSettings.llmProvider === 'custom'}
@@ -205,18 +201,14 @@
 			{:else}
 				<div class="flex items-center justify-between gap-6 py-2">
 					<Label for="model">Model</Label>
-					<select
-						id="model"
-						class="h-9 min-w-64 rounded-md border bg-background px-2 text-sm"
-						value={$appSettings.llmModel}
-						onchange={(event) => setSetting('llmModel', (event.target as HTMLSelectElement).value)}
-					>
-						{#each modelOptions as option (option.id)}
-							<option value={option.id}
-								>{option.label}{option.note ? ` — ${option.note}` : ''}</option
-							>
-						{/each}
-					</select>
+					<Select.Root type="single" items={modelOptions.map((option) => ({ value: option.id, label: `${option.label}${option.note ? ` — ${option.note}` : ''}` }))} value={$appSettings.llmModel} onValueChange={(value) => setSetting('llmModel', value)}>
+						<Select.Trigger id="model" aria-label="Model" class="h-9 min-w-64 max-w-80 bg-background"><Select.Value /></Select.Trigger>
+						<Select.Content class="max-w-[min(24rem,calc(100vw-2rem))]">
+							{#each modelOptions as option (option.id)}
+								<Select.Item value={option.id} label={`${option.label}${option.note ? ` — ${option.note}` : ''}`} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 				<div class="flex items-center gap-3 pt-1">
 					<Button variant="outline" size="sm" onclick={refreshModels} disabled={refreshing}>
@@ -292,39 +284,34 @@
 		<section class="mb-8 border-b pb-6">
 			<h2 class="mb-4 text-xs font-semibold tracking-widest text-faint uppercase">Speech</h2>
 			<div class="flex items-center justify-between gap-6 py-2">
-				<Label>Transcription</Label>
-				<select
-					class="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-					value={$appSettings.sttMode}
-					onchange={(event) =>
-						setSetting('sttMode', (event.target as HTMLSelectElement).value as 'local' | 'cloud')}
-				>
-					<option value="local">Local (Whisper Small, WASM)</option>
-					<option value="cloud">Cloud (Groq)</option>
-				</select>
+				<Label for="sttMode">Transcription</Label>
+				<Select.Root type="single" items={[{ value: 'local', label: 'Local (Whisper Small, WASM)' }, { value: 'cloud', label: 'Cloud (Groq)' }]} value={$appSettings.sttMode} onValueChange={(value) => setSetting('sttMode', value as 'local' | 'cloud')}>
+					<Select.Trigger id="sttMode" aria-label="Transcription" class="h-9 min-w-48 bg-background"><Select.Value /></Select.Trigger>
+					<Select.Content>
+						<Select.Item value="local" label="Local (Whisper Small, WASM)" />
+						<Select.Item value="cloud" label="Cloud (Groq)" />
+					</Select.Content>
+				</Select.Root>
 			</div>
 			<div class="flex items-center justify-between gap-6 py-2">
-				<Label>Voice</Label>
-				<select
-					class="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-					value={$appSettings.ttsMode}
-					onchange={(event) =>
-						setSetting('ttsMode', (event.target as HTMLSelectElement).value as 'local' | 'cloud')}
-				>
-					<option value="local">Local (Piper)</option>
-					<option value="cloud">Cloud (OpenAI)</option>
-				</select>
+				<Label for="ttsMode">Voice</Label>
+				<Select.Root type="single" items={[{ value: 'local', label: 'Local (Piper)' }, { value: 'cloud', label: 'Cloud (OpenAI)' }]} value={$appSettings.ttsMode} onValueChange={(value) => setSetting('ttsMode', value as 'local' | 'cloud')}>
+					<Select.Trigger id="ttsMode" aria-label="Voice" class="h-9 min-w-48 bg-background"><Select.Value /></Select.Trigger>
+					<Select.Content>
+						<Select.Item value="local" label="Local (Piper)" />
+						<Select.Item value="cloud" label="Cloud (OpenAI)" />
+					</Select.Content>
+				</Select.Root>
 			</div>
 			{#if $appSettings.ttsMode === 'local'}
 				<div class="flex items-center justify-between gap-6 py-2">
-					<Label>Piper voice</Label>
-					<select
-						class="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-						value={$appSettings.ttsVoice}
-						onchange={(event) => setSetting('ttsVoice', (event.target as HTMLSelectElement).value)}
-					>
-						{#each voices as voice (voice.id)}<option value={voice.id}>{voice.label}</option>{/each}
-					</select>
+					<Label for="ttsVoice">Piper voice</Label>
+					<Select.Root type="single" items={voices.map((voice) => ({ value: voice.id, label: voice.label }))} value={$appSettings.ttsVoice} onValueChange={(value) => setSetting('ttsVoice', value)}>
+						<Select.Trigger id="ttsVoice" aria-label="Piper voice" class="h-9 min-w-48 max-w-72 bg-background"><Select.Value /></Select.Trigger>
+						<Select.Content>
+							{#each voices as voice (voice.id)}<Select.Item value={voice.id} label={voice.label} />{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 			{:else}
 				<div class="flex items-center justify-between gap-6 py-2">
