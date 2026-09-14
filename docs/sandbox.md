@@ -1,0 +1,31 @@
+Bonjour monsieur, je voudrais un billet
+pour Lyon s'il vous plaît.
+Bonjour madame.
+Vous partez aujourd'hui ?
+Oui, cet après-midi si possible.
+Très bien. Vous préférez un train direct
+ou avec correspondance ?
+Un train direct, s'il vous plaît.
+D'accord.
+Il y a un train à 15h10.
+Parfait.
+Combien coûte le billet ?
+50 € en seconde place, 65 en première.
+Je prends la seconde classe. Merci.
+Vous payez en carte ou en espèce ?
+par carte, s'il vous plaît.
+Très bien. Voici votre billet et votre
+reçu.
+Merci beaucoup.
+Le train part de quelle voix ?
+De la voie 5.
+Vous devez valider le billet avant de
+monter.
+Où puis-je le valider ?
+Juste là-bas à la borne jaune.
+D'accord.
+Combien de temps dure le trajet ?
+Environ 2h30.
+Parfait.
+Merci pour votre aide.
+Avec plaisir.

@@ -1,0 +1,8 @@
+# Native linker for the host target.
+#
+# On Arch-based distributions GCC reports its triple as `x86_64-pc-linux-gnu`
+# while Rust's host triple is `x86_64-unknown-linux-gnu`. Some toolchains then
+# look for a linker named `x86_64-linux-gnu-gcc`, which does not exist here.
+# Pinning the linker to `gcc` avoids that without a system-wide change.
+[target.x86_64-unknown-linux-gnu]
+linker = "gcc"

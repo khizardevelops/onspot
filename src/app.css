@@ -1,0 +1,181 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Self-hosted fonts — no third-party font CDN in a privacy-focused app. */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/source-serif-4/400.css';
+@import '@fontsource/source-serif-4/500.css';
+@import '@fontsource/source-serif-4/600.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Design tokens.
+ *
+ * The `--background`/`--foreground`/... block is the shadcn-svelte contract.
+ * The lower block (`--rail-bg`, `--brand`, `--warn`, ...) is onspot's own
+ * palette, taken from `prototype/app.html`. `--accent` is deliberately shadcn's
+ * subtle hover surface, *not* the brand colour; the brand is `--brand`.
+ */
+:root {
+	--background: #fafaf8;
+	--foreground: #1a1a1a;
+	--card: #ffffff;
+	--card-foreground: #1a1a1a;
+	--popover: #ffffff;
+	--popover-foreground: #1a1a1a;
+	--primary: #0f766e;
+	--primary-foreground: #ffffff;
+	--secondary: #f5f4f0;
+	--secondary-foreground: #1a1a1a;
+	--muted: #f5f4f0;
+	--muted-foreground: #6b6b6b;
+	--accent: #f5f4f0;
+	--accent-foreground: #1a1a1a;
+	--destructive: #dc2626;
+	--destructive-foreground: #ffffff;
+	--border: #e8e6e1;
+	--input: #d8d5ce;
+	--ring: #0f766e;
+
+	--rail-bg: #eeece6;
+	--surface-2: #f5f4f0;
+	--faint: #9a9a9a;
+	--brand: #0f766e;
+	--brand-soft: rgba(15, 118, 110, 0.09);
+	--brand-hover: #0d655e;
+	--error: #dc2626;
+	--error-soft: rgba(220, 38, 38, 0.08);
+	--warn: #d97706;
+	--warn-soft: rgba(217, 119, 6, 0.08);
+	--good: #059669;
+	--good-soft: rgba(5, 150, 105, 0.08);
+	--glow-red: 255, 77, 77;
+	--glow-yellow: 255, 193, 7;
+	--glow-green: 5, 150, 105;
+
+	--radius: 0.625rem;
+}
+
+[data-theme='dark'] {
+	--background: #0e0e10;
+	--foreground: #ededed;
+	--card: #18181b;
+	--card-foreground: #ededed;
+	--popover: #18181b;
+	--popover-foreground: #ededed;
+	--primary: #14b8a6;
+	--primary-foreground: #0e0e10;
+	--secondary: #1f1f23;
+	--secondary-foreground: #ededed;
+	--muted: #1f1f23;
+	--muted-foreground: #8a8a8a;
+	--accent: #1f1f23;
+	--accent-foreground: #ededed;
+	--destructive: #f87171;
+	--destructive-foreground: #0e0e10;
+	--border: #26262a;
+	--input: #3a3a40;
+	--ring: #14b8a6;
+
+	--rail-bg: #0a0a0c;
+	--surface-2: #1f1f23;
+	--faint: #5a5a5a;
+	--brand: #14b8a6;
+	--brand-soft: rgba(20, 184, 166, 0.11);
+	--brand-hover: #2dd4bf;
+	--error: #f87171;
+	--error-soft: rgba(248, 113, 113, 0.1);
+	--warn: #fbbf24;
+	--warn-soft: rgba(251, 191, 36, 0.1);
+	--good: #34d399;
+	--good-soft: rgba(52, 211, 153, 0.1);
+	--glow-red: 248, 113, 113;
+	--glow-yellow: 251, 191, 36;
+	--glow-green: 52, 211, 153;
+}
+
+@theme inline {
+	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--font-serif: 'Source Serif 4', Georgia, serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	--color-rail: var(--rail-bg);
+	--color-surface-2: var(--surface-2);
+	--color-faint: var(--faint);
+	--color-brand: var(--brand);
+	--color-brand-soft: var(--brand-soft);
+	--color-brand-hover: var(--brand-hover);
+	--color-error: var(--error);
+	--color-error-soft: var(--error-soft);
+	--color-warn: var(--warn);
+	--color-warn-soft: var(--warn-soft);
+	--color-good: var(--good);
+	--color-good-soft: var(--good-soft);
+
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+	* {
+		border-color: var(--border);
+	}
+
+	html,
+	body {
+		height: 100%;
+	}
+
+	body {
+		background-color: var(--background);
+		color: var(--foreground);
+		font-family: var(--font-sans);
+		font-size: 14px;
+		line-height: 1.5;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		background: var(--input);
+		border-radius: 5px;
+		border: 3px solid var(--background);
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: var(--faint);
+	}
+}

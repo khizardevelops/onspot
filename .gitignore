@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# SvelteKit
+.svelte-kit/
+build/
+.vercel
+.netlify
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 18MB espeak-ng data for French G2P, restored via the copy step in commands.md
+static/piper-wasm/
+
+# Local database dumps / exports
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated repomix bundles (npm run bundle:ui)
+repomix/
