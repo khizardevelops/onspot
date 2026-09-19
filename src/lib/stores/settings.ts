@@ -3,6 +3,7 @@ import { getDatabaseAdapter } from '$lib/adapters/db';
 import type { RunMode } from '$lib/adapters/db';
 import type { LlmModelId, LlmProviderId } from '$lib/adapters/llm';
 import { getProvider } from '$lib/adapters/llm';
+import { APPROVED_LANGUAGES, NEUTRAL_TUNING, type VoiceTuning } from '$lib/languages';
 
 /** How much translation to show under an attempt. */
 export type TranslationMode = 'off' | 'idiomatic' | 'all';
@@ -32,6 +33,11 @@ export interface AppSettings {
 	/** How much translation to show under an attempt. */
 	translationMode: TranslationMode;
 	targetLanguage: string;
+	/**
+	 * Advanced per-voice audio adjustments (volume/EQ) layered on top of each
+	 * voice's approved processing profile. Keyed by voice id; absent = neutral.
+	 */
+	voiceTunings: Record<string, VoiceTuning>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -45,11 +51,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	customBaseUrl: '',
 	customModel: '',
 	translationMode: 'off',
-	targetLanguage: 'French'
+	targetLanguage: '',
+	voiceTunings: {}
 };
 
 const FIELD_PREFIX = 'onspot.setting.';
 const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
+
+/** True once persisted settings have been loaded; prevents first-run flicker. */
+export const settingsReady = writable(false);
 
 let hydrated = false;
 
@@ -85,11 +95,20 @@ export async function initSettings(): Promise<void> {
 			// keep the default
 		}
 	}
+	// Settings written before the language registry used ids stored the English
+	// name ("French"). Normalise to the registry id, or clear it so the first-run
+	// picker appears.
+	const match = APPROVED_LANGUAGES.find(
+		(language) => language.id === loaded.targetLanguage || language.name === loaded.targetLanguage
+	);
+	loaded.targetLanguage = match?.id ?? '';
+	loaded.voiceTunings = sanitizeTunings(loaded.voiceTunings);
 	// A settings row from before the model enum existed may name a model this
 	// build no longer ships. The Settings dropdown keeps the unknown id as an
 	// extra option rather than silently discarding the user's choice.
 	hydrated = true;
 	store.set(loaded);
+	settingsReady.set(true);
 }
 
 export const appSettings = {
@@ -100,4 +119,47 @@ export const appSettings = {
 
 export function setSetting<K extends keyof AppSettings>(field: K, value: AppSettings[K]): void {
 	store.update((current) => ({ ...current, [field]: value }));
+}
+
+/** Per-voice tuning values are clamped to the UI's ±12 dB range. */
+function sanitizeTunings(value: unknown): Record<string, VoiceTuning> {
+	if (!value || typeof value !== 'object') return {};
+	const out: Record<string, VoiceTuning> = {};
+	for (const [voiceId, raw] of Object.entries(value as Record<string, unknown>)) {
+		if (!raw || typeof raw !== 'object') continue;
+		const entry = raw as Record<string, unknown>;
+		const clamp = (value: unknown): number =>
+			typeof value === 'number' && Number.isFinite(value) ? Math.max(-12, Math.min(12, value)) : 0;
+		out[voiceId] = {
+			volumeDb: clamp(entry.volumeDb),
+			bassDb: clamp(entry.bassDb),
+			bodyDb: clamp(entry.bodyDb),
+			presenceDb: clamp(entry.presenceDb),
+			trebleDb: clamp(entry.trebleDb)
+		};
+	}
+	return out;
+}
+
+export function voiceTuning(settings: AppSettings, voiceId: string): VoiceTuning {
+	return settings.voiceTunings[voiceId] ?? NEUTRAL_TUNING;
+}
+
+export function setVoiceTuning(voiceId: string, patch: Partial<VoiceTuning>): void {
+	store.update((current) => ({
+		...current,
+		voiceTunings: {
+			...current.voiceTunings,
+			[voiceId]: { ...NEUTRAL_TUNING, ...current.voiceTunings[voiceId], ...patch }
+		}
+	}));
+}
+
+/** Drops the voice's adjustments, restoring the approved sound. */
+export function resetVoiceTuning(voiceId: string): void {
+	store.update((current) => {
+		const next = { ...current.voiceTunings };
+		delete next[voiceId];
+		return { ...current, voiceTunings: next };
+	});
 }

@@ -4,6 +4,45 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### Writing In `docs/` Reloaded The Dev App
+- **Symptom**: typing in `docs/*.md` triggered a full page reload of the running dev app, losing
+  in-page state, even though `docs/` is never imported by app code.
+- **Cause**: Tailwind v4's Vite plugin scans the whole project root for class candidates
+  (including Markdown) and registers every scanned file as a build dependency of `app.css`.
+  Vite then maps a change in that file to the CSS module, finds no HMR boundary, and sends a full
+  reload (logged as `page reload docs/...`).
+- **Fix**: exclude non-app content from Tailwind's scan in `src/app.css` with
+  `@source not '../docs'` plus `.agents`, `eval` and `repomix`. App code (`src/`) is still
+  scanned, so utility classes keep working. A dev server started before the fix keeps the stale
+  watcher registrations and must be restarted once.
+- **Files**: `src/app.css`
+
+### Long Cards Flipped Away While Being Read
+- **Symptom**: expanding the word breakdown on a long take and scrolling down through it made the
+  card rotate/curve off-screen. The card expanded visually but the conveyor kept treating the
+  card's exit progress as if it were short.
+- **Cause**: the exit view timeline (`animation-range: exit 0% exit 100%`) is anchored to the
+  card's box. For a card taller than the viewport, the exit range is already part-way through as
+  soon as it is on screen, so ordinary scrolling inside it maps to heavy `rotateX`/fade.
+- **Fix**: cards taller than `max(480px, 75% viewport)` get a JS-applied `tall` class that
+  disables the conveyor animation (`.attempt-slot:global(.tall)`), so they scroll flat. Every
+  slot is `ResizeObserver`-watched; the callback only re-evaluates the card whose size changed.
+  The rAF fallback skips tall slots too.
+- **Svelte trap**: a plain `.attempt-slot.tall` selector is pruned because the class is added at
+  runtime; the selector must be `:global(.tall)` on the scoped parent.
+- **Files**: `AttemptStream.svelte`
+
+### Feedback Tabs And Mode Switch Looked Unselected
+- **Symptom**: "all/errors/warnings/suggestions — all has the same colour when selected and
+  unselected"; the Exam/Casual switch was equally bland.
+- **Cause**: bits-ui's Tabs trigger exposes its state as `data-state="active|inactive"`, but the
+  shadcn base classes and our custom classes targeted `data-active:`. That variant never matched,
+  so the selected pill had a transparent background exactly like the unselected ones.
+- **Fix**: selected styling now targets `[data-state=active]` (`data-[state=active]:` in markup).
+  Each severity gets its own tint; `All` is a high-contrast neutral pill. Equal four-column grid
+  with important utilities also fixed the `All` column being wider than the rest.
+- **Files**: `FeedbackPanel.svelte`, `routes/+page.svelte`
+
 ### Piper Multi-Speaker Voices Failed With "input 'sid' is missing in 'feeds'"
 - **Symptom**: `Piper UPMC (F, medium)` synthesized nothing: `[Failed: input 'sid' is missing in 'feeds'.]`
 - **Cause**: French Piper voices are not structurally interchangeable. `siwis` and `tom` are single-speaker, but `upmc` has **2** speakers (jessica, pierre) and `mls` has **125** — those graphs declare an extra `sid` (speaker id) input. The adapter only ever fed `input`, `input_lengths` and `scales`.

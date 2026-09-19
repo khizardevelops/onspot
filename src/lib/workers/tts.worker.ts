@@ -15,12 +15,18 @@ interface SynthesizeRequest {
 	text: string;
 }
 
+interface LoadRequest {
+	id: number;
+	type: 'load';
+	voice: string;
+}
+
 interface ReleaseRequest {
 	id: number;
 	type: 'release';
 }
 
-type Request = SynthesizeRequest | ReleaseRequest;
+type Request = SynthesizeRequest | LoadRequest | ReleaseRequest;
 
 type Response =
 	| { id: number; type: 'progress'; progress: ModelProgress }
@@ -33,6 +39,7 @@ type Response =
 			durationSec: number;
 			peak: number;
 	  }
+	| { id: number; type: 'ready' }
 	| { id: number; type: 'released' }
 	| { id: number; type: 'error'; message: string };
 
@@ -81,6 +88,11 @@ async function handle(request: Request): Promise<void> {
 		if (!adapter) throw new Error(`Unknown local voice "${request.voice}".`);
 		if (adapter.status !== 'ready') {
 			await adapter.load((progress) => post({ id: request.id, type: 'progress', progress }));
+		}
+
+		if (request.type === 'load') {
+			post({ id: request.id, type: 'ready' });
+			return;
 		}
 
 		const result = await adapter.synthesize(request.text);

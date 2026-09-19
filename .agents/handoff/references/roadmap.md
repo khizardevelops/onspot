@@ -4,7 +4,8 @@
 - **Phase 3 — BYOC sync.** Google Drive (OAuth 2.0 PKCE, client-side), WebDAV, and local
   `.sqlite` export/import.
 - Complete one real local Whisper + configured LLM practice run after the full model download.
-- Apply the listening-test EQ/loudness pass to Piper Tom.
+- Confirm the Piper Tom EQ/loudness processing profile by ear, then approve the next language
+  (STT + voice) with a human quality pass and add it to the language registry.
 
 ## Completed
 - **Phase 1 — foundation.** SvelteKit SPA, Tauri shell, cross-origin isolation, and dual-runtime
@@ -13,6 +14,9 @@
   evaluation, persistence, and Piper / cloud TTS.
 - **Phase 4 — product UI.** Practice, History, Insights, Settings, the attempt conveyor, and
   per-attempt strict translation v2 with progressive disclosure.
+- **Language system.** Registry with per-language approval records, first-run language picker,
+  manual cancellable language-data download with a global progress bar, per-voice TTS processing
+  (EQ/limiter/normalization), and language-parameterized STT/TTS/prompts.
 
 ## Medium-Term
 - Grow the prompt set and topic generation beyond the prototype's static list.

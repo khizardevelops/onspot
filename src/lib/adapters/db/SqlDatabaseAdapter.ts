@@ -120,17 +120,23 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 
 	// ---------------------------------------------------------------- Prompts
 
-	async listPrompts(): Promise<Prompt[]> {
+	async listPrompts(language?: string): Promise<Prompt[]> {
 		const db = await this.sql();
+		if (language) {
+			return db.select<Prompt>(
+				'SELECT id, title, text, category, language, created_at AS createdAt FROM prompts WHERE language = ? ORDER BY created_at DESC',
+				[language]
+			);
+		}
 		return db.select<Prompt>(
-			'SELECT id, title, text, category, created_at AS createdAt FROM prompts ORDER BY created_at DESC'
+			'SELECT id, title, text, category, language, created_at AS createdAt FROM prompts ORDER BY created_at DESC'
 		);
 	}
 
 	async getPrompt(id: string): Promise<Prompt | null> {
 		const db = await this.sql();
 		const rows = await db.select<Prompt>(
-			'SELECT id, title, text, category, created_at AS createdAt FROM prompts WHERE id = ?',
+			'SELECT id, title, text, category, language, created_at AS createdAt FROM prompts WHERE id = ?',
 			[id]
 		);
 		return rows[0] ?? null;
@@ -139,8 +145,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	async putPrompt(prompt: Prompt): Promise<void> {
 		const db = await this.sql();
 		await db.execute(
-			upsert('prompts', ['id', 'title', 'text', 'category', 'created_at']),
-			[prompt.id, prompt.title, prompt.text, prompt.category, prompt.createdAt]
+			upsert('prompts', ['id', 'title', 'text', 'category', 'language', 'created_at']),
+			[prompt.id, prompt.title, prompt.text, prompt.category, prompt.language, prompt.createdAt]
 		);
 	}
 
@@ -455,6 +461,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 		lines.push('COMMIT;');
 		return new TextEncoder().encode(lines.join('\n'));
 	}
+
+	abstract exportSqliteFile(): Promise<Uint8Array>;
 
 	async import(data: Uint8Array): Promise<void> {
 		const db = await this.sql();

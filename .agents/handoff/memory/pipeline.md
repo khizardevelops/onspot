@@ -56,6 +56,38 @@ strict translation-only LLM JSON
 Everything except the BYOK endpoints runs on the device. Audio is stored so an attempt can be
 replayed; text goes to a cloud LLM only when a key is configured.
 
+## Language-data download (manual, cancellable)
+
+```
+user picks a language (first run or Settings)
+      |
+      v
+language registry entry: approved STT + default/selected voice + prompts
+      |
+      v
+Settings -> Language data -> Download  (never automatic)
+      |
+      v
+stores/languageData.ts
+  +-- preloadLocalSTT(language)      whisper repo -> transformers-cache
+  |     progress callback -> weighted share of 0..100
+  +-- preloadLocalVoice(voice)       .onnx into onspot-tts-cache
+  |     progress callback -> the rest of 0..100
+  +-- refreshLanguageData()          re-reads both caches -> ready
+      |
+      +-- LanguageDownloadBar (layout) shows the combined bar + Cancel anywhere
+      +-- cancel: terminate both workers; next use lazily recreates them
+      v
+Practice gate clears once both caches hold the approved files
+
+TTS read-back:  Piper PCM -> voice processing profile (EQ, compressor/limiter,
+                makeup, peak normalization) -> WAV -> cache/playback
+```
+
+The check uses the Cache API, which is per origin — a cold origin shows "Not installed" even if
+another port has the bytes. Cloud-only configurations skip the gate.
+
+
 ## Runtime split
 
 ```

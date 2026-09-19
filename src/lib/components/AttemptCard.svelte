@@ -11,6 +11,7 @@
 	import { appSettings } from '$lib/stores/settings';
 	import { listLocalVoices } from '$lib/adapters/tts/service';
 	import { splitSentences } from '$lib/utils/segments';
+	import { fitFontSize } from '$lib/utils/fitText';
 	import { audioActivity, togglePlay } from '$lib/stores/audio';
 	import Transcript from './Transcript.svelte';
 	import AudioBar from './AudioBar.svelte';
@@ -44,7 +45,24 @@
 	let { attempt, index, active, activeCorrectionId = null, onSelectCorrection }: Props = $props();
 	type TranslationView = 'off' | 'idiomatic' | 'literal' | 'wordForWord' | 'all';
 
-	const voices = listLocalVoices();
+	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
+
+	/*
+	 * Takes run from a sentence to several minutes of speech. Short takes read
+	 * large; longer ones shrink toward the floor so the card keeps its height,
+	 * and only past the floor does the card grow taller.
+	 */
+	const TRANSCRIPT_FIT = {
+		min: 15,
+		max: 24,
+		targetHeight: 190,
+		advance: 0.47,
+		lineHeight: 1.6
+	} as const;
+	let transcriptWidth = $state(0);
+	const transcriptSize = $derived(
+		fitFontSize(attempt.transcript.length, transcriptWidth, TRANSCRIPT_FIT)
+	);
 	let showSegments = $state(false);
 	let rerendering = $state(false);
 	let generatingTranslations = $state(false);
@@ -85,14 +103,16 @@
 		if (translationView === 'off') return [];
 		if (translationView === 'all') {
 			return [
-				{ label: 'Idiomatic', value: translations.idiomatic, italic: false },
-				{ label: 'Literal', value: translations.literal, italic: false },
-				{ label: 'Word-for-word', value: translations.wordForWord, italic: true }
+				{ kind: 'idiomatic', label: 'Idiomatic', value: translations.idiomatic, italic: false },
+				{ kind: 'literal', label: 'Literal', value: translations.literal, italic: false },
+				{ kind: 'wordForWord', label: 'Word-for-word', value: translations.wordForWord, italic: true }
 			].filter((entry) => entry.value);
 		}
 		const value = translations[translationView];
 		const label = TRANSLATION_OPTIONS.find((option) => option.id === translationView)?.label ?? '';
-		return value ? [{ label, value, italic: translationView === 'wordForWord' }] : [];
+		return value
+			? [{ kind: translationView, label, value, italic: translationView === 'wordForWord' }]
+			: [];
 	});
 
 	const segments = $derived(
@@ -183,13 +203,38 @@
 	}
 </script>
 
+{#snippet detailChip(kind: string)}
+	{#if kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
+		<button
+			type="button"
+			class="inline-chip"
+			aria-expanded={showIdiomaticVariants}
+			onclick={() => (showIdiomaticVariants = !showIdiomaticVariants)}
+		>
+			{showIdiomaticVariants ? 'Hide' : '+'}{translations.idiomaticVariants.length} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
+			<ChevronDown class="size-3 transition-transform duration-300 {showIdiomaticVariants ? 'rotate-180' : ''}" />
+		</button>
+	{:else if kind === 'wordForWord'}
+		<button
+			type="button"
+			class="inline-chip"
+			aria-expanded={showWordBreakdown}
+			onclick={() => void toggleWordBreakdown(!showWordBreakdown)}
+		>
+			Word breakdown
+			<ChevronDown class="size-3 transition-transform duration-300 {showWordBreakdown ? 'rotate-180' : ''}" />
+		</button>
+	{/if}
+{/snippet}
+
 <Card.Root
 	data-card-surface
-	class="attempt-card relative w-full min-w-0 gap-0 overflow-visible rounded-[22px] py-0 transition-[border-color,box-shadow,transform] duration-300 {active ? 'active-card' : 'hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]'}"
+	class="attempt-card relative w-full min-w-0 gap-0 overflow-visible rounded-[22px] py-0 transition-[border-color,box-shadow] duration-300 {active ? 'active-card' : 'hover:shadow-[var(--shadow-sheet-hover)]'}"
 >
-	<Card.Header class="flex-row items-start justify-between gap-3 px-4 pt-4 pb-0 sm:px-5 sm:pt-5">
-		<div class="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+	<div class="flex items-center justify-between gap-2 px-4 pt-3 pb-0 sm:px-5 sm:pt-3.5">
+		<div class="flex min-w-0 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
 			<Badge variant={active ? 'default' : 'secondary'} class="h-5 px-2 text-[10px] tracking-wide uppercase">Take {index}</Badge>
+			<span class="text-faint">·</span>
 			<span>{attempt.durationSec.toFixed(0)} sec</span>
 			<span class="text-faint">·</span>
 			<span>{attempt.wordCount} words</span>
@@ -199,7 +244,7 @@
 			<Tooltip.Root>
 				<Tooltip.Trigger
 					aria-label={attemptPlaying() ? 'Pause natural version' : 'Play natural version'}
-					class="grid size-9 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+					class="grid size-8 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
 					onclick={toggleAttemptAudio}
 				>
 					{#if attemptPlaying()}<Pause class="size-4" />{:else}<Volume2 class="size-4" />{/if}
@@ -210,7 +255,7 @@
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger
 					aria-label="Translation options"
-					class="flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-all focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none {translationView !== 'off' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground'}"
+					class="flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-all focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none {translationView !== 'off' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground'}"
 				>
 					{#if generatingTranslations}<Loader2 class="size-3.5 animate-spin" />{:else}<Languages class="size-3.5" />{/if}
 					<span class="hidden sm:inline">{generatingTranslations ? 'Working…' : translationLabel}</span>
@@ -236,7 +281,7 @@
 			</DropdownMenu.Root>
 
 			<DropdownMenu.Root>
-				<DropdownMenu.Trigger aria-label="More attempt actions" class="grid size-9 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none">
+				<DropdownMenu.Trigger aria-label="More attempt actions" class="grid size-8 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none">
 					<Ellipsis class="size-4" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end" class="w-60 p-1.5" loop>
@@ -255,18 +300,25 @@
 						</DropdownMenu.Sub>
 					{/if}
 				</DropdownMenu.Content>
-			</DropdownMenu.Root>
+					</DropdownMenu.Root>
 		</div>
-	</Card.Header>
+	</div>
 
-	<Card.Content class="px-4 pt-3 pb-4 sm:px-5 sm:pb-5">
-		<Transcript
-			text={attempt.transcript}
-			corrections={attempt.corrections}
-			activeCorrectionId={active ? activeCorrectionId : null}
-			onSelect={(correctionId) => onSelectCorrection?.(attempt.id, correctionId)}
-			class="block break-words font-serif text-[19px] leading-[1.75]"
-		/>
+	<Card.Content class="px-4 pt-2 pb-3.5 sm:px-5 sm:pb-4">
+		<div
+			bind:clientWidth={transcriptWidth}
+			class="transcript-fit"
+			style:font-size={`${transcriptSize}px`}
+			style:line-height={TRANSCRIPT_FIT.lineHeight}
+		>
+			<Transcript
+				text={attempt.transcript}
+				corrections={attempt.corrections}
+				activeCorrectionId={active ? activeCorrectionId : null}
+				onSelect={(correctionId) => onSelectCorrection?.(attempt.id, correctionId)}
+				class="block break-words font-serif [text-wrap:pretty]"
+			/>
+		</div>
 
 		{#if active}
 			<div in:slide={{ duration: 280, axis: 'y' }} out:fade={{ duration: 130 }}>
@@ -282,30 +334,34 @@
 		{/if}
 
 		{#if translationView !== 'off'}
-			<div class="mt-4 min-w-0" aria-live="polite" in:slide={{ duration: 320 }} out:fade={{ duration: 140 }}>
-				<Separator class="mb-3" />
+			<div class="mt-3 min-w-0" aria-live="polite" in:slide={{ duration: 320 }} out:fade={{ duration: 140 }}>
+				<Separator class="mb-2.5" />
 				{#if generatingTranslations}
 					<p class="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 class="size-4 animate-spin text-[var(--brand)]" /> Generating and saving translations…</p>
 				{:else}
-					<div class={visibleTranslations.length > 1 ? 'grid gap-3 sm:grid-cols-3' : ''}>
+					<div class="grid gap-2">
 						{#each visibleTranslations as translation (translation.label)}
-							<div class="translation-surface min-w-0 rounded-xl px-3 py-2.5" in:fly={{ y: 5, duration: 260 }}>
-								<p class="text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">{translation.label}</p>
-								<p class="mt-1 text-sm leading-relaxed break-words {translation.italic ? 'text-muted-foreground italic' : ''}">{translation.value}</p>
+							<div class="translation-surface min-w-0 rounded-xl px-3 py-2" in:fly={{ y: 5, duration: 260 }}>
+								<!-- Secondary detail takes space that is already there: the label row, or the text's first line. -->
+								{#if visibleTranslations.length > 1}
+									<div class="flex min-h-5 items-center justify-between gap-2">
+										<p class="text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">{translation.label}</p>
+										{@render detailChip(translation.kind)}
+									</div>
+								{/if}
+								<p class="text-sm leading-relaxed break-words {visibleTranslations.length > 1 ? 'mt-0.5' : ''} {translation.italic ? 'text-muted-foreground italic' : ''}">
+									{#if visibleTranslations.length === 1}<span class="float-right ml-2">{@render detailChip(translation.kind)}</span>{/if}{translation.value}
+								</p>
 							</div>
 						{/each}
 					</div>
 
 					{#if (translationView === 'idiomatic' || translationView === 'all') && translations.idiomaticVariants.length > 0}
-						<Collapsible.Root bind:open={showIdiomaticVariants} class="mt-2">
-							<Collapsible.Trigger class="flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[var(--brand)] transition-colors hover:bg-[var(--brand-soft)]">
-								<ChevronDown class="size-3.5 transition-transform duration-300 {showIdiomaticVariants ? 'rotate-180' : ''}" />
-								{showIdiomaticVariants ? 'Hide' : 'Show'} {translations.idiomaticVariants.length} natural alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
-							</Collapsible.Trigger>
+						<Collapsible.Root bind:open={showIdiomaticVariants}>
 							<Collapsible.Content class="disclosure overflow-hidden">
-								<div class="grid gap-2 pt-1 sm:grid-cols-2">
+								<div class="grid gap-2 pt-2 sm:grid-cols-2">
 									{#each translations.idiomaticVariants as variant (variant)}
-										<p class="rounded-xl bg-[var(--surface-2)] px-3 py-2 text-sm">{variant}</p>
+										<p class="translation-surface rounded-xl px-3 py-2 text-sm">{variant}</p>
 									{/each}
 								</div>
 							</Collapsible.Content>
@@ -313,13 +369,10 @@
 					{/if}
 
 					{#if translationView === 'wordForWord' || translationView === 'all'}
-						<Collapsible.Root open={showWordBreakdown} onOpenChange={(open) => void toggleWordBreakdown(open)} class="mt-1">
-							<Collapsible.Trigger class="flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[var(--brand)] transition-colors hover:bg-[var(--brand-soft)]">
-								<ChevronDown class="size-3.5 transition-transform duration-300 {showWordBreakdown ? 'rotate-180' : ''}" /> Word breakdown
-							</Collapsible.Trigger>
+						<Collapsible.Root open={showWordBreakdown}>
 							<Collapsible.Content class="disclosure overflow-hidden">
 								{#if translations.wordBreakdown.length > 0}
-									<dl class="mt-1 grid grid-cols-[minmax(0,auto)_1fr] gap-x-3 gap-y-1.5 rounded-xl bg-[var(--surface-2)] p-3 text-xs">
+									<dl class="translation-surface mt-2 grid grid-cols-[minmax(0,auto)_1fr] gap-x-3 gap-y-1.5 rounded-xl p-3 text-xs">
 										{#each translations.wordBreakdown as item, position (`${item.source}-${position}`)}
 											<dt class="font-medium break-words">{item.source}</dt><dd class="min-w-0 text-muted-foreground break-words">{item.target}</dd>
 										{/each}
@@ -333,8 +386,8 @@
 		{/if}
 
 		{#if showSegments && segments.length > 1}
-			<div class="mt-4" in:slide={{ duration: 300 }} out:fade={{ duration: 140 }}>
-				<Separator class="mb-3" />
+			<div class="mt-3" in:slide={{ duration: 300 }} out:fade={{ duration: 140 }}>
+				<Separator class="mb-2.5" />
 				<p class="eyebrow mb-2"><ListMusic class="size-3.5" /> Sentence playback</p>
 				<div class="space-y-1">
 					{#each segments as segment, position (position)}
@@ -356,16 +409,38 @@
 </Card.Root>
 
 <style>
-	:global(.attempt-card) {
-		background:
-			linear-gradient(145deg, color-mix(in srgb, var(--card) 97%, var(--brand-soft)), var(--card) 60%),
-			var(--card);
-		box-shadow: var(--shadow-card);
-	}
+	/* The selected take: a sheet with a teal edge (it is the selected item). */
 	:global(.active-card) {
-		box-shadow: 0 0 0 1px var(--brand), 0 18px 55px color-mix(in srgb, var(--brand) 12%, transparent);
+		border-color: var(--brand);
+		box-shadow: 0 0 0 1px var(--brand), var(--shadow-sheet-hover);
 	}
-	.translation-surface { background: color-mix(in srgb, var(--surface-2) 82%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 65%, transparent); }
+	/*
+	 * Translation surfaces are deliberately tinted with the brand colour. The
+	 * neutral surface token is almost the page background, so a neutral box read
+	 * as an accidental colour mismatch rather than a highlighted translation.
+	 */
+	.translation-surface {
+		background: color-mix(in srgb, var(--brand) 8%, var(--card));
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 20%, transparent);
+	}
+	/* A compact control chip for a translation's secondary detail. */
+	.inline-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: var(--control);
+		color: var(--on-control);
+		font-size: 0.75rem;
+		font-weight: 500;
+		font-style: normal;
+		line-height: 1.5;
+		white-space: nowrap;
+		transition: background-color 160ms ease;
+	}
+	.inline-chip:hover { background: var(--control-hover); }
+	.inline-chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent); outline-offset: 1px; }
 	:global(.disclosure[data-state='open']) { animation: disclose 300ms cubic-bezier(0.22, 1, 0.36, 1); }
 	:global(.disclosure[data-state='closed']) { animation: conceal 170ms cubic-bezier(0.4, 0, 1, 1); }
 	@keyframes disclose { from { height: 0; opacity: 0; transform: translateY(-4px); } to { height: var(--bits-collapsible-content-height); opacity: 1; transform: translateY(0); } }

@@ -5,7 +5,7 @@
 	import { computeInsights, type InsightsData, type Occurrence } from '$lib/insights';
 	import { openSession } from '$lib/stores/practice';
 	import { toast } from '$lib/stores/toast';
-	import { ArrowLeft } from '@lucide/svelte';
+	import { ArrowLeft, ChevronRight } from '@lucide/svelte';
 
 	let data = $state<InsightsData | null>(null);
 	let loading = $state(true);
@@ -109,7 +109,7 @@
 			<div class="flex flex-col gap-6">
 				{#each groups as group (group.session?.id ?? 'unknown')}
 					<div>
-						<div class="mb-2 flex items-baseline justify-between border-b pb-1.5">
+						<div class="mb-2.5 flex items-center gap-3 px-1">
 							<button
 								type="button"
 								class="font-serif text-base font-medium hover:text-[var(--brand)]"
@@ -117,13 +117,14 @@
 							>
 								{group.session?.title ?? 'Unknown session'}
 							</button>
-							<span class="text-xs text-muted-foreground">
+							<span class="h-px flex-1 bg-border" aria-hidden="true"></span>
+							<span class="text-xs text-faint">
 								{group.session ? fmtDate(group.session.createdAt) : ''}
 							</span>
 						</div>
 						<div class="flex flex-col gap-2">
 							{#each group.occurrences as occurrence (occurrence.correction.id)}
-								<div class="rounded-lg border bg-card p-3">
+								<div class="sheet rounded-2xl p-3.5">
 									<p class="mb-1 text-xs text-muted-foreground">
 										Attempt {attemptIndex[occurrence.attempt.id] ?? '?'} ·
 										{fmtDate(occurrence.attempt.createdAt)}
@@ -153,21 +154,21 @@
 			</p>
 
 			<div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-				<div class="rounded-lg border bg-card p-4">
-					<p class="text-[11px] font-medium tracking-widest text-faint uppercase">Sessions</p>
-					<p class="mt-2 font-serif text-2xl">{data.totals.sessions}</p>
+				<div class="sheet rounded-2xl p-4">
+					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Sessions</p>
+					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight">{data.totals.sessions}</p>
 				</div>
-				<div class="rounded-lg border bg-card p-4">
-					<p class="text-[11px] font-medium tracking-widest text-faint uppercase">Speaking</p>
-					<p class="mt-2 font-serif text-2xl">{fmtDuration(data.totals.speakingSeconds)}</p>
+				<div class="sheet rounded-2xl p-4">
+					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Speaking</p>
+					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight">{fmtDuration(data.totals.speakingSeconds)}</p>
 				</div>
-				<div class="rounded-lg border bg-card p-4">
-					<p class="text-[11px] font-medium tracking-widest text-faint uppercase">Words</p>
-					<p class="mt-2 font-serif text-2xl">{data.totals.words}</p>
+				<div class="sheet rounded-2xl p-4">
+					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Words</p>
+					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight">{data.totals.words}</p>
 				</div>
-				<div class="rounded-lg border bg-card p-4">
-					<p class="text-[11px] font-medium tracking-widest text-faint uppercase">Mistakes</p>
-					<p class="mt-2 font-serif text-2xl text-[var(--error)]">{data.totals.errors}</p>
+				<div class="sheet rounded-2xl p-4">
+					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Mistakes</p>
+					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight text-[var(--error)]">{data.totals.errors}</p>
 				</div>
 			</div>
 
@@ -181,15 +182,16 @@
 			{:else}
 				<div class="grid gap-8 sm:grid-cols-2">
 					<div>
-						<div class="mb-3 flex items-baseline justify-between border-b pb-2">
-							<h2 class="text-[11px] font-bold tracking-widest uppercase">Exam patterns</h2>
-							<span class="text-[10.5px] text-faint">Speaking mistakes to drill</span>
-						</div>
+						<h2 class="mb-3 flex items-center gap-3 px-1">
+							<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Exam patterns</span>
+							<span class="h-px flex-1 bg-border" aria-hidden="true"></span>
+							<span class="text-xs text-faint">Speaking mistakes to drill</span>
+						</h2>
 						<div class="flex flex-col gap-2">
 							{#each examPatterns as pattern (pattern.key)}
 								<button
 									type="button"
-									class="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-left transition-shadow hover:shadow-sm"
+									class="flex items-center justify-between gap-3 sheet rounded-2xl px-4 py-3 text-left transition-shadow hover:shadow-[var(--shadow-sheet-hover)]"
 									onclick={() => (selectedKey = pattern.key)}
 								>
 									<div class="min-w-0">
@@ -198,26 +200,33 @@
 											pattern.category
 										)}">{CATEGORY_LABEL[pattern.category] ?? pattern.category}</p>
 									</div>
-									<span class="shrink-0 font-serif text-lg">{pattern.count}</span>
+									<span class="flex shrink-0 items-center gap-2">
+										<span class="count-chip">{pattern.count}</span>
+										<ChevronRight class="size-4 text-faint" />
+									</span>
 								</button>
 							{/each}
 						</div>
 					</div>
 
 					<div>
-						<div class="mb-3 flex items-baseline justify-between border-b pb-2">
-							<h2 class="text-[11px] font-bold tracking-widest uppercase">Core grammar</h2>
-							<span class="text-[10.5px] text-faint">Errors first</span>
-						</div>
+						<h2 class="mb-3 flex items-center gap-3 px-1">
+							<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Core grammar</span>
+							<span class="h-px flex-1 bg-border" aria-hidden="true"></span>
+							<span class="text-xs text-faint">Errors first</span>
+						</h2>
 						<div class="flex flex-col gap-2">
 							{#each grammarPatterns as pattern (pattern.key)}
 								<button
 									type="button"
-									class="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-left transition-shadow hover:shadow-sm"
+									class="flex items-center justify-between gap-3 sheet rounded-2xl px-4 py-3 text-left transition-shadow hover:shadow-[var(--shadow-sheet-hover)]"
 									onclick={() => (selectedKey = pattern.key)}
 								>
 									<p class="truncate font-serif text-sm font-medium">{pattern.label}</p>
-									<span class="shrink-0 font-serif text-lg">{pattern.count}</span>
+									<span class="flex shrink-0 items-center gap-2">
+										<span class="count-chip">{pattern.count}</span>
+										<ChevronRight class="size-4 text-faint" />
+									</span>
 								</button>
 							{/each}
 						</div>
@@ -227,3 +236,18 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	/* A pattern's count, in the control colour: the row is clickable. */
+	.count-chip {
+		min-width: 1.75rem;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: var(--control);
+		color: var(--on-control);
+		font-size: 0.8125rem;
+		font-weight: 600;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+	}
+</style>

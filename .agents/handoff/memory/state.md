@@ -11,6 +11,98 @@ Piper Tom EQ/loudness pass remain verification/polish work.
 The earlier model-selection lab is complete. Its approved STT/TTS choices and evidence live in
 `docs/benchmarks/`; do not re-litigate them without new evidence.
 
+## Language system (2026-09-15)
+- `src/lib/languages/index.ts` is the single source of truth for supported languages. Each
+  `LanguageDefinition` carries the STT model, the approved Piper voices, per-voice audio
+  processing profiles, seed prompts, and an `approval` record (who tested it, when, evidence).
+  Only `approval.status === 'approved'` languages are offered; French is the only one.
+- First run shows `LanguagePicker.svelte` (gated on `settingsReady` so returning users do not see
+  a flash). The choice is persisted as `targetLanguage` (`''` until chosen; legacy `'French'`
+  values are normalised to `'fr'` in `initSettings`).
+- Downloads are deliberately manual: Practice shows a gate telling the user to open
+  **Settings → Language data** and click Download. `stores/languageData.ts` runs
+  `preloadLocalSTT` then `preloadLocalVoice`, reports one combined 0–100 figure, and
+  `cancelLanguageDownload()` terminates the workers mid-flight. `LanguageDownloadBar.svelte` is
+  mounted in the layout, so the progress bar and Cancel follow the user across routes.
+- TTS output is post-processed per voice (`LanguageVoice.processing` +
+  `src/lib/utils/audioEffects.ts`): high-shelf EQ, compressor/limiter, makeup gain, peak
+  normalization. Piper Tom carries the listening-test correction; the other voices are raw.
+- **Settings layout (2026-09-18, from `prototype/to-be-implemented/Settings.html`).** Five titled
+  shadcn `Card`s: Language (selects + language-data `Item`), AI provider (BYOK) (provider → key →
+  model + Refresh → note/links `Item` with Test connection), Transcription (asks for a Groq key
+  when cloud STT is on and the LLM provider is not Groq), Voice & audio (engine, voice,
+  Advanced-only Equalizer, Voice preview), Storage. Rows are shadcn `Field` (responsive
+  orientation); keys use `InputGroup` with show/hide; General/Advanced is a `ToggleGroup` styled as
+  a sliding segmented control (Advanced default). Blocks live in `src/lib/components/settings/`.
+- **4-band EQ + volume.** Bass (200 Hz low shelf), Body (500 Hz peaking, Q 1), Presence (1.2 kHz
+  peaking), Treble (3.2 kHz high shelf), ±12 dB, plus a separate Volume output fader.
+  `AudioProcessingProfile.body` / `VoiceTuning.bodyDb` are new; `tuningSignature` appends Body only
+  when non-zero, so audio cached before Body existed keeps its key. `VoiceEqualizer.svelte` uses
+  the shadcn `Slider` (vertical, `thumbPositioning="exact"`), plots the response from Web Audio's
+  own `BiquadFilterNode.getFrequencyResponse` on a 100 Hz–8 kHz log axis (0 dB = approved sound),
+  and names each thumb for screen readers via a small action.
+- **Shared processing chain.** `createProcessingChain()` in `utils/audioEffects.ts` builds the EQ,
+  approved compressor, makeup, normalization, volume and limiter as Web Audio nodes. `processPcm`
+  renders it offline for read-backs (bit-identical to the previous implementation, verified);
+  the Settings preview runs the same graph live.
+- **Live voice preview.** `stores/ttsPreview.ts` synthesizes the preview sentence once **raw**
+  (`synthesizeSpeech({ raw: true })`, cache signature `raw`) and plays it through the live chain
+  in its own `AudioContext` at 22.05 kHz. Moving a fader calls `chain.setTuning` (smoothed
+  `setTargetAtTime`) — no regeneration. Loop is the preview's own `source.loop`; Pause suspends
+  the context; leaving Settings stops it. Cloud previews play unprocessed.
+- **SQLite export.** Settings → Storage → Export .sqlite writes the whole database: every table,
+  recordings and all cached TTS audio (`audio_assets`), settings, schema version. Web:
+  sqlite-wasm `sqlite3_js_db_export` in the OPFS worker, saved with `browser-fs-access` (native
+  Save-as where supported, download otherwise). Desktop: `VACUUM INTO` a temp file, read with
+  `@tauri-apps/plugin-fs`, saved via `@tauri-apps/plugin-dialog`. API keys (localStorage) and
+  downloaded models (Cache API) are not included. The old JSON export is gone.
+- **Paper texture.** `components/PaperTexture.svelte` wraps `@paper-design/shaders` (vanilla
+  `ShaderMount`, same params→uniforms mapping and image prep as their React wrapper). It renders
+  once, snapshots to WebP, disposes the WebGL context and caches the image in the Cache API
+  (`onspot-paper-v1`, keyed by size bucket + DPR + params); later loads use no WebGL. The layout
+  shows a soft page paper behind everything and a laid (ribbed) paper in the rail, per theme.
+  Page surfaces (practice grid/stage, composer fade, feedback panel) are translucent so it shows.
+- **Sheets & page (2026-09-19).** Cards are frosted `.sheet`s; the page is a `page-sheet` laid on
+  the rail (see rules/style.md). The earlier stitched binding and sheet texture are gone.
+- **Colour hierarchy (2026-09-18).** Paper → deep paper (rail) → sheet (cards) → inset →
+  control (sea-glass, all neutral buttons) → selected/primary (teal) → semantic; documented in
+  `rules/style.md` and at the top of the `:root` block in `app.css`. Paper texture is gently
+  crumpled (no heavy grain).
+- **Paper surfaces & relief (no plastic gradients).** The page texture is published as
+  `--paper-page` on `<html>`; `.paper-surface` (app.css) paints it with `background-attachment:
+  fixed`, so any surface is cut from the same sheet and lines up with the page. Used by the
+  Practice header, the conveyor lip and composer fade (masked), History session cards, the
+  Exam/Casual knob and the rail keys. Relief tokens: `--paper-emboss(-hover)`, `--paper-deboss`,
+  `--paper-press-tint` (plus `--neu-raised*`/`--neu-pressed*` for larger cards). Rail keys are
+  page-paper tiles on the ribbed rail, embossed; the current page is debossed and shaded. The
+  mode switch is a debossed channel with an embossed paper knob and a glowing indicator.
+- **History.** Sessions are grouped by calendar day (Today, Yesterday, weekday within a week,
+  then full date; `Intl.DateTimeFormat`) with a count per day, and sorted by start date via a
+  shadcn DropdownMenu (Newest / Oldest first, remembered in `localStorage`
+  `onspot.history.sort`). Cards are sheets (`bg-card`, border, `--shadow-card`), no motion and no
+  fixed-attachment background (that made scrolling glitchy). Regex / Case sensitive are shadcn
+  `Toggle`s folded behind an options toggle next to the search box.
+- **Feedback panel.** Header: title trigger · count · recording + natural-version buttons ·
+  chevron trigger (summary gets the full width). Severity tabs are the Exam/Casual control: a
+  sea-glass channel (50px) with one sheet knob that slides to the measured active tab, count on
+  top, label + indicator light below. Tabs size to content (40–104px), so "All" is narrowest; a
+  container query tightens labels under 250px. The category filter is a 40px control key beside
+  the channel. Styles reaching shadcn elements must be `:global(...)`.
+- **Attempt card.** Transcript font adapts to length: `utils/fitText.ts` (area model, no DOM
+  measuring) picks 15–24px so text fills ~190px before the card grows; Source Serif, line-height
+  1.6. Natural alternatives / Word breakdown are chips on the translation label row (compare
+  view) or floated into the first line (single view) — never their own row. Tighter padding.
+- **Practice feedback sidebar.** The column wrapper inside `.coach-content` (a row flex box) now
+  has `w-full`; before, it shrank to its content and left an empty strip.
+- **shadcn registry vs bits-ui 2.19.** The current registry emits `data-vertical:` /
+  `data-horizontal:` classes; bits-ui emits `data-orientation`. Newly added components (slider,
+  toggle-group, field, item, input-group) were patched to `data-[orientation=…]`. Do **not** add a
+  global `@custom-variant data-vertical` — it silently activates inert classes in the older
+  tabs/separator components (e.g. forces the Feedback tabs to 32px).
+- STT/TTS/prompts/LLM prompts are all parameterized by the selected language. Nothing is bundled;
+  every model is fetched from its public host by the user's device. `docs/languages.md` tracks the
+  approval system and the add-a-language recipe.
+
 ## Product shape (from `docs/prompts/inception.md`)
 - SvelteKit + `@sveltejs/adapter-static` (`fallback: 'index.html'`) → pure client-side SPA.
 - Tauri v2 desktop wrapper (.exe first, cross-platform ready).
@@ -46,12 +138,19 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   pronounced CSS scroll-driven 3D conveyor transform; scrolling back to older attempts reverses
   the motion. Unsupported webviews get a requestAnimationFrame fallback and reduced-motion gets
   neither implementation.
+- **Tall cards scroll flat.** The exit timeline is degenerate for a card taller than the viewport
+  (it starts part-way through), so anything over `max(480px, 75% viewport)` gets a JS-applied
+  `tall` class that disables the conveyor. `ResizeObserver` watches every slot and toggles only
+  the card whose size changed. This is what lets a 5-minute take with translations and a word
+  breakdown be read all the way down without flipping away.
 - New attempts rise to the top over 1050ms with deterministic eased scrolling plus a light card
   arrival transform. The component stays mounted when the list is empty so the first attempt also
   animates. Wheel, touch, or pointer input cancels programmatic motion immediately.
 - Every attempt with translation data has a labelled **Translate** menu. It explains and selects
   Idiomatic, Literal, Word-for-word, or all three views. A `ResizeObserver` keeps the floor spacer
   correct when translation content changes a card's height.
+- **Compare all three stacks the three variants vertically**, full card width, each with its
+  label. This is deliberate: takes run 60s–5min, and vertical scrolling is the abundant axis.
 - Translation output is the translation text alone; variant explanations live only in the menu.
   All menu choices are enabled. Choosing a variant on an old/versionless record regenerates the
   full strict v2 translation set through the configured LLM and saves it on that attempt for reuse.
@@ -67,18 +166,45 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 ### Current feedback and shell UX
 - `FeedbackPanel.svelte` uses shadcn Tabs for **All / Errors / Warnings / Suggestions**, with the
   count over each label, and a shadcn Dropdown Menu for Grammar / Register / Fillers / Style.
-- Coach notes is itself a shadcn Collapsible. Desktop closes it into a 64px review rail; viewports
-  below 1024px start with a 58px summary bar and expand it to 42% of the available app height.
-  Choosing an inline transcript correction reopens the panel automatically.
+- **The tabs' selected state depends on `data-state="active"`** (what bits-ui sets), never
+  `data-active`; the old `data-active:` classes silently did nothing and made every tab look
+  unselected. Selected colours: All = high-contrast neutral pill, Errors = red tint,
+  Warnings = amber tint, Suggestions = brand tint. Equal grid columns with `!` utilities.
+- Session stats live in a Collapsible footer, **closed by default**, 36px collapsed, expanding to
+  four small stat cells.
+- Correction rows are bordered cards; the expanded explanation sits inside the same border behind
+  an internal separator, so it never reads as a second card.
+- The feedback panel (visible title **Feedback**; previously "Coach notes") is a shadcn
+  Collapsible. Desktop closes it into a 64px review rail; viewports below 1024px start with a 58px
+  summary bar and expand it to 42% of the available app height. Choosing an inline transcript
+  correction reopens the panel automatically.
 - Empty replacements are deletions: the original is struck through and labelled **Remove**. No
   misleading arrow is rendered. The LLM prompt explicitly requires `replacement: ""` for this
   case, and `correctionTitle()` removes redundant category/severity labels.
 - Corrections are shadcn Collapsibles with animated explanations; AttemptCard uses shadcn Card,
-  Badge, Button, Dropdown Menu, Collapsible, Separator and Tooltip primitives.
-- Settings uses shadcn Select for all seven choices; the native `<select>` controls are gone and
-  each trigger has a programmatic accessible name.
-- The app rail becomes a full-width bottom navigation bar at 640px and below, leaving enough room
-  for the feedback labels at a 390px viewport.
+  Badge, Button, Dropdown Menu, Collapsible, Separator and Tooltip primitives. The attempt header
+  is a single row: `Take n · duration · words` left, actions right.
+- Settings uses shadcn Select for all choices; the native `<select>` controls are gone and each
+  trigger has a programmatic accessible name.
+- The app rail is 56px on desktop and becomes a full-width bottom navigation bar at 640px and
+  below.
+
+### Visual cleanup (2026-09-15)
+- The purple accent is gone: `--brand-2`/`--brand-3` are cyan/sky in both themes, so gradients run
+  teal → cyan instead of teal → violet. Mode switches tint their selected trigger (Exam red,
+  Casual brand).
+- **Cards have real depth against the page.** Light `--background` is `#f1efe9` against white
+  cards; dark is `#0b0b0d` against `#19191d`. Attempt cards carry an explicit border plus the
+  stronger `--shadow-card`; correction cards use `bg-card` + border + `shadow-sm`.
+- The feedback panel's visible title is **Feedback** (was "Coach notes"; component and internal
+  `coach-*` class names are unchanged).
+- No Sparkles/`✨` icons anywhere; empty states use Mic/Check/MessageSquareText.
+- Practice composer has zero outer bottom padding and sits flush against the window bottom.
+- A single translation view renders its text without the redundant variant label; labels appear
+  only in "Compare all three".
+- Translation surfaces (variants, word breakdown, all three comparison panels) carry a brand tint
+  (`color-mix(--brand 8%, --card)` plus a 20% brand ring) instead of `--surface-2`, which was
+  almost identical to the page background and read as an accidental colour mismatch.
 
 ### Phase 1 implemented
 
@@ -183,7 +309,11 @@ prototype's insight columns keep working without new categories.
   correction, so marks link to the feedback panel and every word is individually pronounceable.
   (Replaces the earlier, deleted `utils/highlight.ts` string-wrapping approach.)
 
-### UI sandbox (dev tooling, production untouched)
+### Dev tooling
+- `src/app.css` excludes `docs/`, `.agents/`, `eval/` and `repomix/` from Tailwind's project-wide
+  class scan via `@source not`. Tailwind registers every scanned file as a build dependency of
+  `app.css`, and Vite full-reloads on any change it cannot HMR — so without the exclusions,
+  writing in `docs/` (pure developer notes) reloaded the whole app.
 - `src/routes/ui-sandbox/` is a standalone, **1:1 interactive** clone of the chat-history UI for
   an external UX/UI review. `components/MockTranscript.svelte`, `MockAttemptCard.svelte`,
   `MockAttemptStream.svelte` and `MockFeedbackPanel.svelte` copy production markup and **keep**
@@ -197,6 +327,14 @@ prototype's insight columns keep working without new categories.
   `src/routes/ui-sandbox/**/*.svelte` to `repomix/ui-sandbox-bundle.xml`. The `repomix/` folder is
   tracked (kept by `repomix/.gitkeep`); only the generated `repomix/*-bundle.*` output is
   gitignored, so nothing lands in the repo root and the folder persists after a clone.
+- `npm run bundle -- <page|path|glob...>` (`repomix/bundle.mjs`) exports any page or section of
+  the real app with repomix. Pages are discovered from `src/routes` (`home`, `history`,
+  `insights`, `settings`, `ui-sandbox`; `--list`), so new routes need no setup. From the page's
+  own route files it follows local imports (`$lib`, relative, `?worker`, `new URL(...,
+  import.meta.url)`, CSS `@import`) and passes the file list to `repomix --stdin`. The root
+  `+layout` (app shell) is opt-in via `--layout` because it pulls the practice store and every
+  adapter into each page. Re-export-only barrels (shadcn `ui/x/index.ts`, `adapters/*/index.ts`)
+  don't count toward `--depth`. Output: `repomix/<targets>-bundle.<ext>`, gitignored.
 
 ## Invariants (carried over, still true)
 - All local inference is client-side. Device resolved at load time, never hardcoded. WASM default.

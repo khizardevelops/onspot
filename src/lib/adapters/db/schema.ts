@@ -6,7 +6,7 @@
  * append-only: bump `SCHEMA_VERSION` and add a new entry to `MIGRATIONS`.
  */
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const MIGRATIONS: Record<number, string> = {
 	1: `
@@ -111,5 +111,12 @@ export const MIGRATIONS: Record<number, string> = {
 	5: `
 		ALTER TABLE corrections ADD COLUMN start_index INTEGER;
 		ALTER TABLE corrections ADD COLUMN end_index INTEGER;
+	`,
+
+	// Prompts belong to a target language now that more than one can be offered.
+	// Legacy rows are French; the backfill keeps them usable.
+	6: `
+		ALTER TABLE prompts ADD COLUMN language TEXT;
+		UPDATE prompts SET language = 'fr' WHERE language IS NULL;
 	`
 };

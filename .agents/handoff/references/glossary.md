@@ -1,5 +1,15 @@
 # Glossary
 
+- **Language registry**: `src/lib/languages/index.ts`. The single source of truth for supported
+  languages, their approved STT/voice descriptors, prompts, and approval evidence.
+- **Approved language**: a `LanguageDefinition` (and each of its STT/voice entries) whose
+  `approval.status` is `approved` after a human quality pass. Only these are offered to users.
+- **Language data**: the downloadable bytes for one language — the local STT weights plus the
+  selected Piper voice. Nothing is bundled; the user downloads it on demand.
+- **Download gate**: the Practice notice that tells the user to open Settings → Language data and
+  click Download before their first local session. Cloud-only setups skip it.
+- **Processing profile**: a per-voice post-processing chain (high-shelf EQ, compressor/limiter,
+  makeup gain, peak normalization) applied to TTS PCM before playback.
 - **STT**: Speech-to-Text.
 - **WER**: Word Error Rate — percentage of incorrectly transcribed words.
 - **CER**: Character Error Rate — percentage of incorrectly transcribed characters.

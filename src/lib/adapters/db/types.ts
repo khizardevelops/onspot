@@ -55,6 +55,8 @@ export interface Prompt {
 	title: string;
 	text: string;
 	category: string | null;
+	/** Target language id this prompt belongs to (ISO 639-1). */
+	language: string | null;
 	createdAt: string;
 }
 
@@ -159,7 +161,8 @@ export interface IDatabaseAdapter {
 	close(): Promise<void>;
 
 	// Prompts
-	listPrompts(): Promise<Prompt[]>;
+	/** All prompts, or only those for one language id when provided. */
+	listPrompts(language?: string): Promise<Prompt[]>;
 	getPrompt(id: string): Promise<Prompt | null>;
 	putPrompt(prompt: Prompt): Promise<void>;
 	deletePrompt(id: string): Promise<void>;
@@ -198,8 +201,14 @@ export interface IDatabaseAdapter {
 	getSyncMetadata(provider: string): Promise<SyncMetadata | null>;
 	setSyncMetadata(meta: SyncMetadata): Promise<void>;
 
-	/** Dump the whole database to bytes (or a JSON-free SQLite file). */
+	/** Dump the whole database as a portable SQL script (UTF-8 bytes). */
 	export(): Promise<Uint8Array>;
+	/**
+	 * The whole database as a standard `.sqlite` file: every table, including
+	 * recordings and all cached TTS audio. API keys live outside the database
+	 * and are never part of it.
+	 */
+	exportSqliteFile(): Promise<Uint8Array>;
 	/** Replace the database contents from a dump produced by `export`. */
 	import(data: Uint8Array): Promise<void>;
 }

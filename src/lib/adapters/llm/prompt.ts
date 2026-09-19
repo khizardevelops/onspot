@@ -1,15 +1,16 @@
 import type { ChatMessage, EvaluationRequest } from './types';
-import { TRANSLATION_RULES, TRANSLATION_SCHEMA } from './translationPrompt';
+import { TRANSLATION_SCHEMA, translationRules, type TranslationLanguage } from './translationPrompt';
 
 const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
 const SEVERITIES = ['error', 'warning', 'suggestion'] as const;
 const EXAM_STATUSES = ['strictly-avoid', 'avoid', 'use-sparingly', 'allowed'] as const;
 
-const SCHEMA = `{
+function schemaFor(language: string): string {
+	return `{
   "correctedText": string,        // the learner's transcript with your corrections applied
-  "naturalSpeech": string,        // fluent, natural spoken French version of what they meant
+  "naturalSpeech": string,        // fluent, natural spoken ${language} version of what they meant
   "translations": ${TRANSLATION_SCHEMA},
-  "summary": string,              // at most two short sentences of coaching, in English
+  "summary": string,              // at most two short sentences of coaching, in the learner's native language
   "corrections": [
     {
       "category": "grammar" | "register" | "filler" | "style",
@@ -17,8 +18,8 @@ const SCHEMA = `{
       "label": string,            // specific issue, e.g. "Greeting used for someone else"; never repeat category/severity
       "original": string,         // the exact substring to change
       "replacement": string,      // what it should be; EXACTLY "" when original should simply be removed
-      "replacementTranslation": string, // English meaning of the replacement
-      "explanation": string,      // why, in English, aimed at a learner
+      "replacementTranslation": string, // native-language meaning of the replacement
+      "explanation": string,      // why, in the learner's native language, aimed at a learner
       "speakText": string,        // OPTIONAL: one corrected sentence to read aloud
       "examStatus": "strictly-avoid" | "avoid" | "use-sparingly" | "allowed",
       "formalAlternatives": string[] // OPTIONAL: formal replacements for a casual connector
@@ -31,36 +32,44 @@ const SCHEMA = `{
     { "connector": string, "insteadOf": string, "why": string }
   ]
 }`;
+}
 
-const RULES = `Rules:
+function rulesFor(language: string, translationTarget: string): string {
+	return `Rules:
 - The transcript comes from speech recognition. Ignore obvious transcription artefacts (misheard proper nouns, missing punctuation) unless they change the meaning; do not "correct" the recogniser's mistakes as if they were the learner's.
 - Only correct what the learner actually said. Never invent context or content.
 - grammar → severity "error". register and filler issues → "warning". optional polish → "suggestion".
 - For register/filler corrections, set "examStatus" and give "formalAlternatives" where a formal connector exists.
-- Connectors: prefer connectors that are appropriate for spoken French and, in exam mode, formal (e.g. "par conséquent", "en réalité", "cependant"). Do not suggest written-only connectors the learner cannot say.
+- Connectors: prefer connectors that are appropriate for spoken ${language} and, in exam mode, formal. Do not suggest written-only connectors the learner cannot say.
 - Vocabulary: suggest at most 3 upgrades that a fluent speaker would plausibly use. If there is nothing worth changing, return [].
 - Corrections must use "original" exactly as it appears in the transcript.
 - If a word or phrase should be omitted, put it in "original" and set "replacement" to the empty string. Do not use arrows, dashes, "remove", or explanatory text as a replacement.
 - Make "label" name the concrete learning issue. Do not repeat its category or severity (bad: "Register inappropriate"; good: "Greeting used for someone else").
 - When the learner made no mistakes, return an empty "corrections" array and say so in "summary".
 - "summary": at most two short sentences. State the main issue and the fix; never pad or repeat what the corrections already say.
-${TRANSLATION_RULES}
-- Every correction with a non-empty "replacement" must include "replacementTranslation": the English meaning of the suggested replacement.
+- Write "summary", "explanation", "replacementTranslation" and "why" fields in ${translationTarget}; keep correctedText, naturalSpeech and suggested replacements in ${language}.
+${translationRules({ language, translationTarget })}
+- Every correction with a non-empty "replacement" must include "replacementTranslation": the ${translationTarget} meaning of the suggested replacement.
 - Return ONLY the JSON object. No markdown, no commentary outside it.`;
+}
 
 export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage[] {
+	const translation: TranslationLanguage = {
+		language: request.language,
+		translationTarget: request.translationTarget
+	};
 	const toneNote =
 		request.mode === 'exam'
-			? 'This is EXAM practice: prioritise formal, correct French suitable for the exam.'
-			: 'This is CASUAL practice: prioritise natural, idiomatic spoken French; note formality differences but do not insist on them.';
+			? `This is EXAM practice: prioritise formal, correct ${request.language} suitable for the exam.`
+			: `This is CASUAL practice: prioritise natural, idiomatic spoken ${request.language}; note formality differences but do not insist on them.`;
 
 	const system = [
-		`You are a patient French speaking coach for an English-speaking learner at CEFR level ${request.level}.`,
+		`You are a patient ${request.language} speaking coach for a ${request.translationTarget}-speaking learner at CEFR level ${request.level}.`,
 		toneNote,
 		`The learner was given this prompt: "${request.prompt}".`,
-		'Analyse the spoken French transcript they produced and respond with JSON matching this schema:',
-		SCHEMA,
-		RULES
+		`Analyse the spoken ${request.language} transcript they produced and respond with JSON matching this schema:`,
+		schemaFor(request.language),
+		rulesFor(request.language, request.translationTarget)
 	].join('\n\n');
 
 	const user = [

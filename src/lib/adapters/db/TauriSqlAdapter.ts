@@ -57,6 +57,23 @@ class TauriSqlDriver implements SqlDriver {
 export class TauriSqlAdapter extends SqlDatabaseAdapter {
 	readonly kind = 'tauri-sql' as const;
 
+	/**
+	 * Native SQLite writes a compact, consistent copy with `VACUUM INTO`; it goes
+	 * to the OS temp dir (allowed in `capabilities/default.json`) and is read back.
+	 */
+	async exportSqliteFile(): Promise<Uint8Array> {
+		const { join, tempDir } = await import('@tauri-apps/api/path');
+		const { readFile, remove } = await import('@tauri-apps/plugin-fs');
+		const path = await join(await tempDir(), `onspot-export-${Date.now()}.sqlite`);
+		const db = await this.sql();
+		await db.execute('VACUUM INTO ?', [path]);
+		try {
+			return await readFile(path);
+		} finally {
+			await remove(path).catch(() => undefined);
+		}
+	}
+
 	protected async openDriver(): Promise<SqlDriver> {
 		const db = await Database.load('sqlite:onspot.db');
 		return new TauriSqlDriver(db);

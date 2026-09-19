@@ -84,8 +84,10 @@ enum and default use the current names.
 
 ## Where this is reflected in the app
 
-- Curated dropdown: `openai/gpt-oss-120b` (default) and `openai/gpt-oss-20b`
-  (`src/lib/adapters/llm/providers.ts`).
-- Settings **Refresh model list** queries `GET /models` and filters out non-chat models
-  (speech-to-text, text-to-speech, guards/classifiers), so the models above appear as
-  "From your account".
+- Curated dropdown (`src/lib/adapters/llm/providers.ts`): GPT-OSS 120B (default), GPT-OSS 20B,
+  Compound, Compound Mini, and the two Qwen 27B models. Excluded on purpose:
+  `openai/gpt-oss-safeguard-20b` (classifier), `allam-2-7b` (4k context too small).
+- Settings **auto-refreshes** `GET /models` on load whenever a key is present (no button press
+  needed) and filters out non-chat models, so an account that sees newer models than this build's
+  curated list still gets them as "From your account". The manual **Refresh model list** button
+  remains.

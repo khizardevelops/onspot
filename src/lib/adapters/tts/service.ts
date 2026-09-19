@@ -4,11 +4,17 @@ import { localVoiceChoices } from './voices';
 import { pcmToWavUrl } from './roundTrip';
 import { getDatabaseAdapter } from '$lib/adapters/db';
 import { base64ToBlob, blobToBase64 } from '$lib/utils/base64';
+import { getVoice, requireLanguage } from '$lib/languages';
+import { processPcm, tuningSignature } from '$lib/utils/audioEffects';
+import { appSettings, voiceTuning } from '$lib/stores/settings';
+import { get } from 'svelte/store';
 import type { ModelProgress, TtsChoice } from '../../types';
 
 export interface SynthesizeOptions {
 	text: string;
 	mode: 'local' | 'cloud';
+	/** Target language id; selects the voice set and its audio profile. */
+	languageId: string;
 	/** Local Piper voice id, e.g. `piper-tom-medium`. */
 	voice?: string;
 	openaiApiKey?: string;
@@ -17,6 +23,12 @@ export interface SynthesizeOptions {
 	onProgress?: (progress: ModelProgress) => void;
 	/** Skip the cache and regenerate. */
 	force?: boolean;
+	/**
+	 * Return the model output without the voice profile or the learner's
+	 * tuning. The Settings preview applies both live, so tuning never needs a
+	 * regeneration there.
+	 */
+	raw?: boolean;
 }
 
 export interface SpeechResult {
@@ -28,9 +40,9 @@ export interface SpeechResult {
 	cached: boolean;
 }
 
-/** Local Piper voices available to the product, ranked by the listening test. */
-export function listLocalVoices(): TtsChoice[] {
-	return localVoiceChoices();
+/** Local Piper voices available for a target language. */
+export function listLocalVoices(languageId: string): TtsChoice[] {
+	return localVoiceChoices(languageId);
 }
 
 let localPiper: WorkerPiperAdapter | null = null;
@@ -38,6 +50,23 @@ let localPiper: WorkerPiperAdapter | null = null;
 function getLocalPiper(): WorkerPiperAdapter {
 	localPiper ??= new WorkerPiperAdapter();
 	return localPiper;
+}
+
+/**
+ * Downloads and initializes a local voice without synthesizing. Called by the
+ * language-data download so a session never starts with a cold voice.
+ */
+export async function preloadLocalVoice(
+	voiceId: string,
+	onProgress?: (progress: ModelProgress) => void
+): Promise<void> {
+	await getLocalPiper().preload(voiceId, onProgress);
+}
+
+/** Cancels an in-flight local voice download by tearing the worker down. */
+export function cancelLocalVoiceDownload(): void {
+	localPiper?.dispose();
+	localPiper = null;
 }
 
 /** FNV-1a plus length: short, stable, collision-resistant enough for a cache key. */
@@ -51,16 +80,22 @@ function hashText(text: string): string {
 }
 
 /**
- * Synthesizes French text, caching the WAV by (mode, voice, text).
+ * Synthesizes the target language's text, caching the WAV by
+ * (mode, language, voice, text).
  *
  * A given phrase/voice is deterministic, so a repeat costs no model call and is
  * available instantly (survives reload, since the cache lives in the database).
  * Changing the voice produces a new key, which is what makes retroactive
  * re-rendering of an attempt work.
  */
-export async function synthesizeFrench(options: SynthesizeOptions): Promise<SpeechResult> {
-	const voice = options.voice ?? 'piper-tom-medium';
-	const cacheKey = `tts:${options.mode}:${voice}:${hashText(options.text)}`;
+export async function synthesizeSpeech(options: SynthesizeOptions): Promise<SpeechResult> {
+	const language = requireLanguage(options.languageId);
+	const voice = options.voice || language.defaultVoice;
+	// Advanced per-voice adjustments are part of the cache identity: changing a
+	// slider must not replay audio rendered with the old EQ.
+	const tuning = voiceTuning(get(appSettings), voice);
+	const signature = options.raw ? 'raw' : tuningSignature(tuning);
+	const cacheKey = `tts:${options.mode}:${language.id}:${voice}:${signature}:${hashText(options.text)}`;
 	const db = await getDatabaseAdapter();
 
 	if (!options.force) {
@@ -75,7 +110,7 @@ export async function synthesizeFrench(options: SynthesizeOptions): Promise<Spee
 		}
 	}
 
-	const generated = await generate(options, voice);
+	const generated = await generate(options, language.id, voice);
 
 	try {
 		const blob = await (await fetch(generated.url)).blob();
@@ -96,6 +131,7 @@ export async function synthesizeFrench(options: SynthesizeOptions): Promise<Spee
 
 async function generate(
 	options: SynthesizeOptions,
+	languageId: string,
 	voice: string
 ): Promise<{ url: string; model: string; durationSec: number }> {
 	if (options.mode === 'cloud') {
@@ -116,8 +152,17 @@ async function generate(
 	if (synthesis.peak < 0.001) {
 		throw new Error('The voice returned silence.');
 	}
+
+	// The voice's listening-test correction (EQ / loudness) plus the learner's
+	// adjustments in Settings → Advanced are applied to the PCM before playback.
+	const profile = getVoice(languageId, voice)?.processing;
+	const tuning = voiceTuning(get(appSettings), voice);
+	const audio = options.raw
+		? synthesis.audio
+		: await processPcm(synthesis.audio, synthesis.samplingRate, profile, tuning);
+
 	return {
-		url: pcmToWavUrl(synthesis.audio, synthesis.samplingRate),
+		url: pcmToWavUrl(audio, synthesis.samplingRate),
 		model: synthesis.modelName,
 		durationSec: synthesis.durationSec
 	};

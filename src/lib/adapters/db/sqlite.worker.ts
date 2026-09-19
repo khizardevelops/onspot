@@ -16,7 +16,7 @@ type SqlValue = string | number | null;
 
 interface Request {
 	id: number;
-	op: 'execute' | 'select';
+	op: 'execute' | 'select' | 'export';
 	sql: string;
 	params?: SqlValue[];
 }
@@ -25,6 +25,8 @@ interface Response {
 	id: number;
 	ok: boolean;
 	rows?: Record<string, unknown>[];
+	/** A complete SQLite database image, for `export`. */
+	bytes?: Uint8Array;
 	error?: string;
 }
 
@@ -51,7 +53,17 @@ async function getHandle(): Promise<SqliteHandle> {
 self.onmessage = async (event: MessageEvent<Request>) => {
 	const { id, op, sql, params } = event.data;
 	try {
-		const { db } = await getHandle();
+		const { sqlite3, db } = await getHandle();
+
+		if (op === 'export') {
+			// sqlite-wasm serializes the open database into a standard SQLite file:
+			// every table, the schema version, recordings and the TTS cache.
+			const bytes: Uint8Array = sqlite3.capi.sqlite3_js_db_export(db.pointer);
+			(self as unknown as Worker).postMessage({ id, ok: true, bytes } satisfies Response, [
+				bytes.buffer
+			]);
+			return;
+		}
 
 		if (op === 'select') {
 			const rows = db.exec({

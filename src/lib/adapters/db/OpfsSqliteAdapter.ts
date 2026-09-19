@@ -6,6 +6,7 @@ interface WorkerResponse {
 	id: number;
 	ok: boolean;
 	rows?: Record<string, unknown>[];
+	bytes?: Uint8Array;
 	error?: string;
 }
 
@@ -36,9 +37,9 @@ class WorkerSqlDriver implements SqlDriver {
 	}
 
 	private request(
-		op: 'execute' | 'select',
-		sql: string,
-		params: SqlValue[]
+		op: 'execute' | 'select' | 'export',
+		sql = '',
+		params: SqlValue[] = []
 	): Promise<WorkerResponse> {
 		const id = this.nextId++;
 		return new Promise((resolve, reject) => {
@@ -56,6 +57,13 @@ class WorkerSqlDriver implements SqlDriver {
 		return (response.rows ?? []) as T[];
 	}
 
+	/** The whole database as a standard SQLite file, serialized by sqlite-wasm. */
+	async exportDatabase(): Promise<Uint8Array> {
+		const response = await this.request('export');
+		if (!response.bytes) throw new Error('SQLite export returned no data.');
+		return response.bytes;
+	}
+
 	async close(): Promise<void> {
 		this.worker.terminate();
 	}
@@ -67,6 +75,11 @@ class WorkerSqlDriver implements SqlDriver {
  */
 export class OpfsSqliteAdapter extends SqlDatabaseAdapter {
 	readonly kind = 'opfs-sqlite' as const;
+
+	async exportSqliteFile(): Promise<Uint8Array> {
+		const driver = (await this.sql()) as WorkerSqlDriver;
+		return driver.exportDatabase();
+	}
 
 	protected async openDriver(): Promise<SqlDriver> {
 		if (typeof Worker === 'undefined') {

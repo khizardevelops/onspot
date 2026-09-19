@@ -1,11 +1,21 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window: core APIs plus the SQL plugin.",
+  "description": "Default capability for the main window: core APIs, the SQL plugin, and the save dialog + file access used by the database export.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "sql:default",
-    "sql:allow-execute"
+    "sql:allow-execute",
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [{ "path": "$TEMP/onspot-export-*.sqlite" }]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [{ "path": "$TEMP/onspot-export-*.sqlite" }]
+    }
   ]
 }

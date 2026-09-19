@@ -43,15 +43,46 @@
 		spacerHeight = Math.max(0, container.clientHeight - cards[cards.length - 1].offsetHeight - 24);
 	}
 
+	/**
+	 * Long takes (up to five minutes of speech, translations, word breakdown)
+	 * do not fit the viewport. The exit timeline would already be part-way
+	 * through for such a card and would flip it away while the learner is still
+	 * reading inside it, so anything taller than most of the viewport is kept
+	 * flat and scrolls normally.
+	 */
+	function applyTall(slot: HTMLElement) {
+		if (!container) return;
+		const threshold = Math.max(480, container.clientHeight * 0.75);
+		slot.classList.toggle('tall', slot.offsetHeight > threshold);
+	}
+
+	function markTallCards() {
+		if (!container) return;
+		for (const slot of container.querySelectorAll<HTMLElement>('[data-attempt-id]')) {
+			applyTall(slot);
+		}
+	}
+
+	/** Resize callbacks only touch the card that actually changed size. */
+	function onCardResize(entries: ResizeObserverEntry[]) {
+		measure();
+		for (const entry of entries) {
+			const target = entry.target as HTMLElement;
+			if (target === container) markTallCards();
+			else if (target.matches('[data-attempt-id]')) applyTall(target);
+		}
+	}
+
 	function observeCards() {
 		if (!resizeObserver || !container) return;
 		resizeObserver.disconnect();
 		resizeObserver.observe(container);
-		// The spacer depends only on the viewport and newest card. Observing every
-		// historical card made every disclosure change fan out through one shared
-		// observer for no benefit.
-		const last = [...container.querySelectorAll<HTMLElement>('[data-attempt-id]')].at(-1);
-		if (last) resizeObserver.observe(last);
+		// Every slot is observed because expanding translations or a word
+		// breakdown changes a card's height and may need the flat-scroll class.
+		for (const slot of container.querySelectorAll<HTMLElement>('[data-attempt-id]')) {
+			resizeObserver.observe(slot);
+		}
+		markTallCards();
 	}
 
 	function cancelAnimatedScroll() {
@@ -137,6 +168,11 @@
 			return;
 		}
 		for (const card of container.querySelectorAll<HTMLElement>('[data-attempt-id]')) {
+			if (card.classList.contains('tall')) {
+				card.style.removeProperty('transform');
+				card.style.removeProperty('opacity');
+				continue;
+			}
 			const relativeTop = card.offsetTop - container.scrollTop;
 			const progress = Math.max(0, Math.min(1, -relativeTop / 170));
 			if (progress === 0) {
@@ -160,6 +196,7 @@
 		await tick();
 		observeCards();
 		measure();
+		markTallCards();
 		// The floor spacer changes the scroll range, so wait for that layout before
 		// calculating the card's final position.
 		await tick();
@@ -195,7 +232,7 @@
 			updateFallbackConveyor();
 		};
 		reducedMotionQuery.addEventListener('change', handleMotionPreference);
-		resizeObserver = new ResizeObserver(measure);
+		resizeObserver = new ResizeObserver(onCardResize);
 		observeCards();
 		knownSessionId = $practice.sessionId;
 		knownLastAttemptId = attempts.at(-1)?.id ?? null;
@@ -300,8 +337,15 @@
 
 	.attempt-slot {
 		content-visibility: auto;
-		contain-intrinsic-size: auto 240px;
+		contain-intrinsic-size: auto 320px;
 		transform-origin: top center;
+	}
+
+	/* Tall cards scroll flat; the exit curve would otherwise flip them away
+	   while the learner is still reading inside them. The class is added from
+	   JS, so the selector has to be global for Svelte to keep it. */
+	.attempt-slot:global(.tall) {
+		animation: none !important;
 	}
 
 	@keyframes conveyor-exit {
@@ -319,13 +363,10 @@
 		}
 	}
 
+	/* Cards rolling out under the header fade into the same paper (see .paper-surface). */
 	.conveyor-lip {
-		background: linear-gradient(
-			to bottom,
-			color-mix(in srgb, var(--background) 96%, transparent) 0%,
-			color-mix(in srgb, var(--background) 76%, transparent) 58%,
-			transparent 100%
-		);
+		background: var(--background) var(--paper-page, none) center / cover fixed;
+		mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.78) 58%, transparent 100%);
 	}
 
 	/* Respect the user's motion preference: no conveyor, no lip. */

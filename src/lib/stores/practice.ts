@@ -12,12 +12,14 @@ import { appSettings, setSetting } from './settings';
 import { groqApiKey, openaiApiKey } from './secrets';
 import { resolveLlmEndpoint } from './llm';
 import { playTrack, setAudioLoading } from './audio';
+import { refreshLanguageData } from './languageData';
 import { VoiceRecorder, type Recording } from '$lib/utils/recorder';
-import { transcribeFrench } from '$lib/adapters/stt/service';
+import { transcribeSpeech } from '$lib/adapters/stt/service';
 import { evaluateAttempt, generateTranslations, type EvaluationResult } from '$lib/adapters/llm';
-import { synthesizeFrench } from '$lib/adapters/tts/service';
+import { synthesizeSpeech } from '$lib/adapters/tts/service';
 import { base64ToBlob, blobToBase64 } from '$lib/utils/base64';
 import { ensurePromptsSeeded, pickRandomPrompt } from '$lib/practice/prompts';
+import { requireLanguage, getVoice } from '$lib/languages';
 import { MAX_RECORDING_SEC, capWords, countWords } from '$lib/config';
 import { toast } from './toast';
 import type { ModelProgress } from '$lib/types';
@@ -94,15 +96,47 @@ function update(patch: Partial<PracticeState>): void {
 /** Loads the database and seeds the prompt set. Call once on startup. */
 export async function initPractice(): Promise<void> {
 	db = await getDatabaseAdapter();
-	prompts = await ensurePromptsSeeded(db);
+	const languageId = get(appSettings).targetLanguage;
+	if (languageId) {
+		prompts = await ensurePromptsSeeded(db, languageId);
+	}
 	const state = get(store);
-	if (!state.prompt.id) {
+	if (!state.prompt.id && prompts.length > 0) {
 		const prompt = pickRandomPrompt(prompts);
 		update({ prompt: { id: prompt.id, title: prompt.title, text: prompt.text } });
 	}
 	if (!state.sessionId) {
 		update({ mode: get(appSettings).mode });
 	}
+}
+
+/**
+ * Switches the language being studied: persists the choice, reseeds that
+ * language's prompts and starts a fresh session. The download itself stays
+ * manual so a mis-click never commits the user to a large transfer.
+ */
+export async function setTargetLanguage(languageId: string): Promise<void> {
+	const language = requireLanguage(languageId);
+	setSetting('targetLanguage', language.id);
+	// A voice saved for another language does not exist here; fall back to the
+	// listening-test default for this language.
+	if (!getVoice(language.id, get(appSettings).ttsVoice)) {
+		setSetting('ttsVoice', language.defaultVoice);
+	}
+	if (!db) db = await getDatabaseAdapter();
+	prompts = await ensurePromptsSeeded(db, language.id);
+	update({
+		sessionId: null,
+		attempts: [],
+		activeAttemptId: null,
+		phase: 'idle',
+		error: null,
+		elapsed: 0,
+		level: 0,
+		prompt: { id: '', title: '', text: '' }
+	});
+	nextPrompt();
+	void refreshLanguageData(language.id);
 }
 
 /**
@@ -192,18 +226,20 @@ export async function stopAndAnalyze(): Promise<void> {
 	update({ level: 0, phase: 'transcribing', statusText: 'Transcribing…', progress: null });
 
 	const settings = get(appSettings);
+	const language = requireLanguage(settings.targetLanguage);
 
 	try {
-		const stt = await transcribeFrench({
+		const stt = await transcribeSpeech({
 			audio16kMono: recording.pcm,
 			mode: settings.sttMode,
+			languageId: language.id,
 			groqApiKey: get(groqApiKey) || undefined,
 			onProgress: (progress) => update({ progress, statusText: progress.status })
 		});
 
-		update({ phase: 'evaluating', statusText: 'Analyzing your French…', progress: null });
+		update({ phase: 'evaluating', statusText: `Analyzing your ${language.name}…`, progress: null });
 
-		// 60s of fast French is ~240 words; cap there so a runaway transcript
+		// 60s of fast speech is ~240 words; cap there so a runaway transcript
 		// cannot blow the LLM output budget.
 		const transcript = capWords(stt.text);
 
@@ -212,6 +248,8 @@ export async function stopAndAnalyze(): Promise<void> {
 			prompt: get(store).prompt.text,
 			mode: get(store).mode,
 			level: settings.level,
+			language: language.name,
+			translationTarget: language.translationTarget,
 			endpoint: resolveLlmEndpoint(settings)
 		});
 
@@ -460,9 +498,11 @@ export function ensureAttemptTranslations(
 
 	const job = (async () => {
 		if (!db) db = await getDatabaseAdapter();
+		const language = requireLanguage(get(appSettings).targetLanguage);
 		const translations = await generateTranslations(
 			attempt.transcript,
-			resolveLlmEndpoint(get(appSettings))
+			resolveLlmEndpoint(get(appSettings)),
+			{ language: language.name, translationTarget: language.translationTarget }
 		);
 		const row = await db.getAttempt(attemptId);
 		if (!row) throw new Error('Attempt not found.');
@@ -515,9 +555,10 @@ async function playAttemptText(
 		url: ''
 	});
 	try {
-		const speech = await synthesizeFrench({
+		const speech = await synthesizeSpeech({
 			text,
 			mode: settings.ttsMode,
+			languageId: settings.targetLanguage,
 			voice: attempt.ttsVoice ?? settings.ttsVoice,
 			openaiApiKey: get(openaiApiKey) || undefined,
 			attemptId: attempt.id
@@ -546,9 +587,10 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 	if (!attempt) return;
 	const text = attempt.naturalSpeech || attempt.correctedText;
 	try {
-		const speech = await synthesizeFrench({
+		const speech = await synthesizeSpeech({
 			text,
 			mode: get(appSettings).ttsMode,
+			languageId: get(appSettings).targetLanguage,
 			voice,
 			openaiApiKey: get(openaiApiKey) || undefined,
 			attemptId,
@@ -569,15 +611,16 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 	}
 }
 
-/** Synthesizes and plays arbitrary French text (used for correction read-back). */
+/** Synthesizes and plays arbitrary target-language text (used for correction read-back). */
 export async function speakText(text: string): Promise<void> {
 	if (!text.trim()) return;
 	const settings = get(appSettings);
 	setAudioLoading(true, { attemptId: '', kind: 'correction', label: text, url: '' });
 	try {
-		const speech = await synthesizeFrench({
+		const speech = await synthesizeSpeech({
 			text,
 			mode: settings.ttsMode,
+			languageId: settings.targetLanguage,
 			voice: settings.ttsVoice,
 			openaiApiKey: get(openaiApiKey) || undefined
 		});

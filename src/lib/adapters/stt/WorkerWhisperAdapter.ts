@@ -42,6 +42,8 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 		dtype?: string;
 		language?: string;
 		description?: string;
+		parameterCount?: string;
+		quantizedSize?: string;
 	}) {
 		const fullConfig: ModelConfig = {
 			id: config.id,
@@ -49,14 +51,14 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 			description: config.description ?? 'Whisper ONNX transcription, off the UI thread.',
 			provider: 'Transformers.js',
 			modelRepoId: config.modelRepoId,
-			parameterCount: '244M',
-			quantizedSize: '~299 MB (q4)',
-			language: 'Multilingual / French',
+			parameterCount: config.parameterCount ?? '244M',
+			quantizedSize: config.quantizedSize ?? '~299 MB (q4)',
+			language: config.language ?? 'Multilingual',
 			dtype: config.dtype ?? 'q4',
 			status: 'unloaded'
 		};
 		super(fullConfig);
-		this.language = config.language ?? 'french';
+		this.language = config.language ?? 'english';
 		this.worker = new STTWorker();
 		this.worker.onmessage = (event: MessageEvent<WorkerMessage>) => this.handle(event.data);
 		this.worker.onerror = (event) => {
@@ -177,7 +179,7 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 				type: 'transcribe',
 				pcm: copy,
 				sampleRate: 16000,
-				language: options?.language === 'fr' || options?.language === 'french' ? 'french' : this.language
+				language: options?.language ?? this.language
 			},
 			[copy.buffer]
 		);
@@ -186,7 +188,9 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 
 	public async dispose(): Promise<void> {
 		this.worker.terminate();
-		this.pending.clear();
+		// Reject in-flight requests first; a bare terminate would leave their
+		// promises pending forever and wedge the download state.
+		this.rejectAll(new Error('STT worker disposed.'));
 		await super.dispose();
 	}
 }

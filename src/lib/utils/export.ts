@@ -1,53 +1,54 @@
-import { getDatabaseAdapter } from '$lib/adapters/db';
+import { getDatabaseAdapter, isTauriRuntime } from '$lib/adapters/db';
+
+const SQLITE_MIME = 'application/vnd.sqlite3';
 
 /**
- * Exports everything the learner has created as a single JSON file: sessions,
- * attempts, corrections, prompts, settings, and the stored recordings (base64).
+ * Exports the learner's whole database as one standard `.sqlite` file:
+ * sessions, attempts, corrections, translations, prompts, settings, the
+ * recordings and every cached TTS clip (read-backs, sentences, words,
+ * previews). It opens in any SQLite tool.
  *
- * The TTS cache is deliberately not exported — it is regenerable and can be
- * large. Recordings are the irreplaceable part.
+ * API keys are not included: they live in `localStorage`, never in the
+ * database. Downloaded speech models are not included either; they are
+ * public downloads the app can fetch again.
+ *
+ * Resolves to `false` when the learner cancels the save dialog.
  */
-export async function exportAllData(): Promise<void> {
+export async function exportDatabaseFile(): Promise<boolean> {
+	const fileName = `onspot-backup-${new Date().toISOString().slice(0, 10)}.sqlite`;
 	const db = await getDatabaseAdapter();
-	const [sessions, attempts, corrections, prompts, settings] = await Promise.all([
-		db.listSessions(),
-		db.listAllAttempts(),
-		db.listAllCorrections(),
-		db.listPrompts(),
-		db.listSettings()
-	]);
 
-	const recordings: { attemptId: string; mime: string; dataBase64: string }[] = [];
-	for (const attempt of attempts) {
-		const audio = await db.getAudio(`attempt:${attempt.id}`);
-		if (audio) {
-			recordings.push({
-				attemptId: attempt.id,
-				mime: audio.mime,
-				dataBase64: audio.dataBase64
-			});
-		}
+	if (isTauriRuntime()) {
+		const { save } = await import('@tauri-apps/plugin-dialog');
+		const path = await save({
+			defaultPath: fileName,
+			filters: [{ name: 'SQLite database', extensions: ['sqlite'] }]
+		});
+		if (!path) return false;
+		const { writeFile } = await import('@tauri-apps/plugin-fs');
+		await writeFile(path, await db.exportSqliteFile());
+		return true;
 	}
 
-	const payload = {
-		app: 'onspot',
-		format: 1,
-		exportedAt: new Date().toISOString(),
-		sessions,
-		attempts,
-		corrections,
-		prompts,
-		settings,
-		recordings
-	};
-
-	const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement('a');
-	anchor.href = url;
-	anchor.download = `onspot-export-${new Date().toISOString().slice(0, 10)}.json`;
-	document.body.appendChild(anchor);
-	anchor.click();
-	anchor.remove();
-	URL.revokeObjectURL(url);
+	// Native "Save as" where the File System Access API exists, a download
+	// elsewhere. The blob is passed as a promise so the picker opens while the
+	// user gesture is still fresh.
+	const { fileSave } = await import('browser-fs-access');
+	try {
+		await fileSave(
+			db
+				.exportSqliteFile()
+				.then((bytes) => new Blob([bytes as Uint8Array<ArrayBuffer>], { type: SQLITE_MIME })),
+			{
+				fileName,
+				extensions: ['.sqlite'],
+				mimeTypes: [SQLITE_MIME],
+				description: 'SQLite database'
+			}
+		);
+		return true;
+	} catch (error) {
+		if (error instanceof DOMException && error.name === 'AbortError') return false;
+		throw error;
+	}
 }

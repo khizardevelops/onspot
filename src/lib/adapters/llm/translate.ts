@@ -3,30 +3,39 @@ import { chatCompletion } from './client';
 import { extractJson } from './evaluate';
 import {
 	DETAILED_TRANSLATION_SCHEMA,
-	TRANSLATION_RULES
+	translationRules,
+	type TranslationLanguage
 } from './translationPrompt';
 import type { ChatMessage, LlmEndpoint } from './types';
 
 const MAX_TRANSLATION_TOKENS = 2048;
 
-function translationMessages(transcript: string): ChatMessage[] {
+function translationMessages(
+	transcript: string,
+	translation: TranslationLanguage
+): ChatMessage[] {
 	return [
 		{
 			role: 'system',
-			content: `You are an expert French-to-English translation engine. Translate the source into distinct study views.
+			content: `You are an expert ${translation.language}-to-${translation.translationTarget} translation engine. Translate the source into distinct study views.
 
 Return only a JSON object with this exact structure:
 {
   "translations": ${DETAILED_TRANSLATION_SCHEMA}
 }
 
-${TRANSLATION_RULES}
+${translationRules(translation)}
 
-For "wordBreakdown", map the source's primary tokens or morphemes in order to their isolated English equivalents. Split contractions when useful, such as "m'" → "me" and "appelle" → "call". Keep each item brief.`
+For "wordBreakdown", map the source's primary tokens or morphemes in order to their isolated ${translation.translationTarget} equivalents. Split contractions when useful. Keep each item brief.`
 		},
 		{
 			role: 'user',
-			content: ['French transcript:', '"""', transcript.trim(), '"""'].join('\n')
+			content: [
+				`${translation.language} transcript:`,
+				'"""',
+				transcript.trim(),
+				'"""'
+			].join('\n')
 		}
 	];
 }
@@ -54,9 +63,10 @@ function breakdown(value: unknown): TranslationBreakdownItem[] {
 export async function generateTranslations(
 	transcript: string,
 	endpoint: LlmEndpoint,
+	translation: TranslationLanguage,
 	signal?: AbortSignal
 ): Promise<TranslationSet> {
-	const raw = await chatCompletion(endpoint, translationMessages(transcript), {
+	const raw = await chatCompletion(endpoint, translationMessages(transcript, translation), {
 		json: true,
 		temperature: 0.1,
 		maxTokens: MAX_TRANSLATION_TOKENS,

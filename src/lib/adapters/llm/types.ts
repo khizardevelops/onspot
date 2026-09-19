@@ -96,6 +96,10 @@ export interface EvaluationRequest {
 	prompt: string;
 	mode: RunMode;
 	level: string;
+	/** Target language name, e.g. `French`. */
+	language: string;
+	/** Learner's native language name, e.g. `English`. */
+	translationTarget: string;
 	endpoint: LlmEndpoint;
 	/** Output token cap; defaults to the pacing-derived budget. */
 	maxTokens?: number;

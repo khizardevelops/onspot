@@ -60,7 +60,7 @@ export class GroqWhisperAdapter extends BaseSTTAdapter {
 		const form = new FormData();
 		form.append('file', encodeWav(audio16kMono, 16000), 'audio.wav');
 		form.append('model', this.model);
-		form.append('language', 'fr');
+		form.append('language', options?.language ?? 'en');
 		form.append('response_format', 'json');
 		if (options?.task === 'translate') form.append('task', 'translate');
 

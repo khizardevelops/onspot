@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <style>
+        :root {
+            /* Original Color Palette - strictly adhered to */
+            --bg-color: #f7f6f2;      /* Warm off-white */
+            --card-bg: #ffffff;
+            --text-main: #2c2c2c;     /* Deep charcoal */
+            --text-muted: #7a7a7a;    /* Soft gray */
+            --border-color: #e8e8e3;  /* Subtle warm border */
+            --accent-color: #6c9a8e;  /* Muted sage teal */
+            --accent-hover: #5a8579;
+            --accent-light: rgba(108, 154, 142, 0.1);
+            --input-bg: #fbfbf9;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            font-size: 14px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            letter-spacing: -0.01em;
+        }
+
+        /* Glassmorphic Sidebar */
+        .sidebar {
+            width: 68px;
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(0,0,0,0.04);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 32px;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .sidebar-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .sidebar-icon:hover {
+            background-color: rgba(0,0,0,0.03);
+            color: var(--text-main);
+            transform: translateY(-1px);
+        }
+
+        .sidebar-icon.active {
+            background-color: var(--accent-color);
+            color: white;
+            box-shadow: 0 4px 12px rgba(108, 154, 142, 0.3);
+        }
+
+        .sidebar-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 64px 48px;
+            position: relative;
+        }
+
+        .container {
+            max-width: 760px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        h1 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.03em;
+            color: #1a1a1a;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 15px;
+            margin-bottom: 40px;
+            max-width: 620px;
+            line-height: 1.6;
+        }
+
+        /* Modern Full-Width Segmented Control */
+        .tabs-container {
+            display: flex;
+            width: 100%;
+            background-color: rgba(0,0,0,0.04);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 48px;
+            position: relative;
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px 0;
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            background: transparent;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tab.active {
+            color: var(--text-main);
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--card-bg);
+            border-radius: 9px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            z-index: -1;
+        }
+
+        /* Premium Cards */
+        .settings-group {
+            margin-bottom: 40px;
+        }
+
+        .group-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            padding-left: 4px;
+            font-weight: 700;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 20px;
+            box-shadow: 0 12px 32px -8px rgba(0,0,0,0.04), 0 4px 12px -4px rgba(0,0,0,0.02);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            transition: box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 16px 40px -8px rgba(0,0,0,0.06), 0 4px 12px -4px rgba(0,0,0,0.03);
+        }
+
+        .card-body {
+            padding: 24px 32px;
+        }
+
+        /* Sleek Form Elements */
+        .form-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .form-row:last-child {
+            border-bottom: none;
+        }
+
+        .form-row label {
+            color: var(--text-main);
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .input-control {
+            width: 280px;
+            padding: 12px 16px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            background-color: var(--input-bg);
+            font-size: 14px;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: inherit;
+            appearance: none;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .input-control:hover {
+            background-color: #f5f5f2;
+        }
+
+        .input-control:focus {
+            border-color: var(--accent-color);
+            background-color: var(--card-bg);
+            box-shadow: 0 0 0 4px var(--accent-light), inset 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        /* Custom Select */
+        .select-wrapper {
+            position: relative;
+            width: 280px;
+        }
+
+        .select-wrapper::after {
+            content: "▼";
+            font-size: 8px;
+            color: var(--text-muted);
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            transition: transform 0.2s ease;
+        }
+
+        .select-wrapper:focus-within::after {
+            transform: translateY(-50%) rotate(180deg);
+        }
+
+        .select-wrapper select {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        /* Info Boxes */
+        .info-box {
+            background-color: var(--input-bg);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border: 1px solid var(--border-color);
+        }
+
+        .info-box-content {
+            max-width: 70%;
+        }
+
+        .info-box-title {
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .badge {
+            font-size: 11px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            background-color: #e0f2e9;
+            color: #2b7a5c;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .info-box p {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Tactile Buttons */
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(108, 154, 142, 0.2);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(108, 154, 142, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0) scale(0.98);
+            box-shadow: 0 1px 4px rgba(108, 154, 142, 0.2);
+        }
+
+        .btn-secondary {
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--input-bg);
+            border-color: #dcdcd7;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        .link {
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+
+        .link:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        /* API Key Input */
+        .api-key-wrapper {
+            position: relative;
+            width: 280px;
+        }
+
+        .api-key-wrapper input {
+            width: 100%;
+            padding-right: 44px;
+            font-family: "SF Mono", "Roboto Mono", monospace;
+            letter-spacing: 1px;
+            font-size: 13px;
+        }
+
+        .toggle-visibility {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            padding: 4px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .toggle-visibility:hover {
+            background-color: rgba(0,0,0,0.05);
+            color: var(--text-main);
+        }
+
+        /* Voice & Audio Section */
+        .voice-audio-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Graphical Equalizer - Studio Feel */
+        .eq-container {
+            background-color: #f0efea;
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 16px;
+            padding: 32px 24px;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+            margin-top: 16px;
+        }
+
+        .eq-container.playing {
+            background-color: #e8ede9;
+            border-color: rgba(108, 154, 142, 0.3);
+            box-shadow: inset 0 2px 8px rgba(108, 154, 142, 0.05), 0 0 0 1px rgba(108, 154, 142, 0.1);
+        }
+
+        .eq-graph {
+            position: absolute;
+            top: 32px;
+            left: 24px;
+            right: 24px;
+            height: 140px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .eq-sliders {
+            display: flex;
+            justify-content: space-around;
+            position: relative;
+            z-index: 2;
+            height: 140px;
+        }
+
+        .eq-band {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            justify-content: flex-end;
+        }
+
+        .eq-slider-wrapper {
+            height: 100px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .eq-slider {
+            writing-mode: vertical-lr;
+            direction: rtl;
+            width: 10px;
+            height: 100%;
+            background: transparent;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        .eq-slider::-webkit-slider-runnable-track {
+            width: 4px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 4px;
+        }
+
+        .eq-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 2px solid var(--accent-color);
+            margin-left: -7px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, border-color 0.2s;
+        }
+
+        .eq-container.playing .eq-slider::-webkit-slider-thumb {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            transform: scale(1.1);
+            box-shadow: 0 0 12px rgba(108, 154, 142, 0.5);
+        }
+
+        .eq-value {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 10px;
+            width: 44px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .eq-label {
+            font-size: 12px;
+            color: var(--text-main);
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        /* Voice Preview Box */
+        .voice-preview-box {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+            margin-top: 24px;
+        }
+
+        .voice-preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .voice-preview-text {
+            font-size: 14px;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            line-height: 1.6;
+            font-style: italic;
+            opacity: 0.9;
+        }
+
+        .voice-preview-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Loop Button with Pulse Animation */
+        .btn-loop {
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .btn-loop:hover {
+            background-color: var(--input-bg);
+            transform: translateY(-1px);
+        }
+
+        .btn-loop.active {
+            background-color: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 0 rgba(108, 154, 142, 0.7);
+            animation: pulse 2s infinite;
+        }
+
+        .btn-loop svg {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.3s ease;
+        }
+
+        .btn-loop.active svg {
+            animation: spin 3s linear infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(108, 154, 142, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(108, 154, 142, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(108, 154, 142, 0); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Utility */
+        .mt-4 { margin-top: 16px; }
+        .mt-6 { margin-top: 24px; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .gap-2 { gap: 8px; }
+        .gap-4 { gap: 16px; }
+        .text-xs { font-size: 12px; color: var(--text-muted); }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,0,0,0.2);
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Glassmorphic Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-icon active">
+            <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="sidebar-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div class="sidebar-icon">
+            <svg viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </div>
+        <div class="sidebar-icon">
+            <svg viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        </div>
+        <div class="sidebar-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            
+            <h1>Settings</h1>
+            <p class="subtitle">Everything runs on this device unless you add a cloud key. Keys never leave your device and are never written to the synced database.</p>
+
+            <div class="tabs-container">
+                <button class="tab">General</button>
+                <button class="tab active">Advanced</button>
+            </div>
+
+            <!-- LANGUAGE SECTION -->
+            <div class="settings-group">
+                <div class="group-title">Language</div>
+                <div class="card">
+                    <div class="card-body">
+                        <div class="form-row">
+                            <label>I am studying</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>French (Français)</option>
+                                    <option>Spanish (Español)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>Your level</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>B1</option>
+                                    <option>A1</option>
+                                    <option>A2</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>Default mode</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>Casual</option>
+                                    <option>Intensive</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="info-box">
+                            <div class="info-box-content">
+                                <div class="info-box-title">
+                                    French data <span class="badge">Installed</span>
+                                </div>
+                                <p>The approved speech-recognition model and voice (onnx-community/whisper-small and Piper Tom (M, medium), about 363 MB) download from the internet onto this device. Nothing is bundled with the app.</p>
+                            </div>
+                            <button class="btn-secondary" style="color: var(--accent-color); border-color: var(--accent-color); background: transparent;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                Downloaded
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI PROVIDER SECTION -->
+            <div class="settings-group">
+                <div class="group-title">AI Provider (BYOK)</div>
+                <div class="card">
+                    <div class="card-body">
+                        <div class="form-row">
+                            <label>Provider</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>Groq</option>
+                                    <option>OpenAI</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>Model</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>openai/gpt-oss-safeguard-20b (saved)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-4" style="margin-top: 20px;">
+                            <button class="btn-secondary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                Refresh model list
+                            </button>
+                            <span class="text-xs">Found 6 models.</span>
+                        </div>
+
+                        <div class="info-box" style="background-color: var(--input-bg); border: 1px solid var(--border-color); padding: 20px; margin-top: 20px;">
+                            <div class="info-box-content" style="max-width: 75%;">
+                                <p style="margin-bottom: 12px;">Only models your Groq key can actually use are listed. If a model is missing, enable it under Model Permissions in the Groq Console, then Refresh. Some models (e.g. Llama 3.1/3.3) are Enterprise-only and return a 404 for standard accounts.</p>
+                                <div style="display: flex; gap: 20px;">
+                                    <a href="#" class="link text-xs">Groq API keys</a>
+                                    <a href="#" class="link text-xs">Model list & permissions</a>
+                                </div>
+                            </div>
+                            <button class="btn-secondary">Test connection</button>
+                        </div>
+
+                        <div class="form-row" style="margin-top: 24px;">
+                            <label>Groq API key</label>
+                            <div class="api-key-wrapper">
+                                <input type="password" class="input-control" value="sk-1234567890abcdef1234567890abcdef" id="apiKeyInput">
+                                <button class="toggle-visibility" onclick="togglePassword()">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TRANSCRIPTION SECTION (Moved to its own section) -->
+            <div class="settings-group">
+                <div class="group-title">Transcription</div>
+                <div class="card">
+                    <div class="card-body">
+                        <div class="form-row">
+                            <label>Transcription</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>Cloud (Groq)</option>
+                                    <option>Local (Whisper)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONSOLIDATED VOICE & AUDIO SECTION -->
+            <div class="settings-group">
+                <div class="group-title">Voice & Audio</div>
+                <div class="card">
+                    <div class="card-body voice-audio-section">
+                        
+                        <!-- TTS Provider -->
+                        <div class="form-row" style="padding-top: 0; border-bottom: 1px solid var(--border-color);">
+                            <label>TTS Provider</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>Local (Piper)</option>
+                                    <option>Cloud (ElevenLabs)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Voice Selector -->
+                        <div class="form-row" style="border-bottom: none;">
+                            <label>Voice</label>
+                            <div class="select-wrapper">
+                                <select class="input-control">
+                                    <option>Piper Tom (M, medium)</option>
+                                    <option>Piper Alice (F, medium)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Graphical Equalizer - Studio Panel -->
+                        <div class="eq-container" id="eqContainer">
+                            <!-- SVG Graph for visual curve -->
+                            <svg class="eq-graph" viewBox="0 0 400 140" preserveAspectRatio="none">
+                                <defs>
+                                    <linearGradient id="eqGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#6c9a8e" stop-opacity="0.25"/>
+                                        <stop offset="100%" stop-color="#6c9a8e" stop-opacity="0"/>
+                                    </linearGradient>
+                                </defs>
+                                <path id="eqFill" fill="url(#eqGradient)" d="M0,140 L0,70 L133,70 L266,70 L400,70 L400,140 Z" />
+                                <path id="eqLine" fill="none" stroke="#6c9a8e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M0,70 L133,70 L266,70 L400,70" />
+                            </svg>
+
+                            <div class="eq-sliders">
+                                <!-- Volume -->
+                                <div class="eq-band">
+                                    <span class="eq-value" id="val-vol">-5 dB</span>
+                                    <div class="eq-slider-wrapper">
+                                        <input type="range" class="eq-slider" min="-12" max="12" value="-5" data-index="0" data-id="vol">
+                                    </div>
+                                    <span class="eq-label">Volume</span>
+                                </div>
+                                <!-- Bass -->
+                                <div class="eq-band">
+                                    <span class="eq-value" id="val-bass">0 dB</span>
+                                    <div class="eq-slider-wrapper">
+                                        <input type="range" class="eq-slider" min="-12" max="12" value="0" data-index="1" data-id="bass">
+                                    </div>
+                                    <span class="eq-label">Bass</span>
+                                </div>
+                                <!-- Presence -->
+                                <div class="eq-band">
+                                    <span class="eq-value" id="val-pres">0 dB</span>
+                                    <div class="eq-slider-wrapper">
+                                        <input type="range" class="eq-slider" min="-12" max="12" value="0" data-index="2" data-id="pres">
+                                    </div>
+                                    <span class="eq-label">Presence</span>
+                                </div>
+                                <!-- Treble -->
+                                <div class="eq-band">
+                                    <span class="eq-value" id="val-treb">0 dB</span>
+                                    <div class="eq-slider-wrapper">
+                                        <input type="range" class="eq-slider" min="-12" max="12" value="0" data-index="3" data-id="treb">
+                                    </div>
+                                    <span class="eq-label">Treble</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; align-items: center; gap: 16px; margin-top: 16px;">
+                            <button class="btn-secondary" onclick="resetEq()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                Reset to approved sound
+                            </button>
+                            <span class="text-xs">Adjusted voices regenerate their cached audio on the next play.</span>
+                        </div>
+
+                        <!-- Voice Preview with Loop -->
+                        <div class="voice-preview-box">
+                            <div class="voice-preview-header">
+                                <span style="font-weight: 600; font-size: 14px;">Voice preview</span>
+                                <span class="badge" id="previewStatus" style="background-color: #fff3cd; color: #856404;">Not generated</span>
+                            </div>
+                            <p class="voice-preview-text">"Bonjour ! Voici un aperçu de la voix qui vous accompagnera pendant vos séances d'oral, avec la prononciation et le rythme corrigés après chaque prise."</p>
+                            <p class="text-xs" style="margin-bottom: 20px;">Generated once and cached on this device, so replaying is free. Preview the voice here before your first session.</p>
+                            <div class="voice-preview-actions">
+                                <button class="btn-primary" id="playBtn" onclick="togglePlay()">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" id="playIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    <span id="playText">Play preview</span>
+                                </button>
+                                <button class="btn-loop" id="loopBtn" onclick="toggleLoop()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+                                    Loop
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- STORAGE SECTION -->
+            <div class="settings-group">
+                <div class="group-title">Storage</div>
+                <div class="card">
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div>
+                                <label style="font-weight: 600;">Database</label>
+                                <p class="text-xs mt-4">Sessions, attempts, corrections and recordings are stored locally.</p>
+                            </div>
+                            <span class="text-xs" style="background-color: var(--input-bg); padding: 8px 16px; border-radius: 8px; font-weight: 600; border: 1px solid var(--border-color);">On this device (SQLite)</span>
+                        </div>
+                        <div class="form-row" style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                            <div>
+                                <label style="font-weight: 600;">Export my data</label>
+                                <p class="text-xs mt-4">Sessions, attempts, corrections and recordings as a JSON file. Cloud sync (Google Drive, WebDAV) is planned for a later phase.</p>
+                            </div>
+                            <button class="btn-secondary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Toggle API Key visibility
+        function togglePassword() {
+            const input = document.getElementById('apiKeyInput');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        // Graphical EQ Logic
+        const sliders = document.querySelectorAll('.eq-slider');
+        const eqLine = document.getElementById('eqLine');
+        const eqFill = document.getElementById('eqFill');
+        const eqContainer = document.getElementById('eqContainer');
+        
+        const xCoords = [50, 150, 250, 350];
+        const baseY = 70; 
+        const maxDeviation = 50; 
+
+        function updateEqGraph() {
+            let points = [];
+            sliders.forEach((slider, index) => {
+                const val = parseFloat(slider.value);
+                const x = xCoords[index];
+                const y = baseY - (val / 12) * maxDeviation;
+                points.push({x, y});
+            });
+
+            // Create smooth cubic bezier curve
+            let pathD = `M${points[0].x},${points[0].y}`;
+            for (let i = 0; i < points.length - 1; i++) {
+                const x1 = points[i].x;
+                const y1 = points[i].y;
+                const x2 = points[i+1].x;
+                const y2 = points[i+1].y;
+                const cp1x = x1 + (x2 - x1) / 2;
+                const cp1y = y1;
+                const cp2x = x1 + (x2 - x1) / 2;
+                const cp2y = y2;
+                pathD += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${x2},${y2}`;
+            }
+            eqLine.setAttribute('d', pathD);
+
+            // Update fill path
+            let fillD = `M0,140 L0,${points[0].y}`;
+            for (let i = 0; i < points.length - 1; i++) {
+                const x1 = points[i].x;
+                const y1 = points[i].y;
+                const x2 = points[i+1].x;
+                const y2 = points[i+1].y;
+                const cp1x = x1 + (x2 - x1) / 2;
+                const cp1y = y1;
+                const cp2x = x1 + (x2 - x1) / 2;
+                const cp2y = y2;
+                fillD += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${x2},${y2}`;
+            }
+            fillD += ` L400,140 Z`;
+            eqFill.setAttribute('d', fillD);
+        }
+
+        // Update value labels
+        sliders.forEach(slider => {
+            slider.addEventListener('input', (e) => {
+                const val = e.target.value;
+                const id = e.target.dataset.id;
+                const label = document.getElementById(`val-${id}`);
+                label.textContent = `${val > 0 ? '+' : ''}${val} dB`;
+                updateEqGraph();
+            });
+        });
+
+        // Reset EQ
+        function resetEq() {
+            sliders.forEach(slider => {
+                if (slider.dataset.id === 'vol') {
+                    slider.value = -5;
+                    document.getElementById('val-vol').textContent = '-5 dB';
+                } else {
+                    slider.value = 0;
+                    document.getElementById(`val-${slider.dataset.id}`).textContent = '0 dB';
+                }
+            });
+            updateEqGraph();
+        }
+
+        // Initialize graph on load
+        updateEqGraph();
+
+        // Tab switching logic
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
+        });
+
+        // Audio Preview & Loop Logic
+        let isPlaying = false;
+        let isLooping = false;
+        let loopInterval = null;
+
+        const playBtn = document.getElementById('playBtn');
+        const playIcon = document.getElementById('playIcon');
+        const playText = document.getElementById('playText');
+        const loopBtn = document.getElementById('loopBtn');
+        const previewStatus = document.getElementById('previewStatus');
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            
+            if (isPlaying) {
+                playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+                playText.textContent = 'Pause';
+                previewStatus.textContent = 'Playing...';
+                previewStatus.style.backgroundColor = '#e0f2e9';
+                previewStatus.style.color = '#2b7a5c';
+                eqContainer.classList.add('playing');
+
+                if (isLooping) {
+                    startLoop();
+                }
+            } else {
+                playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+                playText.textContent = 'Play preview';
+                previewStatus.textContent = 'Paused';
+                previewStatus.style.backgroundColor = '#fff3cd';
+                previewStatus.style.color = '#856404';
+                eqContainer.classList.remove('playing');
+                stopLoop();
+            }
+        }
+
+        function toggleLoop() {
+            isLooping = !isLooping;
+            loopBtn.classList.toggle('active', isLooping);
+            
+            if (isLooping && isPlaying) {
+                startLoop();
+            } else if (!isLooping) {
+                stopLoop();
+            }
+        }
+
+        function startLoop() {
+            stopLoop(); // Clear any existing interval
+            loopInterval = setInterval(() => {
+                // Simulate audio looping by flashing the status
+                previewStatus.textContent = 'Looping...';
+                setTimeout(() => {
+                    if (isLooping) previewStatus.textContent = 'Playing...';
+                }, 600);
+            }, 2500); // Simulate a 2.5-second audio clip
+        }
+
+        function stopLoop() {
+            if (loopInterval) {
+                clearInterval(loopInterval);
+                loopInterval = null;
+            }
+        }
+    </script>
+</body>
+</html>

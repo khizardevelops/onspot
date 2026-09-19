@@ -8,6 +8,10 @@ import type { LlmModelOption, LlmProviderConfig, LlmProviderId } from './types';
 export type LlmModelId =
 	| 'openai/gpt-oss-120b'
 	| 'openai/gpt-oss-20b'
+	| 'groq/compound'
+	| 'groq/compound-mini'
+	| 'qwen/qwen3.8-27b'
+	| 'qwen/qwen3.6-27b'
 	| 'deepseek-flash'
 	| 'deepseek-v4-pro'
 	// eslint-disable-next-line @typescript-eslint/ban-types
@@ -48,18 +52,23 @@ export const LLM_PROVIDERS: Record<LlmProviderId, LlmProviderConfig> = {
 };
 
 /**
- * Curated model dropdown per provider.
+ * Curated model dropdown per provider, kept in step with the account probe in
+ * `docs/benchmarks/llm-providers.md` (2026-09-14). The live list is fetched
+ * automatically in Settings whenever a key is present, so an account that gains
+ * access to newer models does not wait for an app update.
  *
  * Groq: only generally-available chat models. Llama 3.1/3.3 are Enterprise-only
- * (they 404 on a standard key), and the account-specific truth comes from the
- * "Refresh" button, which filters the live list to chat models.
- * DeepSeek: current model names (the old `deepseek-chat`/`deepseek-reasoner`
- * names are legacy).
+ * (they 404 on a standard key). DeepSeek: current model names (the old
+ * `deepseek-chat`/`deepseek-reasoner` names are legacy).
  */
 export const LLM_MODELS: Record<LlmProviderId, LlmModelOption[]> = {
 	groq: [
 		{ id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Default, best quality' },
-		{ id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Faster' }
+		{ id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Faster' },
+		{ id: 'groq/compound', label: 'Compound', note: '8x rate limit (70k TPM)' },
+		{ id: 'groq/compound-mini', label: 'Compound Mini', note: '8x rate limit (70k TPM)' },
+		{ id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', note: 'Alternative 27B model' },
+		{ id: 'qwen/qwen3.6-27b', label: 'Qwen 3.6 27B', note: 'Alternative 27B model' }
 	],
 	deepseek: [
 		{ id: 'deepseek-flash', label: 'DeepSeek Flash', note: 'Fast (default)' },

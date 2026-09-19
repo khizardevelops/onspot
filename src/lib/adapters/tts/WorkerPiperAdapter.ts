@@ -18,6 +18,7 @@ interface Pending {
 type WorkerMessage =
 	| { id: number; type: 'progress'; progress: ModelProgress }
 	| ({ id: number; type: 'speech' } & SpeechPayload)
+	| { id: number; type: 'ready' }
 	| { id: number; type: 'released' }
 	| { id: number; type: 'error'; message: string };
 
@@ -59,6 +60,16 @@ export class WorkerPiperAdapter {
 			});
 			return;
 		}
+		if (message.type === 'ready') {
+			pending.resolve({
+				audio: new Float32Array(),
+				samplingRate: 0,
+				modelName: '',
+				durationSec: 0,
+				peak: 0
+			});
+			return;
+		}
 		pending.resolve({
 			audio: new Float32Array(),
 			samplingRate: 0,
@@ -84,6 +95,25 @@ export class WorkerPiperAdapter {
 		return new Promise((resolve, reject) => {
 			this.pending.set(id, { resolve, reject, onProgress });
 			this.ensureWorker().postMessage({ id, type: 'synthesize', voice, text });
+		});
+	}
+
+	/**
+	 * Downloads and initializes a voice without synthesizing anything. Used by
+	 * the language-data download so the bytes land before the first session.
+	 */
+	public preload(
+		voice: string,
+		onProgress?: (progress: ModelProgress) => void
+	): Promise<void> {
+		const id = this.nextId++;
+		return new Promise((resolve, reject) => {
+			this.pending.set(id, {
+				resolve: () => resolve(),
+				reject,
+				onProgress
+			});
+			this.ensureWorker().postMessage({ id, type: 'load', voice });
 		});
 	}
 

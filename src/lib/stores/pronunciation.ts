@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { appSettings } from './settings';
 import { openaiApiKey } from './secrets';
-import { synthesizeFrench } from '$lib/adapters/tts/service';
+import { synthesizeSpeech } from '$lib/adapters/tts/service';
 
 /**
  * Per-word pronunciation.
@@ -40,9 +40,10 @@ async function synthesize(word: string): Promise<string> {
 	if (running) return running;
 
 	const settings = get(appSettings);
-	const promise = synthesizeFrench({
+	const promise = synthesizeSpeech({
 		text: key,
 		mode: settings.ttsMode,
+		languageId: settings.targetLanguage,
 		voice: settings.ttsVoice,
 		openaiApiKey: get(openaiApiKey) || undefined
 	})

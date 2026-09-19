@@ -7,7 +7,7 @@ import { get, writable } from 'svelte/store';
  * play/pause, seek, speed or loop, and no way to tell which segment was
  * playing. All playback now goes through one element so the UI can show state.
  */
-export type AudioKind = 'attempt' | 'segment' | 'recording' | 'correction';
+export type AudioKind = 'attempt' | 'segment' | 'recording' | 'correction' | 'preview';
 
 export interface AudioTrack {
 	attemptId: string;

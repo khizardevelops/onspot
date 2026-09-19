@@ -410,3 +410,94 @@ the redundant `attempt.translation` field (#21), list virtualization (#23), cont
   rail. Below 1024px it defaults closed as a 58px horizontal bar and opens to 42% of app height.
 - Selecting a marked transcript word always reopens Coach notes so linked feedback is never hidden.
   Motion follows `prefers-reduced-motion` and the 390px view has no horizontal overflow.
+
+### Language registry is the single source of truth (2026-09-15)
+- `src/lib/languages/index.ts` holds every `LanguageDefinition` (STT, voices, prompts, approval).
+  Adding a language is one entry after a human quality pass; nothing else in the app names a
+  language directly. `docs/languages.md` is the human-facing tracker.
+- A language is offered only when it and each of its STT/voice entries are `approved`; the
+  approval record names the test, the date and the evidence file. This preserves the lab rule
+  that no download is exposed before a human has judged its output.
+- Downloads are manual, per language, and cancellable — never automatic on selection. The
+  product requirement is that a mis-click costs nothing, so the user can switch languages and
+  download later. The gate tells the user to open Settings → Language data rather than downloading
+  silently from the Practice screen.
+- The combined progress bar is global (layout-level) so navigation does not hide or cancel it.
+- Cancel terminates the model workers; the next use lazily recreates them, so a partial cache
+  never blocks a retry.
+
+### TTS correction profiles are declarative and per voice (2026-09-15)
+- `LanguageVoice.processing` carries the listening-test correction (high-shelf EQ, compressor /
+  limiter, makeup gain, peak normalization target); `utils/audioEffects.ts` renders it in an
+  `OfflineAudioContext`. No voice-specific branches live in the DSP code.
+- STT input conditioning is deliberately untouched: the approved WER was measured on raw decoded
+  PCM, so any filtering would require a fresh measurement before it can be approved.
+
+### Tabs selected state: `data-state`, not `data-active` (2026-09-15)
+- bits-ui's Tabs trigger exposes `data-state="active"`; the shadcn base classes that use
+  `data-active:` therefore never apply. Custom selected styling must target
+  `[data-state=active]` (or `data-[state=active]:`). This was the real reason the feedback
+  severity tabs looked identical selected and unselected.
+
+### Long cards are flat; the conveyor is for short cards only (2026-09-15)
+- onspot takes run 60s–5min, so an attempt card can be several viewport-heights once translations
+  and a word breakdown are open. The scroll-driven exit animation is meaningless for those cards
+  and actively hostile to reading, so cards over `max(480px, 75% viewport)` get a JS `tall` class
+  that disables the animation. Short cards keep the conveyor.
+- The detection is per-card via `ResizeObserver` (only the resized card is re-measured), so
+  expanding/collapsing anything fixes the card's own behaviour immediately.
+- Compare-all translations stack vertically at full card width. Vertical space is the axis the
+  product has; the old three-column layout squeezed 5-minute content into narrow columns.
+
+### Advanced voice tuning: layered per voice, part of the cache key (2026-09-15)
+- The approved `LanguageVoice.processing` profile stays the baseline. Learner adjustments live in
+  `settings.voiceTunings[voiceId]` as ±12 dB offsets (`VoiceTuning`) and are merged by
+  `resolveProfile`; Reset deletes the entry, restoring the approved sound exactly.
+- `processPcm` runs a fixed chain: 3-band EQ → approved compressor (if any) → makeup →
+  input-peak normalization → learner volume → final limiter. The limiter is what makes a positive
+  volume/EQ boost safe; normalization is computed from the input peak because the final gain
+  cannot be known before rendering.
+- The cache key includes `tuningSignature`, so each tuning is its own cached WAV and a slider
+  change can never replay stale audio. The preview store's selection key includes the same
+  signature (caught by the browser test: without it, the in-memory preview replayed stale audio).
+- Advanced is the same Settings page, not a second tab: General/Advanced is a segmented toggle
+  and the advanced section is a `Collapsible` in the normal flow. Hiding it changes nothing about
+  what is applied; values stay in the store.
+- Advanced is the default selection on load (user request, 2026-09-18). It is page-local state,
+  not a persisted setting.
+
+### Voice preview: reuse the synthesis cache, guard regeneration (2026-09-15)
+- Settings previews the selected local/cloud voice with `LanguageDefinition.preview` through the
+  same `synthesizeSpeech` path as practice, so the WAV lands in the normal DB audio cache and the
+  voice processing profile is heard. No separate cache format or model call path.
+- Play never regenerates: it reuses the in-memory blob URL while that URL is the active track,
+  otherwise it re-reads the cached WAV. Only the confirm dialog calls `force: true`, because a
+  regeneration costs model time (and a cloud request) for no benefit unless the cached audio is
+  actually wrong.
+- Generation is deduplicated per `mode:language:voice`; if the selection changes mid-generation
+  the result is discarded rather than played.
+
+### Card depth beats flat minimalism (2026-09-15)
+- Page background and card surfaces are deliberately separated (`#f1efe9` vs white in light,
+  `#0b0b0d` vs `#19191d` in dark) with explicit card borders and stronger shadows. Attempt cards
+  and feedback correction cards both carry this, because a 5-minute card needs a clear boundary
+  while scrolling.
+
+### Settings preview applies processing live (2026-09-18)
+The preview is synthesized once raw and played through `createProcessingChain` — the same Web
+Audio graph `processPcm` renders offline — so tuning is audible instantly and matches read-backs.
+Re-rendering the whole chain (not EQ-after-compressor) matters: Tom's compressor (ratio 8) would
+otherwise make the live sound differ from the rendered one.
+
+### Export is the SQLite database itself (2026-09-18)
+User request: one `.sqlite` with everything, including cached audio. Web uses sqlite-wasm's
+serializer; desktop uses `VACUUM INTO` + Tauri dialog/fs plugins. Keys and models stay out.
+
+### Paper texture is rendered once and cached as an image (2026-09-18)
+A live full-screen WebGL canvas slowed first content 2–4× under software GL (History: 0.9–2.4s →
+4–6.5s). Snapshotting to WebP (Cache API) makes later loads faster than before (≈0.4–1s) with no
+live GL context; the first render is deferred and done at the screen's real pixel ratio.
+
+### Prefer libraries and shadcn components (2026-09-18)
+User direction: use web APIs, existing deps and shadcn-svelte components rather than hand-rolled
+equivalents (e.g. Web Audio `getFrequencyResponse` instead of hand-written biquad maths).

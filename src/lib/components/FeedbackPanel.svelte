@@ -13,11 +13,13 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import {
 		ArrowRight,
+		BarChart3,
+		Check,
 		ChevronDown,
-		Menu,
+		ListFilter,
+		MessageSquareText,
 		Plus,
 		RotateCcw,
-		Sparkles,
 		Trash2,
 		Volume2
 	} from '@lucide/svelte';
@@ -43,6 +45,7 @@
 	let filter = $state<Filter>('all');
 	let expandedId = $state<string | null>(null);
 	let knownAttemptId = $state<string | null>(null);
+	let statsOpen = $state(false);
 
 	const CATEGORY_LABEL: Record<string, string> = {
 		grammar: 'Grammar',
@@ -99,6 +102,35 @@
 		return list.filter((item) => item.category === filter);
 	});
 
+	const TABS = $derived([
+		{ id: 'all', label: 'All', count: counts.all },
+		{ id: 'error', label: 'Errors', count: counts.error },
+		{ id: 'warning', label: 'Warnings', count: counts.warning },
+		{ id: 'suggestion', label: 'Suggestions', count: counts.suggestion }
+	]);
+
+	/*
+	 * The severity tabs are the same kind of control as Exam / Casual: a channel
+	 * with one raised knob that slides to the selected tab. Tabs are sized to
+	 * their labels, so the knob follows the measured tab rather than a fixed grid.
+	 */
+	let tabsList = $state<HTMLElement | null>(null);
+	let knob = $state({ x: 0, width: 0, visible: false });
+
+	function placeKnob(): void {
+		const active = tabsList?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+		knob = active
+			? { x: active.offsetLeft, width: active.offsetWidth, visible: true }
+			: { ...knob, visible: false };
+	}
+
+	$effect(() => {
+		if (!tabsList) return;
+		const observer = new ResizeObserver(placeKnob);
+		observer.observe(tabsList);
+		return () => observer.disconnect();
+	});
+
 	const tabValue = $derived(
 		filter === 'all' || filter === 'error' || filter === 'warning' || filter === 'suggestion'
 			? filter
@@ -114,6 +146,12 @@
 			filter = 'all';
 			expandedId = null;
 		}
+	});
+
+	$effect(() => {
+		void tabValue;
+		void counts;
+		requestAnimationFrame(placeKnob);
 	});
 
 	$effect(() => {
@@ -140,34 +178,23 @@
 	data-state={open ? 'open' : 'closed'}
 >
 	<Collapsible.Root bind:open class="contents">
-		<div class="coach-bar shrink-0 p-2 sm:px-3">
+		<div class="coach-bar flex shrink-0 items-center gap-1 p-2 sm:px-3">
 			<Collapsible.Trigger
-				class="coach-trigger relative flex min-h-11 w-full items-center gap-2 rounded-2xl px-2.5 text-left text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
-				aria-label={open ? 'Close coach notes' : 'Open coach notes'}
-				title={open ? 'Close coach notes' : 'Open coach notes'}
+				class="coach-trigger relative flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl px-2 text-left text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+				aria-label={open ? 'Close feedback' : 'Open feedback'}
+				title={open ? 'Close feedback' : 'Open feedback'}
 			>
 				<span class="coach-icon grid size-7 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
-					<Sparkles class="size-3.5" />
+					<MessageSquareText class="size-3.5" />
 				</span>
-				<span class="coach-title min-w-0 flex-1 text-xs font-semibold tracking-[0.14em] uppercase">Coach notes</span>
+				<span class="coach-title min-w-0 flex-1 text-xs font-semibold tracking-[0.14em] uppercase">Feedback</span>
 				{#if attempt && counts.all > 0}
 					<Badge variant="secondary" class="coach-count h-6 min-w-6 justify-center rounded-full px-1.5 tabular-nums">{counts.all}</Badge>
 				{/if}
-				<ChevronDown class="coach-chevron size-4 shrink-0 transition-transform duration-300 {open ? 'rotate-180' : ''}" />
 			</Collapsible.Trigger>
-		</div>
-
-		<Collapsible.Content class="coach-content min-h-0 flex-1 overflow-hidden">
-			<div class="flex h-full min-h-0 flex-col">
-	{#if attempt}
-		<div class="shrink-0 px-4 pt-1 pb-3 sm:px-5 sm:pt-2">
-			<div class="mb-3 flex items-start justify-between gap-3">
-				<div class="min-w-0">
-					{#if attempt.summary}
-						<p class="text-sm leading-relaxed text-muted-foreground">{attempt.summary}</p>
-					{/if}
-				</div>
-				<div class="flex shrink-0 gap-1">
+			<!-- Playback lives in the header so the summary below gets the full width. -->
+			{#if attempt}
+				<div class="coach-actions flex shrink-0 items-center gap-0.5">
 					<Button size="icon-sm" variant="ghost" aria-label="Play your recording" title="Your recording" onclick={() => playRecording(attempt.id)}>
 						<RotateCcw class="size-4" />
 					</Button>
@@ -175,25 +202,46 @@
 						<Volume2 class="size-4" />
 					</Button>
 				</div>
-			</div>
+			{/if}
+			<Collapsible.Trigger
+				class="coach-chevron-button grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+				aria-label={open ? 'Collapse feedback' : 'Expand feedback'}
+			>
+				<ChevronDown class="coach-chevron size-4 transition-transform duration-300 {open ? 'rotate-180' : ''}" />
+			</Collapsible.Trigger>
+		</div>
+
+		<Collapsible.Content class="coach-content min-h-0 flex-1 overflow-hidden">
+			<!-- `.coach-content` is a row flex box; without `w-full` this column shrinks to its content. -->
+			<div class="flex h-full min-h-0 w-full min-w-0 flex-col">
+	{#if attempt}
+		<div class="shrink-0 px-4 pt-0.5 pb-3 sm:px-5">
+			{#if attempt.summary}
+				<p class="mb-2.5 text-sm leading-relaxed text-muted-foreground">{attempt.summary}</p>
+			{/if}
 
 			{#if attempt.corrections.length > 0}
-				<div class="flex items-stretch gap-2">
+				<div class="flex items-stretch gap-1.5">
 					<Tabs.Root
 						value={tabValue}
 						onValueChange={(value) => (filter = value as Filter)}
-						class="min-w-0 flex-1"
+						class="severity-tabs min-w-0 flex-1"
 					>
-						<Tabs.List class="feedback-tabs grid h-[54px] w-full grid-cols-4 rounded-2xl p-1">
-							{#each [
-								{ id: 'all', label: 'All', count: counts.all },
-								{ id: 'error', label: 'Errors', count: counts.error },
-								{ id: 'warning', label: 'Warnings', count: counts.warning },
-								{ id: 'suggestion', label: 'Suggestions', count: counts.suggestion }
-							] as tab (tab.id)}
-								<Tabs.Trigger value={tab.id} class="feedback-tab h-full min-w-0 flex-col gap-0 rounded-xl px-1 py-1">
+						<Tabs.List
+							bind:ref={tabsList}
+							class="feedback-tabs paper-grain relative flex h-[50px] w-full justify-start gap-0.5 rounded-[14px] p-1"
+						>
+							<span
+								class="tab-knob paper-grain"
+								class:visible={knob.visible}
+								style:translate={`${knob.x}px 0`}
+								style:width={`${knob.width}px`}
+								aria-hidden="true"
+							></span>
+							{#each TABS as tab (tab.id)}
+								<Tabs.Trigger value={tab.id} data-severity={tab.id} class="feedback-tab">
 									<span class="text-base leading-none font-semibold tabular-nums">{tab.count}</span>
-									<span class="feedback-tab-label mt-1 max-w-full truncate text-[11px] leading-none font-medium">{tab.label}</span>
+									<span class="feedback-tab-label">{tab.label}</span>
 								</Tabs.Trigger>
 							{/each}
 						</Tabs.List>
@@ -202,10 +250,10 @@
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							aria-label="Filter by feedback type"
-							class="relative grid size-[54px] shrink-0 place-items-center rounded-2xl border bg-background/70 text-muted-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:text-foreground hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none {categoryActive ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]' : ''}"
+							title="Filter by type"
+							class="filter-key paper-grain grid w-10 shrink-0 place-items-center rounded-[14px] transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none {categoryActive ? 'bg-primary text-primary-foreground' : 'bg-control text-on-control hover:bg-control-hover'}"
 						>
-							<Menu class="size-5" />
-							{#if categoryActive}<span class="absolute right-2 bottom-1.5 size-1.5 rounded-full bg-[var(--brand)]"></span>{/if}
+							<ListFilter class="size-4" />
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="end" class="w-56 p-1.5" loop>
 							<DropdownMenu.Label>Feedback type</DropdownMenu.Label>
@@ -236,7 +284,7 @@
 			{#if attempt.corrections.length === 0}
 				<div class="grid min-h-40 place-items-center py-8 text-center" in:fade={{ duration: 280 }}>
 					<div>
-						<div class="mx-auto grid size-11 place-items-center rounded-2xl bg-[var(--good-soft)] text-[var(--good)]"><Sparkles class="size-5" /></div>
+						<div class="mx-auto grid size-11 place-items-center rounded-2xl bg-[var(--good-soft)] text-[var(--good)]"><Check class="size-5" /></div>
 						<p class="mt-3 font-medium">Clean take</p>
 						<p class="mt-1 text-sm text-muted-foreground">Nothing needs correcting.</p>
 					</div>
@@ -244,7 +292,7 @@
 			{:else if corrections.length === 0}
 				<p class="py-8 text-center text-sm text-muted-foreground" in:fade={{ duration: 180 }}>Nothing in this filter.</p>
 			{:else}
-				<div class="divide-y divide-border/70">
+				<div class="space-y-2 py-2">
 					{#each corrections as correction (correction.id)}
 						{@const expanded = expandedId === correction.id}
 						<div
@@ -255,10 +303,10 @@
 						<Collapsible.Root
 							open={expanded}
 							onOpenChange={(open) => select(correction, open)}
-							class="group/correction py-2.5"
+							class="group/correction overflow-hidden sheet rounded-2xl transition-colors {correction.id === activeCorrectionId ? 'border-[var(--brand)]/50' : ''}"
 						>
 							<Collapsible.Trigger
-								class="flex min-h-11 w-full items-start justify-between gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)] focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none {correction.id === activeCorrectionId ? 'bg-[var(--brand-soft)]' : ''}"
+								class="flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-2)] focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none {correction.id === activeCorrectionId ? 'bg-[var(--brand-soft)]' : ''}"
 							>
 								<span class="min-w-0 flex-1">
 									<span class="flex flex-wrap items-center gap-1.5">
@@ -291,8 +339,8 @@
 								<ChevronDown class="mt-2 size-4 shrink-0 text-faint transition-transform duration-300 group-data-[state=open]/correction:rotate-180" />
 							</Collapsible.Trigger>
 
-							<Collapsible.Content class="correction-detail overflow-hidden px-2">
-								<div class="pt-2 pb-1">
+							<Collapsible.Content class="correction-detail overflow-hidden px-3">
+								<div class="border-t border-border/70 pt-2 pb-2.5">
 									{#if correction.explanation}
 										<p class="text-sm leading-relaxed text-muted-foreground">{correction.explanation}</p>
 									{/if}
@@ -328,18 +376,43 @@
 	{:else}
 		<div class="grid min-h-0 flex-1 place-items-center p-6 text-center" in:fade={{ duration: 240 }}>
 			<div>
-				<div class="mx-auto grid size-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Sparkles class="size-5" /></div>
+				<div class="mx-auto grid size-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><MessageSquareText class="size-5" /></div>
 				<p class="mt-3 font-medium">Feedback lives here</p>
 				<p class="mt-1 max-w-52 text-sm text-muted-foreground">Select an attempt after your first recording.</p>
 			</div>
 		</div>
 	{/if}
 
-	<div class="shrink-0 border-t bg-background/45 px-4 py-3 sm:px-5">
-		<p class="text-xs text-muted-foreground tabular-nums">
-			{stats.attempts} take{stats.attempts === 1 ? '' : 's'} · {stats.words} words · {fmtTime(stats.time)}
-			{#if stats.errors > 0} · <span class="text-[var(--error)]">{stats.errors} error{stats.errors === 1 ? '' : 's'}</span>{/if}
-		</p>
+	<div class="shrink-0 border-t bg-background/45">
+		<Collapsible.Root bind:open={statsOpen}>
+			<Collapsible.Trigger
+				class="flex h-9 w-full items-center justify-between gap-2 px-4 text-xs text-muted-foreground transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none sm:px-5"
+				aria-label={statsOpen ? 'Collapse session stats' : 'Expand session stats'}
+			>
+				<span class="flex items-center gap-1.5 font-medium"><BarChart3 class="size-3.5" /> Session stats</span>
+				<ChevronDown class="size-3.5 transition-transform duration-300 {statsOpen ? 'rotate-180' : ''}" />
+			</Collapsible.Trigger>
+			<Collapsible.Content class="stats-detail overflow-hidden">
+				<div class="grid grid-cols-2 gap-1.5 px-4 pb-3 sm:px-5">
+					<div class="rounded-xl bg-[var(--surface-2)] px-3 py-1.5">
+						<p class="text-[10px] tracking-wide text-faint uppercase">Takes</p>
+						<p class="text-sm font-semibold tabular-nums">{stats.attempts}</p>
+					</div>
+					<div class="rounded-xl bg-[var(--surface-2)] px-3 py-1.5">
+						<p class="text-[10px] tracking-wide text-faint uppercase">Words</p>
+						<p class="text-sm font-semibold tabular-nums">{stats.words}</p>
+					</div>
+					<div class="rounded-xl bg-[var(--surface-2)] px-3 py-1.5">
+						<p class="text-[10px] tracking-wide text-faint uppercase">Time</p>
+						<p class="text-sm font-semibold tabular-nums">{fmtTime(stats.time)}</p>
+					</div>
+					<div class="rounded-xl bg-[var(--surface-2)] px-3 py-1.5">
+						<p class="text-[10px] tracking-wide text-faint uppercase">Errors</p>
+						<p class="text-sm font-semibold tabular-nums {stats.errors > 0 ? 'text-[var(--error)]' : ''}">{stats.errors}</p>
+					</div>
+				</div>
+			</Collapsible.Content>
+		</Collapsible.Root>
 	</div>
 			</div>
 		</Collapsible.Content>
@@ -349,13 +422,78 @@
 <style>
 	.feedback-shell {
 		background:
-			linear-gradient(180deg, color-mix(in srgb, var(--card) 90%, transparent), color-mix(in srgb, var(--background) 94%, transparent)),
+			linear-gradient(180deg, color-mix(in srgb, var(--card) 22%, transparent), transparent 55%),
 			radial-gradient(circle at 100% 0%, var(--brand-soft), transparent 45%);
 	}
 
-	.feedback-tabs {
-		background: color-mix(in srgb, var(--surface-2) 82%, transparent);
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+	/*
+	 * Severity tabs: the Exam / Casual control. A sea-glass channel pressed into
+	 * the panel and one raised sheet knob that springs to the selected tab,
+	 * whose label takes its severity colour. Tabs size to their label within a
+	 * floor and a ceiling, so "All" stays narrow.
+	 */
+	:global(.severity-tabs) {
+		container-type: inline-size;
+	}
+	:global(.feedback-tabs) {
+		background-color: var(--control);
+		box-shadow: var(--paper-deboss);
+	}
+	.tab-knob {
+		position: absolute;
+		top: 4px;
+		bottom: 4px;
+		left: 0;
+		border-radius: 10px;
+		background-color: var(--card);
+		box-shadow: var(--paper-emboss-hover);
+		opacity: 0;
+		transition:
+			translate 440ms cubic-bezier(0.34, 1.35, 0.64, 1),
+			width 440ms cubic-bezier(0.34, 1.35, 0.64, 1),
+			opacity 200ms ease;
+	}
+	.tab-knob.visible {
+		opacity: 1;
+	}
+	:global(.feedback-tabs .feedback-tab) {
+		position: relative;
+		z-index: 1;
+		flex: 1 1 auto;
+		min-width: 40px;
+		max-width: 104px;
+		height: 100%;
+		flex-direction: column;
+		gap: 3px;
+		padding-inline: 6px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		box-shadow: none;
+		color: var(--on-control);
+		transition: color 240ms ease;
+	}
+	:global(.feedback-tabs .feedback-tab:hover) { color: var(--foreground); }
+	:global(.feedback-tabs .feedback-tab[data-state='active']) { background: transparent; box-shadow: none; color: var(--foreground); }
+	:global(.feedback-tabs .feedback-tab[data-severity='error'][data-state='active']) { color: var(--error); }
+	:global(.feedback-tabs .feedback-tab[data-severity='warning'][data-state='active']) { color: var(--warn); }
+	:global(.feedback-tabs .feedback-tab[data-severity='suggestion'][data-state='active']) { color: var(--brand); }
+	:global(.feedback-tabs .feedback-tab-label) {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1;
+		letter-spacing: -0.01em;
+		white-space: nowrap;
+	}
+	:global(.filter-key) {
+		box-shadow: var(--paper-emboss);
+	}
+	@container (max-width: 250px) {
+		:global(.feedback-tabs .feedback-tab-label) { font-size: 10px; }
+		:global(.feedback-tabs .feedback-tab) { padding-inline: 4px; }
 	}
 
 	:global(.coach-content[data-state='open']) {
@@ -396,9 +534,18 @@
 		to { height: 0; opacity: 0; }
 	}
 
+	:global(.stats-detail[data-state='open']) {
+		animation: expand-detail 280ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	:global(.stats-detail[data-state='closed']) {
+		animation: collapse-detail 160ms cubic-bezier(0.4, 0, 1, 1);
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		:global(.coach-content) { animation-duration: 1ms !important; }
 		:global(.correction-detail) { animation-duration: 1ms !important; }
+		:global(.stats-detail) { animation-duration: 1ms !important; }
 	}
 
 	@media (min-width: 1024px) {
@@ -410,7 +557,8 @@
 			padding-inline: 0;
 		}
 		.feedback-shell[data-state='closed'] :global(.coach-title) { display: none; }
-		.feedback-shell[data-state='closed'] :global(.coach-chevron) { display: none; }
+		.feedback-shell[data-state='closed'] :global(.coach-chevron-button) { display: none; }
+		.feedback-shell[data-state='closed'] .coach-actions { display: none; }
 		.feedback-shell[data-state='closed'] :global(.coach-count) {
 			position: absolute;
 			top: 1px;
@@ -421,13 +569,8 @@
 		}
 	}
 
-	@media (max-width: 420px) {
-		:global(.feedback-tab) { padding-inline: 0; }
-		:global(.feedback-tab-label) {
-			font-size: 9.5px;
-			letter-spacing: -0.015em;
-			overflow: visible;
-			text-overflow: clip;
-		}
+	.feedback-shell[data-state='closed'] .coach-actions { display: none; }
+	@media (prefers-reduced-motion: reduce) {
+		.tab-knob { transition-duration: 1ms; }
 	}
 </style>

@@ -1,6 +1,17 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/*
+ * Tailwind v4 scans the whole project for class candidates, and its Vite
+ * plugin sends a full page reload whenever a scanned file changes. Keep the
+ * scan to app code so notes, lab data and generated bundles never reload the
+ * dev server while they are being written.
+ */
+@source not '../docs';
+@source not '../.agents';
+@source not '../eval';
+@source not '../repomix';
+
 /* Self-hosted fonts — no third-party font CDN in a privacy-focused app. */
 @import '@fontsource/inter/latin-400.css';
 @import '@fontsource/inter/latin-500.css';
@@ -13,6 +24,7 @@
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
+
 /*
  * Design tokens.
  *
@@ -22,93 +34,151 @@
  * subtle hover surface, *not* the brand colour; the brand is `--brand`.
  */
 :root {
-	--background: #fafaf8;
-	--foreground: #1a1a1a;
-	--card: #ffffff;
-	--card-foreground: #1a1a1a;
-	--popover: #ffffff;
-	--popover-foreground: #1a1a1a;
+	/*
+	 * Colour hierarchy — each colour means one thing everywhere:
+	 *   paper      --background  the textured page (quietest)
+	 *   deep paper --rail-bg     navigation rail
+	 *   sheet      --card        content cards; the raised pill of a segmented control
+	 *   inset      --surface-2   panels and wells inside sheets (not interactive)
+	 *   control    --secondary   every neutral button, toggle and segment track (sea-glass)
+	 *   selected   --primary     current page, pressed toggles, primary actions (teal)
+	 *   semantic   --error/--warn/--good  status only, never decoration
+	 *   ink        --foreground > --muted-foreground > --faint
+	 */
+	--background: #efeae0;
+	--foreground: #221f1a;
+	--card: #fffcf7;
+	--card-foreground: #221f1a;
+	--popover: #fffcf7;
+	--popover-foreground: #221f1a;
 	--primary: #0f766e;
-	--primary-foreground: #ffffff;
-	--secondary: #f5f4f0;
-	--secondary-foreground: #1a1a1a;
-	--muted: #f5f4f0;
-	--muted-foreground: #6b6b6b;
-	--accent: #f5f4f0;
-	--accent-foreground: #1a1a1a;
-	--destructive: #dc2626;
-	--destructive-foreground: #ffffff;
-	--border: #e8e6e1;
-	--input: #d8d5ce;
+	--primary-foreground: #f3fbf8;
+	--secondary: #d6e5df;
+	--secondary-foreground: #1e4a43;
+	--muted: #d6e5df;
+	--muted-foreground: #6b6459;
+	--accent: #c9ddd5;
+	--accent-foreground: #1e4a43;
+	--destructive: #c2412d;
+	--destructive-foreground: #fffcf7;
+	--border: #ddd4c4;
+	--input: #cfc5b3;
 	--ring: #0f766e;
 
-	--rail-bg: #eeece6;
-	--surface-2: #f5f4f0;
-	--faint: #9a9a9a;
+	--control: #d6e5df;
+	--control-hover: #c9ddd5;
+	--control-line: #b5ccc4;
+	--on-control: #1e4a43;
+	--rail-bg: #e3dbcb;
+	--surface-2: #e6e0d4;
+	--faint: #9e9588;
 	--brand: #0f766e;
-	--brand-2: #7c3aed;
-	--brand-3: #2563eb;
-	--brand-soft: rgba(15, 118, 110, 0.09);
-	--brand-hover: #0d655e;
-	--error: #dc2626;
-	--error-soft: rgba(220, 38, 38, 0.08);
-	--warn: #d97706;
-	--warn-soft: rgba(217, 119, 6, 0.08);
-	--good: #059669;
-	--good-soft: rgba(5, 150, 105, 0.08);
-	--glow-red: 255, 77, 77;
-	--glow-yellow: 255, 193, 7;
-	--glow-green: 5, 150, 105;
-	--border-strong: #cbc8c0;
-	--shadow-card: 0 1px 2px rgba(32, 30, 26, 0.04), 0 12px 36px rgba(32, 30, 26, 0.055);
-	--shadow-card-hover: 0 18px 48px rgba(32, 30, 26, 0.1);
-	--shadow-float: 0 24px 70px rgba(32, 30, 26, 0.13), 0 2px 8px rgba(32, 30, 26, 0.06);
+	--brand-2: #0891b2;
+	--brand-3: #0284c7;
+	--brand-soft: rgba(15, 118, 110, 0.1);
+	--brand-hover: #0c615a;
+	--error: #c2412d;
+	--error-soft: rgba(194, 65, 45, 0.09);
+	--warn: #b7791f;
+	--warn-soft: rgba(183, 121, 31, 0.1);
+	--good: #2f855a;
+	--good-soft: rgba(47, 133, 90, 0.09);
+	--glow-red: 194, 65, 45;
+	--glow-yellow: 183, 121, 31;
+	--glow-green: 47, 133, 90;
+	--border-strong: #c8bda9;
+	--shadow-card: 0 1px 2px rgba(60, 50, 35, 0.06), 0 10px 28px rgba(60, 50, 35, 0.09);
+	--shadow-card-hover: 0 16px 44px rgba(60, 50, 35, 0.13);
+	--shadow-float: 0 24px 70px rgba(60, 50, 35, 0.16), 0 2px 8px rgba(60, 50, 35, 0.07);
+	/* Sheets (cards) rest on the paper: a hairline edge and a layered, soft shadow. */
+	--sheet-line: rgba(120, 100, 70, 0.17);
+	--shadow-sheet: 0 1px 1px rgba(70, 55, 30, 0.05), 0 2px 4px rgba(70, 55, 30, 0.05), 0 8px 16px -6px rgba(70, 55, 30, 0.11), 0 18px 34px -14px rgba(70, 55, 30, 0.12);
+	--shadow-sheet-hover: 0 1px 1px rgba(70, 55, 30, 0.06), 0 3px 6px rgba(70, 55, 30, 0.07), 0 12px 22px -8px rgba(70, 55, 30, 0.14), 0 24px 42px -16px rgba(70, 55, 30, 0.16);
+	--sheet-frost: color-mix(in srgb, var(--card) 74%, transparent);
+	--sheet-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+	/* The page is a sheet laid on the rail: the shadow its left edge casts. */
+	--page-edge-shadow: -10px 0 24px -14px rgba(70, 55, 30, 0.38), -1px 0 0 rgba(120, 100, 70, 0.12);
+	/* How the paper grain sits on a coloured surface (see .paper-grain). */
+	--paper-blend: multiply;
+	/* Neumorphism: a raised surface lit from the top left.
+	   Light mode leans on the dark shadow; dark mode on the light one. */
+	--neu-raised: 9px 9px 22px rgba(150, 140, 120, 0.42), -9px -9px 22px rgba(255, 255, 255, 0.92);
+	--neu-raised-hover: 12px 12px 28px rgba(150, 140, 120, 0.48), -12px -12px 28px rgba(255, 255, 255, 1);
+	--neu-pressed: inset 6px 6px 14px rgba(150, 140, 120, 0.4), inset -6px -6px 14px rgba(255, 255, 255, 0.9);
+	/* Small controls: a well pressed into the page and a convex knob raised out of it. */
+	--neu-raised-sm: 3px 3px 7px rgba(150, 140, 120, 0.5), -3px -3px 7px rgba(255, 255, 255, 0.95);
+	--neu-pressed-sm: inset 3px 3px 6px rgba(150, 140, 120, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+	/* Paper relief: an emboss lifts a shape out of the sheet, a deboss presses it in. No gradients. */
+	--paper-emboss: 1.5px 1.5px 3px rgba(120, 108, 85, 0.32), -1px -1px 2px rgba(255, 255, 255, 0.55);
+	--paper-emboss-hover: 2px 2px 5px rgba(120, 108, 85, 0.36), -1.5px -1.5px 3px rgba(255, 255, 255, 0.65);
+	--paper-deboss: inset 2px 2px 5px rgba(20, 50, 45, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.28);
+	--paper-press-tint: rgba(120, 108, 85, 0.07);
 
 	--radius: 0.625rem;
 }
 
 [data-theme='dark'] {
-	--background: #0e0e10;
-	--foreground: #ededed;
-	--card: #18181b;
-	--card-foreground: #ededed;
-	--popover: #18181b;
-	--popover-foreground: #ededed;
-	--primary: #14b8a6;
-	--primary-foreground: #0e0e10;
-	--secondary: #1f1f23;
-	--secondary-foreground: #ededed;
-	--muted: #1f1f23;
-	--muted-foreground: #8a8a8a;
-	--accent: #1f1f23;
-	--accent-foreground: #ededed;
-	--destructive: #f87171;
-	--destructive-foreground: #0e0e10;
-	--border: #26262a;
-	--input: #3a3a40;
-	--ring: #14b8a6;
+	--background: #151412;
+	--foreground: #ede7dc;
+	--card: #1e1c19;
+	--card-foreground: #ede7dc;
+	--popover: #1e1c19;
+	--popover-foreground: #ede7dc;
+	--primary: #2db3a3;
+	--primary-foreground: #06201c;
+	--secondary: #1f2d2a;
+	--secondary-foreground: #bfe3d9;
+	--muted: #1f2d2a;
+	--muted-foreground: #a79f92;
+	--accent: #263834;
+	--accent-foreground: #bfe3d9;
+	--destructive: #ee7f6b;
+	--destructive-foreground: #1e1c19;
+	--border: #2f2b26;
+	--input: #3a3530;
+	--ring: #2db3a3;
 
-	--rail-bg: #0a0a0c;
-	--surface-2: #1f1f23;
-	--faint: #5a5a5a;
-	--brand: #14b8a6;
-	--brand-2: #a78bfa;
-	--brand-3: #60a5fa;
-	--brand-soft: rgba(20, 184, 166, 0.11);
-	--brand-hover: #2dd4bf;
-	--error: #f87171;
-	--error-soft: rgba(248, 113, 113, 0.1);
-	--warn: #fbbf24;
-	--warn-soft: rgba(251, 191, 36, 0.1);
-	--good: #34d399;
-	--good-soft: rgba(52, 211, 153, 0.1);
-	--glow-red: 248, 113, 113;
-	--glow-yellow: 251, 191, 36;
-	--glow-green: 52, 211, 153;
-	--border-strong: #424249;
-	--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 42px rgba(0, 0, 0, 0.2);
-	--shadow-card-hover: 0 20px 54px rgba(0, 0, 0, 0.3);
-	--shadow-float: 0 26px 76px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.22);
+	--control: #1f2d2a;
+	--control-hover: #263834;
+	--control-line: #33504a;
+	--on-control: #bfe3d9;
+	--rail-bg: #0f0e0d;
+	--surface-2: #24221e;
+	--faint: #6f685e;
+	--brand: #2db3a3;
+	--brand-2: #22d3ee;
+	--brand-3: #38bdf8;
+	--brand-soft: rgba(45, 179, 163, 0.12);
+	--brand-hover: #3cc4b3;
+	--error: #ee7f6b;
+	--error-soft: rgba(238, 127, 107, 0.12);
+	--warn: #e3b35a;
+	--warn-soft: rgba(227, 179, 90, 0.12);
+	--good: #62c391;
+	--good-soft: rgba(98, 195, 145, 0.12);
+	--glow-red: 238, 127, 107;
+	--glow-yellow: 227, 179, 90;
+	--glow-green: 98, 195, 145;
+	--border-strong: #45403a;
+	--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.32);
+	--shadow-card-hover: 0 20px 54px rgba(0, 0, 0, 0.42);
+	--shadow-float: 0 26px 76px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.3);
+	--sheet-line: rgba(255, 245, 225, 0.07);
+	--shadow-sheet: 0 1px 1px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.25), 0 8px 16px -6px rgba(0, 0, 0, 0.35), 0 18px 34px -14px rgba(0, 0, 0, 0.4);
+	--shadow-sheet-hover: 0 1px 1px rgba(0, 0, 0, 0.32), 0 3px 6px rgba(0, 0, 0, 0.3), 0 12px 22px -8px rgba(0, 0, 0, 0.42), 0 24px 42px -16px rgba(0, 0, 0, 0.46);
+	--sheet-frost: color-mix(in srgb, var(--card) 72%, transparent);
+	--sheet-highlight: inset 0 1px 0 rgba(255, 245, 225, 0.06);
+	--page-edge-shadow: -12px 0 26px -14px rgba(0, 0, 0, 0.7), -1px 0 0 rgba(255, 245, 225, 0.05);
+	--paper-blend: screen;
+	--neu-raised: 9px 9px 22px rgba(0, 0, 0, 0.7), -8px -8px 20px rgba(255, 245, 225, 0.075);
+	--neu-raised-hover: 12px 12px 28px rgba(0, 0, 0, 0.75), -10px -10px 26px rgba(255, 245, 225, 0.1);
+	--neu-pressed: inset 6px 6px 14px rgba(0, 0, 0, 0.7), inset -6px -6px 14px rgba(255, 245, 225, 0.06);
+	--neu-raised-sm: 3px 3px 7px rgba(0, 0, 0, 0.8), -3px -3px 7px rgba(255, 245, 225, 0.08);
+	--neu-pressed-sm: inset 3px 3px 6px rgba(0, 0, 0, 0.8), inset -3px -3px 6px rgba(255, 245, 225, 0.06);
+	--paper-emboss: 1.5px 1.5px 3px rgba(0, 0, 0, 0.65), -1px -1px 2px rgba(255, 245, 225, 0.07);
+	--paper-emboss-hover: 2px 2px 5px rgba(0, 0, 0, 0.7), -1.5px -1.5px 3px rgba(255, 245, 225, 0.09);
+	--paper-deboss: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -1.5px -1.5px 4px rgba(255, 255, 255, 0.08);
+	--paper-press-tint: rgba(0, 0, 0, 0.18);
 }
 
 @theme inline {
@@ -136,6 +206,10 @@
 	--color-input: var(--input);
 	--color-ring: var(--ring);
 
+	--color-control: var(--control);
+	--color-control-hover: var(--control-hover);
+	--color-control-line: var(--control-line);
+	--color-on-control: var(--on-control);
 	--color-rail: var(--rail-bg);
 	--color-surface-2: var(--surface-2);
 	--color-faint: var(--faint);
@@ -202,6 +276,45 @@
 }
 
 @layer components {
+	/*
+	 * A surface cut from the app's paper: the page texture (published by the
+	 * layout as --paper-page) attached to the viewport, so it lines up exactly
+	 * with the paper behind the app. Plain page colour until the texture is ready.
+	 */
+	.paper-surface {
+		background-color: var(--background);
+		background-image: var(--paper-page, none);
+		background-size: cover;
+		background-position: center;
+		background-attachment: fixed;
+	}
+
+	/*
+	 * A sheet: the content layer of the colour hierarchy. Frosted: translucent
+	 * sheet colour over a backdrop blur, so the crumpled paper beneath shows
+	 * through softly; a hairline edge, a top highlight and a layered shadow give
+	 * it depth. (Backdrop blur is composited, so scrolling sheets stay smooth.)
+	 */
+	.sheet {
+		background-color: var(--sheet-frost);
+		-webkit-backdrop-filter: blur(14px) saturate(125%);
+		backdrop-filter: blur(14px) saturate(125%);
+		border: 1px solid var(--sheet-line);
+		box-shadow: var(--sheet-highlight), var(--shadow-sheet);
+	}
+
+	/*
+	 * The same paper grain on a coloured surface (a control, a selected key):
+	 * set background-color, and the grain is blended into it like tinted card stock.
+	 */
+	.paper-grain {
+		background-image: var(--paper-page, none);
+		background-size: cover;
+		background-position: center;
+		background-attachment: fixed;
+		background-blend-mode: var(--paper-blend);
+	}
+
 	.eyebrow {
 		display: flex;
 		align-items: center;
