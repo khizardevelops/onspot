@@ -3,7 +3,7 @@ import { getDatabaseAdapter } from '$lib/adapters/db';
 import type { RunMode } from '$lib/adapters/db';
 import type { LlmModelId, LlmProviderId } from '$lib/adapters/llm';
 import { getProvider } from '$lib/adapters/llm';
-import { APPROVED_LANGUAGES, NEUTRAL_TUNING, type VoiceTuning } from '$lib/languages';
+import { APPROVED_LANGUAGES, DEFAULT_LANGUAGE_ID, NEUTRAL_TUNING, type VoiceTuning } from '$lib/languages';
 
 /** How much translation to show under an attempt. */
 export type TranslationMode = 'off' | 'idiomatic' | 'all';
@@ -51,7 +51,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	customBaseUrl: '',
 	customModel: '',
 	translationMode: 'off',
-	targetLanguage: '',
+	// French is currently the only approved language. A usable default avoids an
+	// indeterminate first boot that otherwise stays at “Checking language data…”.
+	targetLanguage: DEFAULT_LANGUAGE_ID,
 	voiceTunings: {}
 };
 
@@ -101,7 +103,10 @@ export async function initSettings(): Promise<void> {
 	const match = APPROVED_LANGUAGES.find(
 		(language) => language.id === loaded.targetLanguage || language.name === loaded.targetLanguage
 	);
-	loaded.targetLanguage = match?.id ?? '';
+	// A corrupt/obsolete setting must not leave the app without a language. When
+	// more languages are approved, this remains a safe default rather than a
+	// null state that prevents the data gate from resolving.
+	loaded.targetLanguage = match?.id ?? DEFAULT_LANGUAGE_ID;
 	loaded.voiceTunings = sanitizeTunings(loaded.voiceTunings);
 	// A settings row from before the model enum existed may name a model this
 	// build no longer ships. The Settings dropdown keeps the unknown id as an

@@ -180,7 +180,7 @@
 	<Collapsible.Root bind:open class="contents">
 		<div class="coach-bar flex shrink-0 items-center gap-1 p-2 sm:px-3">
 			<Collapsible.Trigger
-				class="coach-trigger relative flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl px-2 text-left text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+				class="coach-trigger relative flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2 text-left text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
 				aria-label={open ? 'Close feedback' : 'Open feedback'}
 				title={open ? 'Close feedback' : 'Open feedback'}
 			>
@@ -191,6 +191,8 @@
 				{#if attempt && counts.all > 0}
 					<Badge variant="secondary" class="coach-count h-6 min-w-6 justify-center rounded-full px-1.5 tabular-nums">{counts.all}</Badge>
 				{/if}
+				<!-- The direction marker is part of the same full-width feedback control. -->
+				<ChevronDown class="coach-chevron size-4 shrink-0 transition-transform duration-200 {open ? 'rotate-180' : ''}" />
 			</Collapsible.Trigger>
 			<!-- Playback lives in the header so the summary below gets the full width. -->
 			{#if attempt}
@@ -203,12 +205,6 @@
 					</Button>
 				</div>
 			{/if}
-			<Collapsible.Trigger
-				class="coach-chevron-button grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
-				aria-label={open ? 'Collapse feedback' : 'Expand feedback'}
-			>
-				<ChevronDown class="coach-chevron size-4 transition-transform duration-300 {open ? 'rotate-180' : ''}" />
-			</Collapsible.Trigger>
 		</div>
 
 		<Collapsible.Content class="coach-content min-h-0 flex-1 overflow-hidden">
@@ -306,7 +302,7 @@
 							class="group/correction overflow-hidden sheet rounded-2xl transition-colors {correction.id === activeCorrectionId ? 'border-[var(--brand)]/50' : ''}"
 						>
 							<Collapsible.Trigger
-								class="flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-2)] focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none {correction.id === activeCorrectionId ? 'bg-[var(--brand-soft)]' : ''}"
+								class="feedback-section-trigger flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none {correction.id === activeCorrectionId ? 'bg-[var(--brand-soft)]' : ''}"
 							>
 								<span class="min-w-0 flex-1">
 									<span class="flex flex-wrap items-center gap-1.5">
@@ -386,7 +382,7 @@
 	<div class="shrink-0 border-t bg-background/45">
 		<Collapsible.Root bind:open={statsOpen}>
 			<Collapsible.Trigger
-				class="flex h-9 w-full items-center justify-between gap-2 px-4 text-xs text-muted-foreground transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none sm:px-5"
+				class="feedback-section-trigger flex h-9 w-full items-center justify-between gap-2 px-4 text-xs text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none sm:px-5"
 				aria-label={statsOpen ? 'Collapse session stats' : 'Expand session stats'}
 			>
 				<span class="flex items-center gap-1.5 font-medium"><BarChart3 class="size-3.5" /> Session stats</span>
@@ -424,6 +420,20 @@
 		background:
 			linear-gradient(180deg, color-mix(in srgb, var(--card) 22%, transparent), transparent 55%),
 			radial-gradient(circle at 100% 0%, var(--brand-soft), transparent 45%);
+	}
+
+	/* Disclosure rows are one control. Their chevrons are visual state markers,
+	   not independent hover targets; avoid the generic legacy hover treatment. */
+	:global(.coach-trigger),
+	:global(.feedback-section-trigger) {
+		background: transparent;
+		color: var(--muted-foreground);
+		transition: none;
+	}
+	:global(.coach-trigger:hover),
+	:global(.feedback-section-trigger:hover) {
+		background: transparent;
+		color: var(--muted-foreground);
 	}
 
 	/*
@@ -557,7 +567,6 @@
 			padding-inline: 0;
 		}
 		.feedback-shell[data-state='closed'] :global(.coach-title) { display: none; }
-		.feedback-shell[data-state='closed'] :global(.coach-chevron-button) { display: none; }
 		.feedback-shell[data-state='closed'] .coach-actions { display: none; }
 		.feedback-shell[data-state='closed'] :global(.coach-count) {
 			position: absolute;
@@ -566,6 +575,28 @@
 			min-width: 18px;
 			height: 18px;
 			font-size: 10px;
+		}
+	}
+
+	/* On phones a collapsed panel is deliberately just a thin, tappable handle. */
+	@media (max-width: 1023px) {
+		.feedback-shell[data-state='closed'] .coach-bar {
+			height: 36px;
+			padding: 0 8px;
+		}
+		.feedback-shell[data-state='closed'] :global(.coach-trigger) {
+			min-height: 36px;
+			gap: 6px;
+			padding-inline: 4px;
+		}
+		.feedback-shell[data-state='closed'] :global(.coach-icon) {
+			width: 24px;
+			height: 24px;
+			border-radius: 8px;
+		}
+		.feedback-shell[data-state='closed'] :global(.coach-title) {
+			font-size: 10px;
+			letter-spacing: 0.11em;
 		}
 	}
 

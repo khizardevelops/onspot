@@ -1,3 +1,11 @@
+
+
+## optimisation
+- audio file compression and in a format that is best ment for vocals
+- goal is to save space
+
+
+
 paper textured background and card of realted textured to give off a learning vibe
 
 

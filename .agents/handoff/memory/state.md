@@ -8,6 +8,46 @@ Local Whisper, SQLite, and now Piper TTS all run in workers; the UI thread is ke
 Phase 3 BYOC sync is the next product phase; a real local Whisper + LLM end-to-end proof and the
 Piper Tom EQ/loudness pass remain verification/polish work.
 
+**Persistence boundary (diagnosed 2026-09-20):** the web build persists only to OPFS for its exact
+browser profile and origin. It neither discovers data from another port/profile nor syncs it. A
+fresh profile at `http://localhost:5173` initializes successfully but is empty. A legacy JSON
+backup at `/home/khizar/Downloads/onspot-export-2026-09-18.json` contains 5 sessions / 11 attempts
+/ 14 corrections. The Settings storage card now restores that legacy JSON format by merging it
+into the current local DB; it does not erase unrelated data. Web boot also asks the browser for
+durable storage and releases its OPFS worker at `pagehide`; transient startup failures retry rather
+than poisoning the DB singleton. The user can still need a restore when changing browser profile,
+origin, or web ↔ desktop runtime, because no sync service exists yet. `initPractice()` now
+rehydrates the newest stored session and its attempts/corrections on every fresh app context;
+previously the DB was populated but Practice always looked empty after refresh. Vite is strict on
+`:5173` to prevent an unnoticed port change from selecting a fresh OPFS origin. History reports
+database startup failures separately from a genuinely empty store and provides Retry plus a
+direct legacy `.json` restore. Importing from History or Settings hydrates Practice immediately.
+The legacy backup was restored into Google Chrome's real `Default` profile on 2026-09-20 and
+verified across reload/relaunch: 5 History sessions and the newest 2-take Practice session load.
+
+**Paper segmented control (2026-09-20):** `PaperSegmentedControl.svelte` is the reusable
+Exam/Casual-style control. It owns Tabs' radius/padding (default 14px outer folded board / 10px
+convex key), uses a `scroll`-attached paper texture so translation cannot snap a fixed texture,
+and slides directly in 160ms with no spring/press scale. The selected key—not merely its text—is
+semantically tinted (`error` red for Exam, `brand` teal for Casual) with a centred halo on all
+four sides. Its board is inset/folded; the key's lower/right contours stay outward. No white
+top-left highlight is used in light mode. Settings links to `/ui-sandbox/`, an isolated dummy-data
+interactive UI lab that imports no product stores or services.
+
+**Mobile shell (2026-09-20):** at <=640px the desktop rail is fully hidden and no bottom
+navigation row exists. `+layout.svelte` provides one fixed 44px hamburger overlay in the existing
+top chrome; its disclosed shadcn menu contains New session, all routes, and theme. It does not
+participate in the grid, so `<main>` gets the full viewport height (browser-verified: 844px of an
+844px phone viewport). Practice reserves horizontal—not vertical—space for that overlay and uses
+a 52px compact header. The collapsed Feedback strip remains product content, not navigation.
+
+**Immediate paper theme changes and feedback disclosures (2026-09-20):** `PaperTexture.svelte`
+does not clear its active texture on a light/dark parameter change; it keeps it visible until the
+replacement resolves, while `+layout.svelte` prewarms both appearance variants for page and rail.
+Feedback's mobile closed handle is 36px. Its top header, correction rows, and stats row have one
+trigger apiece with their chevron inside; no generic hover background/transition remains on those
+disclosure controls.
+
 The earlier model-selection lab is complete. Its approved STT/TTS choices and evidence live in
 `docs/benchmarks/`; do not re-litigate them without new evidence.
 

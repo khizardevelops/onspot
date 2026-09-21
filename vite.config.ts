@@ -40,6 +40,10 @@ function crossOriginIsolation(): Plugin {
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), crossOriginIsolation()],
 	server: {
+		// OPFS is scoped to the exact origin. Never silently jump to :5174 and
+		// make an existing database look empty when :5173 is already occupied.
+		port: 5173,
+		strictPort: true,
 		headers: CROSS_ORIGIN_HEADERS,
 		fs: {
 			// The lab's eval/ clips live at the repo root and are pulled in by
@@ -48,6 +52,8 @@ export default defineConfig({
 		}
 	},
 	preview: {
+		port: 4173,
+		strictPort: true,
 		headers: CROSS_ORIGIN_HEADERS
 	},
 	optimizeDeps: {

@@ -4,6 +4,23 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### Refresh Showed An Empty Practice Screen Despite Persisted Sessions
+- **Symptom**: sessions existed in SQLite and appeared in History, but reloading/restarting the
+  app returned Practice to a blank draft; a silently incremented Vite port could also expose a
+  genuinely fresh OPFS database with the same empty appearance.
+- **Cause**: `initPractice()` only opened SQLite and seeded prompts. Its in-memory store was never
+  rehydrated from `listSessions()`/`openSession()` on a new JavaScript context. Vite was not using
+  `strictPort`, and History did not catch DB startup errors, so three different states looked empty.
+- **Fix**: boot restores the newest saved session, Vite is pinned to strict ports, and History now
+  separates Loading / load failure with Retry / truly empty storage with direct backup restore.
+  Both restore surfaces hydrate Practice immediately. Removed eager `pagehide`
+  worker termination, which could kill writes or leave a bfcache-restored singleton with a dead
+  worker.
+- **Proof**: a persisted 5-session/11-attempt profile restored the latest two-take session after
+  reload and a full Chromium restart; History still listed all five sessions with no page errors.
+- **Files**: `stores/practice.ts`, `adapters/db/index.ts`, `routes/history/+page.svelte`,
+  `vite.config.ts`
+
 ### Writing In `docs/` Reloaded The Dev App
 - **Symptom**: typing in `docs/*.md` triggered a full page reload of the running dev app, losing
   in-page state, even though `docs/` is never imported by app code.

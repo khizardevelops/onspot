@@ -1,5 +1,76 @@
 # Last Session
 
+## 2026-09-20: critical refresh data rehydration
+- **Recovery executed:** `/home/khizar/Downloads/onspot-export-2026-09-18.json` was merged into
+  the real Google Chrome `Default` profile for `http://localhost:5173`. Verified 5 History cards,
+  Practice reopening “Favorite city” with 2 takes, and the same state after reload/relaunch; no
+  page errors. The source backup remains unchanged.
+- The SQLite/OPFS database was retaining rows, but `initPractice()` only seeded prompts; every
+  newly loaded JavaScript context therefore presented an empty Practice store until a session was
+  explicitly opened from History. Boot now opens the newest saved session and hydrates all of its
+  attempts/corrections. Initialization is single-flight and resets after a transient failure.
+- Removed the `pagehide` worker termination added earlier: it could kill an in-flight write and
+  broke a bfcache-restored page by leaving the singleton adapter pointed at a dead worker. Browser
+  teardown releases its worker/OPFS handles itself.
+- Vite dev is pinned to strict `localhost:5173`; it now fails rather than silently starting on a
+  fresh-origin `:5174` database. History catches DB errors, offers Retry, and distinguishes an
+  actually empty device store from a load failure. Its empty state has a direct `.json` restore
+  picker; both it and Settings immediately hydrate Practice after importing.
+- Browser proof with the recovered backup: Practice restored “Favorite city” and its two takes
+  on first load, browser reload, and full Chromium restart; History retained all five sessions;
+  no page errors. `npm run check` is 0/0 and the production build succeeds.
+
+## 2026-09-20: persistence recovery, language default, reusable paper control
+- **Persistence:** A real same-profile OPFS restart retains data. The failure mode is switching
+  browser profile/origin/runtime, plus a possible rapid-reload access-handle race. The DB factory
+  now requests durable browser storage, releases its worker on `pagehide`, retries web startup
+  failures up to three times, and clears a failed singleton promise for the next action.
+- **Recovery:** Settings → Storage now offers a non-destructive *Restore .json* for legacy
+  format-1 exports; it merges sessions/prompts/attempts/corrections/recordings/settings and opens
+  History. Browser regression restored the saved 5-session / 11-take backup; History still held
+  5 cards after a reload and a complete browser relaunch, with no page errors. Raw `.sqlite`
+  import is still a separate open task.
+- **Startup:** Settings falls back to `DEFAULT_LANGUAGE_ID` (French) for fresh, corrupt and legacy
+  no-language data. The app no longer displays the first-run picker or a permanent “Checking
+  language data…” state when French is the only approved language.
+- **Control:** `PaperSegmentedControl.svelte` replaces the Practice mode switch and is reusable.
+  Its Tab utilities cannot override the control's radii: default parent 14px / convex child 10px;
+  sm 11px / 8px; lg 16px / 12px. The key slides with a 160ms ease-out (no spring, scale or press
+  bounce). Its texture uses `background-attachment: scroll`, not `fixed`, preventing a texture
+  snap. Exam's red / Casual's teal tint and centred all-sides glow belong to the selected raised
+  key; the board folds inward around it and light mode has no white top-left highlight.
+- The existing data-isolated dummy UI route is now explicitly reachable from Settings → Storage →
+  **Open UI sandbox**.
+
+## 2026-09-20: mobile navigation disclosure
+- Phone layout (<=640px) no longer converts the desktop rail into a 60px bottom bar. The rail is
+  `display:none`; the app grid has one full-height main row. A fixed 44px hamburger in existing
+  top chrome opens a shadcn menu for New session, Practice, History, Insights, Settings and theme.
+  It is an overlay, not a grid participant. Practice's header is 52px and reserves only horizontal
+  room for it. Verified at 390×844: main height is 844px, rail is hidden, the menu is fixed and
+  there are no page errors. The bottom Feedback summary remains app content, not a navbar.
+
+## 2026-09-20: paper-switch and feedback disclosure cleanup
+- PaperTexture retains the already painted sheet until its replacement is ready and prewarms the
+  light and dark page/rail variants at the current size. The deliberate 800ms idle delay and URL
+  reset on an appearance change were removed, eliminating the untextured light/dark switch flash.
+- On phones, a closed Feedback panel is a 36px handle instead of the previous 58px row.
+- Feedback, correction rows, and Session stats are each one disclosure target. The chevron is now
+  inside its corresponding target—not a second button—and their inherited hover-surface animation
+  is disabled. `npm run check` reports 0 errors and 0 warnings after these changes.
+
+## 2026-09-20: missing session-data diagnosis
+- The web app has no shared backend or sync layer yet: `OpfsSqliteAdapter` opens a browser-profile
+  and exact-origin-local OPFS database (`onspot-pool` / `/onspot.db`). A different browser profile,
+  host, port, or cleared site storage is therefore a fresh empty database; History correctly shows
+  “No sessions yet”.
+- The active `http://localhost:5173` build was checked in a fresh Chromium profile: OPFS initializes,
+  no database/runtime errors occur, and the empty History state is expected for that new origin.
+- A recoverable legacy JSON backup exists at `/home/khizar/Downloads/onspot-export-2026-09-18.json`:
+  5 sessions, 11 attempts and 14 corrections. The product currently exports SQLite only and has no
+  import/restore UI, so it cannot load that backup automatically. Phase 3 sync and SQLite import
+  remain open tasks.
+
 ## 2026-09-19 (final): frosted sheets, page laid on the rail
 - Sheets are frosted (translucent + backdrop blur) instead of textured; the sheet texture render
   was removed. The stitched binding was rejected by the user; the page is now a rounded sheet

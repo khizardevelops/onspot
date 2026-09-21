@@ -6,16 +6,19 @@
 	import { page } from '$app/state';
 	import { initSettings, appSettings, settingsReady } from '$lib/stores/settings';
 	import { initPractice, newSession } from '$lib/stores/practice';
+	import { toast } from '$lib/stores/toast';
 	import Toasts from '$lib/components/Toasts.svelte';
 	import LanguagePicker from '$lib/components/LanguagePicker.svelte';
 	import LanguageDownloadBar from '$lib/components/LanguageDownloadBar.svelte';
 	import PaperTexture from '$lib/components/PaperTexture.svelte';
 	import type { PaperTextureParams } from '@paper-design/shaders';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { BarChart3, History, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
+	import { BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
 
 	let { children } = $props();
 	let theme = $state<'light' | 'dark'>('light');
+	let mobileMenuOpen = $state(false);
 
 	/*
 	 * Paper Shaders' paper texture, tuned to gently crumpled paper: soft crumple
@@ -63,6 +66,8 @@
 			rail: { ...RAIL_PAPER, colorBack: '#0f0e0d', colorPaper: '#11100e', colorShadow: '#302b25' }
 		}
 	};
+	const PAGE_PAPERS = [PAPER.light.page, PAPER.dark.page];
+	const RAIL_PAPERS = [PAPER.light.rail, PAPER.dark.rail];
 	const paper = $derived(PAPER[theme]);
 
 	const nav = [
@@ -111,20 +116,25 @@
 					? 'dark'
 					: 'light';
 		applyTheme(initial);
-		void initSettings().then(() => {
-			// Practice needs the persisted language, so it waits for settings.
-			// The language-data status re-checks itself in its store subscription.
-			void initPractice();
-		});
+		void initSettings()
+			.then(() => {
+				// Practice needs the persisted language, so it waits for settings.
+				// The language-data status re-checks itself in its store subscription.
+				return initPractice();
+			})
+			.catch((error) => {
+				console.error('[startup] saved data could not be loaded', error);
+				toast('Saved data could not be loaded. History has details and a retry action.', 6000);
+			});
 	});
 </script>
 
-<PaperTexture class="paper-page" params={paper.page} publishAs="--paper-page" />
+<PaperTexture class="paper-page" params={paper.page} preloadParams={PAGE_PAPERS} publishAs="--paper-page" />
 
 <Tooltip.Provider delayDuration={350}>
 	<div class="app-shell relative z-[1] grid h-screen grid-cols-[56px_1fr] text-foreground">
 		<aside class="app-rail relative z-[1] flex flex-col items-center gap-1 py-3 pr-1.5">
-			<PaperTexture class="paper-rail" params={paper.rail} />
+			<PaperTexture class="paper-rail" params={paper.rail} preloadParams={RAIL_PAPERS} />
 			<div class="brand-mark mb-3 grid size-9 place-items-center rounded-[13px] text-sm font-semibold text-white shadow-lg" aria-label="onspot">o</div>
 
 			<Tooltip.Root>
@@ -177,6 +187,40 @@
 				</div>
 			{/key}
 		</main>
+
+		<!-- Phone navigation is intentionally disclosed: it does not steal 60px from content. -->
+		<div class="mobile-menu">
+			<DropdownMenu.Root bind:open={mobileMenuOpen}>
+				<DropdownMenu.Trigger
+					class="mobile-menu-trigger paper-grain grid size-11 place-items-center rounded-[14px]"
+					aria-label="Open navigation menu"
+					aria-expanded={mobileMenuOpen}
+				>
+					<Menu size={20} strokeWidth={1.8} />
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" sideOffset={8} class="mobile-menu-content w-56 p-1.5">
+					<DropdownMenu.Label>onspot</DropdownMenu.Label>
+					<DropdownMenu.Item class="min-h-11" onSelect={startNewSession}>
+						<Plus /> New session
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+					{#each nav as item (item.href)}
+						{@const Icon = item.icon}
+						<DropdownMenu.Item
+							class="min-h-11"
+							data-current={page.url.pathname === item.href ? '' : undefined}
+							onSelect={() => void goto(item.href)}
+						>
+							<Icon strokeWidth={page.url.pathname === item.href ? 2 : 1.75} /> {item.label}
+						</DropdownMenu.Item>
+					{/each}
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item class="min-h-11" onSelect={toggleTheme}>
+						{#if theme === 'dark'}<Sun /> Light appearance{:else}<Moon /> Dark appearance{/if}
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+		</div>
 	</div>
 </Tooltip.Provider>
 
@@ -256,27 +300,47 @@
 		outline: 2px solid color-mix(in srgb, var(--ring) 60%, transparent);
 		outline-offset: 2px;
 	}
+	.mobile-menu { display: none; }
 	@media (max-width: 640px) {
 		.app-shell {
 			grid-template-columns: minmax(0, 1fr);
-			grid-template-rows: minmax(0, 1fr) 60px;
+			grid-template-rows: minmax(0, 1fr);
 		}
-		.app-rail {
-			grid-row: 2;
-			flex-direction: row;
-			gap: 2px;
-			padding: 8px 10px;
-		}
-		/* On phones the rail is the bottom bar; the page sheet rests on it from above. */
+		/* Phone content gets the whole viewport; navigation is in the disclosed menu. */
+		.app-rail { display: none; }
 		.page-sheet {
 			margin-left: 0;
-			margin-bottom: -6px;
-			border-radius: 0 0 18px 18px;
-			box-shadow: 0 12px 24px -14px rgba(70, 55, 30, 0.4);
+			border-radius: 0;
+			box-shadow: none;
 		}
-		.app-rail :global(.brand-mark) { display: none; }
-		.rail-nav { flex-direction: row; gap: 10px; }
-		.app-shell > main { grid-row: 1; }
+		.mobile-menu {
+			display: block;
+			position: fixed;
+			top: 10px;
+			right: 10px;
+			z-index: 80;
+		}
+		:global(.mobile-menu-trigger) {
+			border: 1px solid var(--control-line);
+			background-color: var(--control);
+			color: var(--on-control);
+			box-shadow: var(--paper-emboss);
+		}
+		:global(.mobile-menu-trigger[aria-expanded='true']) { box-shadow: var(--paper-deboss); }
+		:global(.mobile-menu-content [data-current]) {
+			background: var(--brand-soft);
+			color: var(--brand);
+			font-weight: 600;
+		}
+		/* Practice is the only page with a top-row control: keep it compact and
+		   reserve horizontal, never vertical, room for the floating menu. */
+		:global(.session-header) {
+			min-height: 52px;
+			padding: 8px 62px 8px 14px;
+			gap: 8px;
+		}
+		:global(.session-header .paper-segmented) { height: 36px; }
+		:global(.session-header .paper-segmented-option) { padding-inline: 9px; }
 	}
 	@media (prefers-reduced-motion: reduce) { :global(.rail-action) { transition-duration: 1ms; } }
 </style>

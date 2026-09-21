@@ -188,6 +188,12 @@
 
 	interface Props {
 		params?: PaperTextureParams;
+		/**
+		 * Other paper variants this surface may need shortly (for example the
+		 * opposite appearance). They are prepared while the current sheet is
+		 * visible, so changing appearance never exposes an untextured page.
+		 */
+		preloadParams?: readonly PaperTextureParams[];
 		class?: string;
 		/**
 		 * CSS custom property on `<html>` that receives the texture as `url(...)`, so
@@ -196,7 +202,7 @@
 		publishAs?: string;
 	}
 
-	let { params = {}, class: className = '', publishAs }: Props = $props();
+	let { params = {}, preloadParams = [], class: className = '', publishAs }: Props = $props();
 
 	let host: HTMLDivElement;
 	let url = $state<string | null>(null);
@@ -228,24 +234,24 @@
 		const current = params;
 		if (!width || !height) return;
 		let cancelled = false;
-		// A first render (once per device and size; later loads hit the cache) waits
-		// until the app has settled, so the texture never delays the first content.
-		const whenIdle = (callback: () => void) =>
-			setTimeout(
-				() =>
-					'requestIdleCallback' in window
-						? window.requestIdleCallback(callback, { timeout: 2000 })
-						: callback(),
-				800
-			);
-		whenIdle(() => {
-			if (cancelled) return;
-			textureUrl(current, width, height)
-				.then((next) => {
-					if (!cancelled) url = next;
-				})
-				.catch((error) => console.warn('[paper] texture unavailable', error));
-		});
+		// Keep the current sheet visible until its replacement is ready. Clearing
+		// `url` here used to reveal bare colour for the 800ms idle delay on every
+		// light/dark switch.
+		textureUrl(current, width, height)
+			.then((next) => {
+				if (!cancelled) url = next;
+			})
+			.catch((error) => console.warn('[paper] texture unavailable', error));
+
+		// Build both appearance variants up front. This is deliberately fire-and-
+		// forget: a prewarm must never delay the visible sheet.
+		for (const alternate of preloadParams) {
+			if (alternate !== current) {
+				void textureUrl(alternate, width, height).catch((error) =>
+					console.warn('[paper] texture prewarm unavailable', error)
+				);
+			}
+		}
 		return () => {
 			cancelled = true;
 		};
@@ -259,14 +265,6 @@
 		return () => root.removeProperty(publishAs);
 	});
 
-	// A new theme drops the old texture at once; the plain colour shows until the new one is ready.
-	let shownFor: PaperTextureParams | null = null;
-	$effect.pre(() => {
-		if (shownFor !== params) {
-			shownFor = params;
-			url = null;
-		}
-	});
 </script>
 
 <div

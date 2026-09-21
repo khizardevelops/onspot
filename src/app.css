@@ -315,6 +315,95 @@
 		background-blend-mode: var(--paper-blend);
 	}
 
+	/*
+	 * Reusable paper segmented control. The moving knob deliberately uses a
+	 * scroll-attached texture rather than `background-attachment: fixed`: fixed
+	 * backgrounds are repainted at the end of a transform in Chromium, which was
+	 * the visible paper-texture snap in the old Exam / Casual switch.
+	 *
+	 * Its edge is built from paper contours and shadows, not a white top-left
+	 * highlight. This keeps light mode calm while retaining a tactile folded edge.
+	 */
+	.paper-segmented {
+		position: relative;
+		display: grid;
+		grid-template-columns: repeat(var(--paper-segment-count), minmax(0, 1fr));
+		height: 40px;
+		/* Tabs supplies rounded/padding utilities; these define this control's geometry. */
+		padding: 4px !important;
+		border: 1px solid var(--control-line);
+		border-radius: 14px !important;
+		background-color: var(--control);
+		/* A quiet inward fold around the raised key. */
+		box-shadow: inset 1px 1px 3px color-mix(in srgb, var(--foreground) 18%, transparent), inset -1px -1px 2px color-mix(in srgb, var(--foreground) 6%, transparent);
+		isolation: isolate;
+	}
+	.paper-segmented[data-size='sm'] { height: 32px; border-radius: 11px !important; padding: 3px !important; }
+	.paper-segmented[data-size='lg'] { height: 48px; border-radius: 16px !important; padding: 5px !important; }
+	.paper-segmented-knob {
+		position: absolute;
+		z-index: 0;
+		top: 4px;
+		bottom: 4px;
+		left: 4px;
+		width: calc((100% - 8px) / var(--paper-segment-count));
+		/* A raised paper key, with the lower/right edge carrying its depth. */
+		border: 1px solid var(--border);
+		border-top-color: color-mix(in srgb, var(--card) 50%, var(--border));
+		border-left-color: color-mix(in srgb, var(--card) 42%, var(--border));
+		border-right-color: color-mix(in srgb, var(--foreground) 18%, var(--border));
+		border-bottom-color: color-mix(in srgb, var(--foreground) 27%, var(--border));
+		/* A 4px folded board remains visible around the smaller, raised key. */
+		border-radius: 10px !important;
+		background-color: var(--card);
+		background-image: var(--paper-page, none);
+		background-size: cover;
+		background-position: center;
+		/* Keep the printed grain attached to the knob while it travels. */
+		background-attachment: scroll;
+		box-shadow: 0 2px 4px -2px color-mix(in srgb, var(--foreground) 42%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--foreground) 13%, transparent);
+		/* Deliberately direct: a mode change is a position change, not a toy spring. */
+		transition: translate 160ms ease-out;
+	}
+	/* Semantic tint belongs to the raised key, so the selected mode reads at a glance. */
+	.paper-segmented-knob[data-tone='error'] {
+		background-color: color-mix(in srgb, var(--error) 12%, var(--card));
+		border-right-color: color-mix(in srgb, var(--error) 38%, var(--border));
+		border-bottom-color: color-mix(in srgb, var(--error) 48%, var(--border));
+		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--error) 42%, transparent), 0 0 15px -3px color-mix(in srgb, var(--error) 55%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--error) 20%, transparent);
+	}
+	.paper-segmented-knob[data-tone='brand'] {
+		background-color: color-mix(in srgb, var(--brand) 12%, var(--card));
+		border-right-color: color-mix(in srgb, var(--brand) 38%, var(--border));
+		border-bottom-color: color-mix(in srgb, var(--brand) 48%, var(--border));
+		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--brand) 42%, transparent), 0 0 15px -3px color-mix(in srgb, var(--brand) 55%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--brand) 20%, transparent);
+	}
+	.paper-segmented[data-size='sm'] .paper-segmented-knob { top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / var(--paper-segment-count)); border-radius: 8px !important; }
+	.paper-segmented[data-size='lg'] .paper-segmented-knob { top: 5px; bottom: 5px; left: 5px; width: calc((100% - 10px) / var(--paper-segment-count)); border-radius: 12px !important; }
+	.paper-segmented-option {
+		position: relative;
+		z-index: 1;
+		height: 100%;
+		gap: 6px;
+		border: 0;
+		border-radius: 10px !important;
+		background: transparent !important;
+		box-shadow: none;
+		padding-inline: 12px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--on-control);
+		transition: color 180ms ease;
+	}
+	.paper-segmented-option:hover:not(:disabled) { color: var(--foreground); }
+	.paper-segmented-option[data-state='active'] { background: transparent !important; box-shadow: none !important; }
+	.paper-segmented-option[data-state='active'][data-tone='brand'] { color: var(--brand); }
+	.paper-segmented-option[data-state='active'][data-tone='error'] { color: var(--error); }
+	.paper-segmented-option[data-state='active'][data-tone='neutral'] { color: var(--foreground); }
+	.paper-segmented-option:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent); outline-offset: -2px; }
+	.paper-segmented[data-locked] .paper-segmented-option { cursor: not-allowed; }
+	.paper-segmented[data-locked] .paper-segmented-option:not([data-state='active']) { opacity: 0.45; }
+
 	.eyebrow {
 		display: flex;
 		align-items: center;

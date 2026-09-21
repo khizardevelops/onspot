@@ -82,6 +82,7 @@ let prompts: Prompt[] = [];
 let recorder: VoiceRecorder | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 const translationJobs = new Map<string, Promise<TranslationSet>>();
+let initialization: Promise<void> | null = null;
 
 function newId(prefix: string): string {
 	return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -93,14 +94,35 @@ function update(patch: Partial<PracticeState>): void {
 	store.update((state) => ({ ...state, ...patch }));
 }
 
-/** Loads the database and seeds the prompt set. Call once on startup. */
-export async function initPractice(): Promise<void> {
+/**
+ * Loads persisted practice data exactly once. A browser refresh creates a new
+ * Svelte store, so rehydrate the newest saved session instead of
+ * presenting an empty draft while History still contains the learner's work.
+ */
+export function initPractice(): Promise<void> {
+	initialization ??= hydratePractice().catch((error) => {
+		// Permit a later retry after a transient database startup failure and make
+		// the failure visible in Practice instead of leaving an empty-looking app.
+		initialization = null;
+		update({
+			phase: 'error',
+			error: error instanceof Error ? `Saved practice data could not be loaded: ${error.message}` : 'Saved practice data could not be loaded.'
+		});
+		throw error;
+	});
+	return initialization;
+}
+
+async function hydratePractice(): Promise<void> {
 	db = await getDatabaseAdapter();
 	const languageId = get(appSettings).targetLanguage;
 	if (languageId) {
 		prompts = await ensurePromptsSeeded(db, languageId);
 	}
 	const state = get(store);
+	if (!state.sessionId && state.attempts.length === 0) {
+		if (await hydrateLatestSession()) return;
+	}
 	if (!state.prompt.id && prompts.length > 0) {
 		const prompt = pickRandomPrompt(prompts);
 		update({ prompt: { id: prompt.id, title: prompt.title, text: prompt.text } });
@@ -108,6 +130,15 @@ export async function initPractice(): Promise<void> {
 	if (!state.sessionId) {
 		update({ mode: get(appSettings).mode });
 	}
+}
+
+/** Re-read the newest session after startup or an in-app backup restore. */
+export async function hydrateLatestSession(): Promise<boolean> {
+	if (!db) db = await getDatabaseAdapter();
+	const saved = await db.listSessions();
+	if (saved.length === 0) return false;
+	await openSession(saved[0].id);
+	return true;
 }
 
 /**

@@ -3,8 +3,8 @@
 ## Current priority — Phase 3: BYOC sync
 - [ ] Google Drive OAuth 2.0 PKCE, client-side upload/download.
 - [ ] WebDAV support for Nextcloud, ownCloud, and pCloud.
-- [ ] Local `.sqlite` import/export. The database adapter already supports a portable SQL dump;
-  raw SQLite bytes can remain a later Tauri optimization.
+- [ ] SQLite **import** (restore a `.sqlite` backup). Legacy format-1 JSON restore is now available
+  in Settings → Storage and merges safely; importing the current raw `.sqlite` export remains open.
 
 ## Language system follow-ups
 - [ ] Evaluate and approve the next language (STT + voice) with a human quality pass, then add one
@@ -69,7 +69,9 @@
   disclosure without output headings.
 - [x] Apple-inspired product polish using shadcn-svelte primitives throughout Practice,
   AttemptCard, FeedbackPanel, Settings and navigation; smooth phase/disclosure/menu/card
-  transitions and a mobile bottom navigation bar.
+  transitions and a fixed mobile hamburger menu that consumes no layout row.
+- [x] Refresh/restart data rehydration: Practice opens the newest persisted session, History
+  distinguishes DB failure from empty storage, and dev startup cannot silently change OPFS origin.
 - [x] Feedback severity summary is count-over-label (7/2/3/2 shape) with category filters in the
   hamburger menu; deletion corrections use strike-through + Remove and never an empty arrow.
 - [x] Coach notes opens/closes as one smooth shadcn Collapsible: compact desktop rail, closed-first

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { goto } from '$app/navigation';
 	import {
 		appSettings,
 		resetVoiceTuning,
@@ -7,7 +8,7 @@
 		setVoiceTuning,
 		voiceTuning
 	} from '$lib/stores/settings';
-	import { setTargetLanguage } from '$lib/stores/practice';
+	import { hydrateLatestSession, setTargetLanguage } from '$lib/stores/practice';
 	import {
 		cancelLanguageDownload,
 		downloadLanguageData,
@@ -34,7 +35,7 @@
 	import { ttsPreview } from '$lib/stores/ttsPreview';
 	import { listLocalVoices } from '$lib/adapters/tts/service';
 	import { tuningBands } from '$lib/utils/audioEffects';
-	import { exportDatabaseFile } from '$lib/utils/export';
+	import { exportDatabaseFile, importLegacyJsonBackup } from '$lib/utils/export';
 	import { toast } from '$lib/stores/toast';
 	import VoicePreview from '$lib/components/VoicePreview.svelte';
 	import SettingsSection from '$lib/components/settings/SettingsSection.svelte';
@@ -58,6 +59,7 @@
 		Loader2,
 		RefreshCw,
 		RotateCcw,
+		Upload,
 		X
 	} from '@lucide/svelte';
 
@@ -90,6 +92,8 @@
 	let testOk = $state<boolean | null>(null);
 	let testMessage = $state('');
 	let exporting = $state(false);
+	let restoring = $state(false);
+	let restoreInput = $state<HTMLInputElement | null>(null);
 
 	function updateTuning(key: keyof VoiceTuning, value: number): void {
 		setVoiceTuning($appSettings.ttsVoice, { [key]: value } as Partial<VoiceTuning>);
@@ -124,6 +128,24 @@
 			toast(error instanceof Error ? error.message : 'Export failed');
 		} finally {
 			exporting = false;
+		}
+	}
+
+	async function restoreLegacyBackup(event: Event): Promise<void> {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file || restoring) return;
+		restoring = true;
+		try {
+			const restored = await importLegacyJsonBackup(file);
+			await hydrateLatestSession();
+			toast(`Restored ${restored.sessions} sessions and ${restored.attempts} takes.`);
+			await goto('/history/');
+		} catch (error) {
+			toast(error instanceof Error ? error.message : 'Restore failed');
+		} finally {
+			restoring = false;
 		}
 	}
 
@@ -588,6 +610,24 @@
 				<Button variant="outline" size="lg" class="px-3.5" onclick={exportData} disabled={exporting}>
 					{#if exporting}<Loader2 class="size-4 animate-spin" />{:else}<Download class="size-4" />{/if}
 					{exporting ? 'Exporting…' : 'Export .sqlite'}
+				</Button>
+			</SettingRow>
+			<SettingRow
+				label="Restore legacy backup"
+				hint="Merge an older onspot .json export into this device. Existing unrelated sessions stay in place; you will then open History."
+			>
+				<input bind:this={restoreInput} class="sr-only" type="file" accept="application/json,.json" onchange={restoreLegacyBackup} />
+				<Button variant="outline" size="lg" class="px-3.5" onclick={() => restoreInput?.click()} disabled={restoring}>
+					{#if restoring}<Loader2 class="size-4 animate-spin" />{:else}<Upload class="size-4" />{/if}
+					{restoring ? 'Restoring…' : 'Restore .json'}
+				</Button>
+			</SettingRow>
+			<SettingRow
+				label="Interface lab"
+				hint="A separate interactive copy of the UI with dummy data. Changes and experiments there never touch your sessions or settings."
+			>
+				<Button href="/ui-sandbox/" variant="outline" size="lg" class="px-3.5">
+					<ExternalLink class="size-4" /> Open UI sandbox
 				</Button>
 			</SettingRow>
 		</SettingsSection>

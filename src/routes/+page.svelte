@@ -19,13 +19,13 @@
 	import { toast } from '$lib/stores/toast';
 	import AttemptStream from '$lib/components/AttemptStream.svelte';
 	import FeedbackPanel from '$lib/components/FeedbackPanel.svelte';
+	import PaperSegmentedControl from '$lib/components/PaperSegmentedControl.svelte';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Input } from '$lib/components/ui/input';
 	import { Progress } from '$lib/components/ui/progress';
-	import * as Tabs from '$lib/components/ui/tabs';
 	import {
 		AlertTriangle,
 		Download,
@@ -40,6 +40,10 @@
 	} from '@lucide/svelte';
 
 	const BAR_COUNT = 36;
+	const MODE_OPTIONS = [
+		{ value: 'exam', label: 'Exam', tone: 'error' as const },
+		{ value: 'casual', label: 'Casual', tone: 'brand' as const }
+	];
 	const language = $derived(getLanguage($appSettings.targetLanguage));
 	const dataReady = $derived($languageData.status === 'ready');
 	const checkingData = $derived($languageData.status === 'checking');
@@ -171,26 +175,14 @@
 			</div>
 
 			<div class="flex shrink-0 items-center gap-1.5">
-				<Tabs.Root
+				<PaperSegmentedControl
 					value={$practice.mode}
+					options={MODE_OPTIONS}
+					ariaLabel="Practice mode"
+					disabled={locked}
 					onValueChange={(value) => setSessionMode(value as 'exam' | 'casual')}
-					aria-label="Practice mode"
-				>
-					<Tabs.List
-						class="mode-switch paper-grain"
-						data-mode={$practice.mode}
-						data-locked={locked ? '' : undefined}
-						title={locked ? 'The mode is fixed once a session has takes' : undefined}
-					>
-						<span class="mode-knob paper-grain" aria-hidden="true"></span>
-						<Tabs.Trigger value="exam" disabled={locked} class="mode-option" data-option="exam">
-							<span class="mode-led" aria-hidden="true"></span>Exam
-						</Tabs.Trigger>
-						<Tabs.Trigger value="casual" disabled={locked} class="mode-option" data-option="casual">
-							<span class="mode-led" aria-hidden="true"></span>Casual
-						</Tabs.Trigger>
-					</Tabs.List>
-				</Tabs.Root>
+					class="practice-mode-control"
+				/>
 
 				{#if locked}
 					<DropdownMenu.Root>
@@ -345,84 +337,9 @@
 	.ambient { position: absolute; z-index: -1; border-radius: 999px; pointer-events: none; opacity: 0.5; }
 	.ambient-one { top: 10%; right: 8%; width: 15rem; height: 15rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-2) 14%, transparent), transparent 68%); }
 	.ambient-two { bottom: 18%; left: 2%; width: 12rem; height: 12rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-3) 12%, transparent), transparent 68%); }
-	/*
-	 * Exam / Casual: a neumorphic switch. The track is pressed into the header,
-	 * a convex knob springs between the options and sinks while pressed, and an
-	 * indicator light glows in the mode's colour.
-	 */
-	:global(.mode-switch) {
-		position: relative;
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		height: 40px;
-		padding: 4px;
-		border-radius: 14px;
-		/* Colour hierarchy: the track is a control (sea-glass stock), pressed in. */
-		background-color: var(--control);
-		box-shadow: var(--paper-deboss);
-	}
-	.mode-knob {
-		position: absolute;
-		top: 4px;
-		bottom: 4px;
-		left: 4px;
-		width: calc(50% - 4px);
-		border-radius: 10px;
-		/* The raised knob is sheet paper, as in every segmented control. */
-		background-color: var(--card);
-		box-shadow: var(--paper-emboss-hover);
-		transition:
-			translate 460ms cubic-bezier(0.34, 1.45, 0.64, 1),
-			box-shadow 160ms ease,
-			scale 160ms ease;
-	}
-	:global(.mode-switch[data-mode='casual']) .mode-knob { translate: 100% 0; }
-	:global(.mode-switch:has(.mode-option:active:not(:disabled))) .mode-knob {
-		box-shadow: var(--paper-emboss);
-		scale: 0.97;
-	}
-	:global(.mode-switch .mode-option) {
-		position: relative;
-		z-index: 1;
-		height: 100%;
-		gap: 7px;
-		padding-inline: 12px;
-		border: 0;
-		border-radius: 10px;
-		background: transparent;
-		box-shadow: none;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--on-control);
-		transition: color 240ms ease;
-	}
-	:global(.mode-switch .mode-option:hover:not(:disabled)) { color: var(--foreground); }
-	:global(.mode-switch .mode-option[data-state='active']) { background: transparent; box-shadow: none; }
-	:global(.mode-switch .mode-option[data-option='exam'][data-state='active']) { color: var(--error); }
-	:global(.mode-switch .mode-option[data-option='casual'][data-state='active']) { color: var(--brand); }
-	:global(.mode-switch .mode-option:focus-visible) {
-		outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent);
-		outline-offset: -2px;
-	}
-	.mode-led {
-		width: 6px;
-		height: 6px;
-		border-radius: 999px;
-		background: currentColor;
-		opacity: 0.25;
-		transition: opacity 240ms ease, box-shadow 240ms ease;
-	}
-	:global(.mode-switch .mode-option[data-state='active']) .mode-led {
-		opacity: 1;
-		box-shadow: 0 0 6px currentColor, 0 0 2px currentColor;
-	}
-	/* Locked for a session with takes: the chosen mode stays lit, the other recedes. */
-	:global(.mode-switch .mode-option:disabled) { opacity: 1; cursor: not-allowed; }
-	:global(.mode-switch .mode-option:disabled:not([data-state='active'])) { opacity: 0.45; }
-
 	@media (prefers-reduced-motion: reduce) {
 		.practice-grid { transition-duration: 1ms; }
-		.mode-knob, .mode-led { transition-duration: 1ms; }
+		:global(.paper-segmented-knob) { transition-duration: 1ms; }
 		:global(.record-button:hover) { transform: none; }
 		.waveform span { transition-duration: 1ms !important; }
 	}
@@ -432,6 +349,7 @@
 	}
 	@media (max-width: 1023px) {
 		.practice-grid { grid-template-rows: minmax(0, 1fr) 42%; }
-		.practice-grid.coach-closed { grid-template-rows: minmax(0, 1fr) 58px; }
+		/* Closed feedback is a handle, not a second mobile toolbar. */
+		.practice-grid.coach-closed { grid-template-rows: minmax(0, 1fr) 36px; }
 	}
 </style>

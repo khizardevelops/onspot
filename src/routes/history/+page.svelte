@@ -2,8 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getDatabaseAdapter, type Attempt, type Session } from '$lib/adapters/db';
+	import { importLegacyJsonBackup } from '$lib/utils/export';
 	import {
 		deleteSession,
+		hydrateLatestSession,
 		openSession,
 		playStoredAudio,
 		renameSession
@@ -25,12 +27,16 @@
 		Regex,
 		Search,
 		SlidersHorizontal,
-		Trash2
+		Trash2,
+		Upload
 	} from '@lucide/svelte';
 
 	let sessions = $state<Session[]>([]);
 	let attemptsBySession = $state<Record<string, Attempt[]>>({});
 	let loading = $state(true);
+	let loadError = $state('');
+	let restoring = $state(false);
+	let restoreInput = $state<HTMLInputElement | null>(null);
 	let query = $state('');
 	let regex = $state(false);
 	let caseSensitive = $state(false);
@@ -61,19 +67,44 @@
 	}
 
 	async function load() {
-		const db = await getDatabaseAdapter();
-		const [sessionRows, attemptRows] = await Promise.all([
-			db.listSessions(),
-			db.listAllAttempts()
-		]);
-		sessions = sessionRows;
-		const grouped: Record<string, Attempt[]> = {};
-		for (const attempt of attemptRows) (grouped[attempt.sessionId] ??= []).push(attempt);
-		for (const list of Object.values(grouped)) {
-			list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+		loading = true;
+		loadError = '';
+		try {
+			const db = await getDatabaseAdapter();
+			const [sessionRows, attemptRows] = await Promise.all([
+				db.listSessions(),
+				db.listAllAttempts()
+			]);
+			sessions = sessionRows;
+			const grouped: Record<string, Attempt[]> = {};
+			for (const attempt of attemptRows) (grouped[attempt.sessionId] ??= []).push(attempt);
+			for (const list of Object.values(grouped)) {
+				list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+			}
+			attemptsBySession = grouped;
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'The local database could not be opened.';
+		} finally {
+			loading = false;
 		}
-		attemptsBySession = grouped;
-		loading = false;
+	}
+
+	async function restoreBackup(event: Event): Promise<void> {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file || restoring) return;
+		restoring = true;
+		try {
+			const restored = await importLegacyJsonBackup(file);
+			await hydrateLatestSession();
+			toast(`Restored ${restored.sessions} sessions and ${restored.attempts} takes.`);
+			await load();
+		} catch (error) {
+			toast(error instanceof Error ? error.message : 'Restore failed');
+		} finally {
+			restoring = false;
+		}
 	}
 
 	onMount(load);
@@ -299,12 +330,22 @@
 
 		{#if loading}
 			<p class="text-sm text-muted-foreground">Loading…</p>
+		{:else if loadError}
+			<div class="rounded-lg border border-[var(--error)]/35 bg-[var(--error-soft)] p-8 text-center">
+				<p class="font-serif text-lg text-[var(--error)]">History could not be loaded</p>
+				<p class="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">{loadError}</p>
+				<Button variant="outline" class="mt-4" onclick={() => void load()}>Try again</Button>
+			</div>
 		{:else if sessions.length === 0}
 			<div class="rounded-lg border border-dashed p-10 text-center">
-				<p class="font-serif text-lg">No sessions yet</p>
+				<p class="font-serif text-lg">No sessions in this device storage</p>
 				<p class="mt-1 text-sm text-muted-foreground">
-					Start one from the <a class="text-[var(--brand)] underline" href="/">Practice</a> tab.
+					Restore an existing onspot backup here, or start from <a class="text-[var(--brand)] underline" href="/">Practice</a>.
 				</p>
+				<input bind:this={restoreInput} class="sr-only" type="file" accept="application/json,.json" onchange={restoreBackup} />
+				<Button variant="outline" class="mt-4" onclick={() => restoreInput?.click()} disabled={restoring}>
+					<Upload /> {restoring ? 'Restoring…' : 'Restore .json backup'}
+				</Button>
 			</div>
 		{:else if result.error}
 			<div class="rounded-lg border border-dashed p-10 text-center">
