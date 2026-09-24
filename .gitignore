@@ -45,3 +45,4 @@ static/piper-wasm/
 # bundle.mjs script are tracked; only the generated output is ignored.
 repomix/*-bundle.*
 archive/lab-ui-2026-09-13/
+eval/
