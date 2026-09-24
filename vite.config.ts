@@ -58,5 +58,12 @@ export default defineConfig({
 	},
 	optimizeDeps: {
 		exclude: ['@huggingface/transformers']
+	},
+	css: {
+		preprocessorOptions: {
+			// neo-svelte's theme stylesheet still uses Sass `if()`; it is the
+			// library's code, compiles correctly, and would warn on every start.
+			scss: { silenceDeprecations: ['if-function'] }
+		}
 	}
 });

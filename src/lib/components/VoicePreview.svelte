@@ -11,11 +11,10 @@
 		toggleVoicePreviewLoop,
 		ttsPreview
 	} from '$lib/stores/ttsPreview';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Toggle } from '$lib/components/ui/toggle';
-	import { Progress } from '$lib/components/ui/progress';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { NeoPill } from '@dvcol/neo-svelte/pill';
+	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import { AlertTriangle, Loader2, Pause, Play, Repeat, RotateCcw } from '@lucide/svelte';
 
 	const language = $derived(getLanguage($appSettings.targetLanguage));
@@ -29,21 +28,21 @@
 	onDestroy(stopVoicePreview);
 </script>
 
-<div class="rounded-2xl border bg-[var(--surface-2)]/40 p-4 sm:p-5">
+<div class="voice-preview rounded-2xl border bg-[var(--surface-2)]/40 p-4 sm:p-5">
 	<div class="flex items-center justify-between gap-3">
 		<p class="text-sm font-semibold">Voice preview</p>
 		{#if loading}
-			<Badge variant="secondary">{Math.round($ttsPreview.progress)}%</Badge>
+			<NeoPill size="small" rounded elevation={0}>{Math.round($ttsPreview.progress)}%</NeoPill>
 		{:else if $ttsPreview.status === 'error'}
-			<Badge variant="destructive">Failed</Badge>
+			<NeoPill size="small" rounded elevation={0} color="error" tinted>Failed</NeoPill>
 		{:else if playing}
-			<Badge class="bg-[var(--good-soft)] text-[var(--good)]">{local ? 'Playing live' : 'Playing'}</Badge>
+			<NeoPill size="small" rounded elevation={0} color="success" tinted>{local ? 'Playing live' : 'Playing'}</NeoPill>
 		{:else if $ttsPreview.status === 'ready'}
-			<Badge class="bg-[var(--good-soft)] text-[var(--good)]">
+			<NeoPill size="small" rounded elevation={0} color="success" tinted>
 				{$ttsPreview.fromCache ? 'Cached' : 'Generated'}
-			</Badge>
+			</NeoPill>
 		{:else}
-			<Badge variant="outline">Not generated</Badge>
+			<NeoPill size="small" rounded elevation={0} borderless={false}>Not generated</NeoPill>
 		{/if}
 	</div>
 
@@ -55,47 +54,54 @@
 	</p>
 
 	<div class="mt-4 flex flex-wrap items-center gap-2">
-		<Button
-			size="lg"
-			class="px-3.5"
+		<NeoButton
+			rounded
+			color="primary"
 			disabled={loading || !available}
 			onclick={() => (playing ? pauseVoicePreview() : void playVoicePreview())}
 		>
-			{#if loading}
-				<Loader2 class="size-4 animate-spin" />
-			{:else if playing}
-				<Pause class="size-4" />
-			{:else}
-				<Play class="size-4" />
-			{/if}
+			{#snippet icon()}
+				{#if loading}
+					<Loader2 class="size-4 animate-spin" />
+				{:else if playing}
+					<Pause class="size-4" />
+				{:else}
+					<Play class="size-4" />
+				{/if}
+			{/snippet}
 			{loading ? 'Generating…' : playing ? 'Pause' : 'Play preview'}
-		</Button>
-		<Toggle
-			variant="outline"
-			size="lg"
-			class="loop-toggle px-3.5 {$ttsPreview.loop && playing ? 'pulsing' : ''}"
-			pressed={$ttsPreview.loop}
-			onPressedChange={toggleVoicePreviewLoop}
+		</NeoButton>
+		<NeoButton
+			rounded
+			toggle
+			class="loop-toggle {$ttsPreview.loop && playing ? 'pulsing' : ''}"
+			aria-pressed={$ttsPreview.loop}
+			bind:checked={() => $ttsPreview.loop, () => toggleVoicePreviewLoop()}
 		>
-			<Repeat class="size-4" /> Loop
-		</Toggle>
-		<Button
-			size="icon-lg"
-			variant="ghost"
+			{#snippet icon()}<Repeat class="size-4" />{/snippet}
+			Loop
+		</NeoButton>
+		<NeoButton
+			rounded
+			text
 			class="ml-auto text-muted-foreground"
 			aria-label="Regenerate voice preview"
 			title="Regenerate preview"
 			disabled={loading}
 			onclick={() => (regenerateOpen = true)}
 		>
-			<RotateCcw class="size-4" />
-		</Button>
+			{#snippet icon()}<RotateCcw class="size-4" />{/snippet}
+		</NeoButton>
 	</div>
 
 	{#if loading}
-		<Progress
+		<NeoProgressBar
 			value={$ttsPreview.progress}
-			class="mt-3 h-1.5 bg-[var(--surface-2)] [&>div]:bg-[linear-gradient(90deg,var(--brand),var(--brand-2))] [&>div]:duration-300"
+			class="mt-3"
+			rounded
+			height="6px"
+			color="var(--brand)"
+			aria-label="Voice preview progress"
 		/>
 		{#if $ttsPreview.statusText}
 			<p class="mt-1.5 text-xs text-muted-foreground">{$ttsPreview.statusText}</p>
@@ -109,25 +115,52 @@
 	{/if}
 </div>
 
-<AlertDialog.Root bind:open={regenerateOpen}>
-	<AlertDialog.Content class="rounded-2xl">
-		<AlertDialog.Header>
-			<AlertDialog.Media class="bg-[var(--warn-soft)] text-[var(--warn)]"><RotateCcw /></AlertDialog.Media>
-			<AlertDialog.Title>Regenerate the voice preview?</AlertDialog.Title>
-			<AlertDialog.Description>
-				This reruns the voice model and replaces the cached preview. It can take a few seconds,
-				and cloud voices use an API request. Play the cached preview first if you are not sure.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Keep cached preview</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={() => void regenerateVoicePreview()}>Regenerate</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+<!-- neo-svelte 1.2.0 does not export NeoDialogConfirm, so the confirm is composed from NeoDialog. -->
+<!-- Portaled: the frosted settings card's backdrop-filter would otherwise contain the fixed dialog. -->
+<NeoDialog
+	bind:open={regenerateOpen}
+	portal
+	rounded
+	backdrop
+	filled
+	elevation={3}
+	aria-labelledby="regenerate-preview-title"
+	aria-describedby="regenerate-preview-description"
+	width="min(28rem, calc(100vw - 2rem))"
+	padding="1.25rem 1.5rem"
+>
+	<div class="flex flex-col gap-3">
+		<span class="grid size-10 place-items-center rounded-full bg-[var(--warn-soft)] text-[var(--warn)]"><RotateCcw class="size-5" /></span>
+		<h2 id="regenerate-preview-title" class="dialog-title text-base font-semibold">Regenerate the voice preview?</h2>
+		<p id="regenerate-preview-description" class="text-sm leading-relaxed text-muted-foreground">
+			This reruns the voice model and replaces the cached preview. It can take a few seconds,
+			and cloud voices use an API request. Play the cached preview first if you are not sure.
+		</p>
+		<div class="mt-2 flex flex-wrap justify-end gap-2">
+			<NeoButton rounded onclick={() => (regenerateOpen = false)}>Keep cached preview</NeoButton>
+			<NeoButton
+				rounded
+				color="primary"
+				onclick={() => {
+					regenerateOpen = false;
+					void regenerateVoicePreview();
+				}}>Regenerate</NeoButton
+			>
+		</div>
+	</div>
+</NeoDialog>
 
 <style>
-	:global(.loop-toggle.pulsing) {
+	h2.dialog-title {
+		margin-bottom: 0;
+		font-size: 1rem;
+		line-height: 1.5rem;
+		font-weight: 600;
+	}
+	.voice-preview {
+		border-color: var(--border);
+	}
+	:global(.neo-button.loop-toggle.pulsing) {
 		animation: loop-pulse 2s infinite;
 	}
 	@keyframes loop-pulse {
@@ -142,7 +175,7 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		:global(.loop-toggle.pulsing) {
+		:global(.neo-button.loop-toggle.pulsing) {
 			animation: none;
 		}
 	}

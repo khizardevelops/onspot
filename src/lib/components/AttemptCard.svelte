@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { quickCollapse, quickTooltip } from '$lib/neo';
 	import { fade, fly, slide } from 'svelte/transition';
 	import type { AttemptView } from '$lib/stores/practice';
 	import {
@@ -12,17 +13,20 @@
 	import { listLocalVoices } from '$lib/adapters/tts/service';
 	import { splitSentences } from '$lib/utils/segments';
 	import { fitFontSize } from '$lib/utils/fitText';
+	import { layoutLength } from '$lib/utils/words';
 	import { audioActivity, togglePlay } from '$lib/stores/audio';
 	import Transcript from './Transcript.svelte';
 	import AudioBar from './AudioBar.svelte';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Separator } from '$lib/components/ui/separator';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoCard } from '@dvcol/neo-svelte/cards';
+	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
+	import { NeoDivider } from '@dvcol/neo-svelte/divider';
+	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
+	import PopMenu from '$lib/components/PopMenu.svelte';
+	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
+	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import {
+		Check,
 		ChevronDown,
 		Ellipsis,
 		Languages,
@@ -61,7 +65,8 @@
 	} as const;
 	let transcriptWidth = $state(0);
 	const transcriptSize = $derived(
-		fitFontSize(attempt.transcript.length, transcriptWidth, TRANSCRIPT_FIT)
+		// Japanese glyphs are about twice as wide as Latin ones.
+		fitFontSize(layoutLength(attempt.transcript), transcriptWidth, TRANSCRIPT_FIT)
 	);
 	let showSegments = $state(false);
 	let rerendering = $state(false);
@@ -119,6 +124,55 @@
 		splitSentences(attempt.naturalSpeech || attempt.correctedText || attempt.transcript)
 	);
 	const selectedVoice = $derived(attempt.ttsVoice ?? $appSettings.ttsVoice);
+
+	/* Menu values are namespaced so one onSelect can route every action. */
+	const translationItems = $derived<NeoMenuItem[]>([
+		{
+			value: 'translation-style',
+			label: 'Translation style',
+			section: true,
+			divider: { bottom: true },
+			items: TRANSLATION_OPTIONS.map((option) => ({
+				value: `view:${option.id}`,
+				label: option.label,
+				description: option.detail,
+				after: optionCheck
+			}))
+		},
+		{ value: 'regenerate', label: 'Regenerate saved translations', before: menuIcon }
+	]);
+
+	const actionItems = $derived<NeoMenuItem[]>([
+		{ value: 'replay', label: 'Replay your recording', before: menuIcon },
+		{ value: 'segments', label: 'Sentence playback', before: menuIcon, after: optionCheck },
+		...($appSettings.ttsMode === 'local'
+			? [
+					{
+						value: 'voice',
+						label: 'Read-back voice',
+						before: menuIcon,
+						items: voices.map((voice) => ({ value: `voice:${voice.id}`, label: voice.label, after: optionCheck }))
+					}
+				]
+			: [])
+	]);
+
+	function isChecked(value: unknown): boolean {
+		const key = String(value);
+		if (key === 'segments') return showSegments;
+		if (key.startsWith('view:')) return key.slice(5) === translationView;
+		if (key.startsWith('voice:')) return key.slice(6) === selectedVoice;
+		return false;
+	}
+
+	function onMenuSelect(item: NeoMenuItem): void {
+		const key = String(item.value);
+		if (key === 'regenerate') void regenerateTranslations();
+		else if (key === 'replay') void playRecording(attempt.id);
+		else if (key === 'segments') showSegments = !showSegments;
+		else if (key.startsWith('view:')) void chooseTranslation(key.slice(5));
+		else if (key.startsWith('voice:')) void rerender(key.slice(6));
+	}
 
 	function needsGeneration(view: TranslationView): boolean {
 		if (view === 'off') return false;
@@ -203,37 +257,56 @@
 	}
 </script>
 
+{#snippet menuIcon({ item }: { item: { value: unknown } })}
+	{#if item.value === 'segments'}<ListMusic size={16} />{:else if item.value === 'voice'}<Volume2 size={16} />{:else}<RotateCcw size={16} />{/if}
+{/snippet}
+
+{#snippet optionCheck({ item }: { item: { value: unknown } })}
+	<Check size={15} class="menu-check {isChecked(item.value) ? '' : 'invisible'}" aria-hidden="true" />
+{/snippet}
+
 {#snippet detailChip(kind: string)}
 	{#if kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
-		<button
-			type="button"
+		<NeoButton
+			rounded
+			elevation={1}
+			scale={false}
 			class="inline-chip"
 			aria-expanded={showIdiomaticVariants}
 			onclick={() => (showIdiomaticVariants = !showIdiomaticVariants)}
 		>
 			{showIdiomaticVariants ? 'Hide' : '+'}{translations.idiomaticVariants.length} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
 			<ChevronDown class="size-3 transition-transform duration-300 {showIdiomaticVariants ? 'rotate-180' : ''}" />
-		</button>
+		</NeoButton>
 	{:else if kind === 'wordForWord'}
-		<button
-			type="button"
+		<NeoButton
+			rounded
+			elevation={1}
+			scale={false}
 			class="inline-chip"
 			aria-expanded={showWordBreakdown}
 			onclick={() => void toggleWordBreakdown(!showWordBreakdown)}
 		>
 			Word breakdown
 			<ChevronDown class="size-3 transition-transform duration-300 {showWordBreakdown ? 'rotate-180' : ''}" />
-		</button>
+		</NeoButton>
 	{/if}
 {/snippet}
 
-<Card.Root
+<NeoCard
 	data-card-surface
-	class="attempt-card relative w-full min-w-0 gap-0 overflow-visible rounded-[22px] py-0 transition-[border-color,box-shadow] duration-300 {active ? 'active-card' : 'hover:shadow-[var(--shadow-sheet-hover)]'}"
+	class="attempt-card relative w-full min-w-0 {active ? 'active-card' : ''}"
+	spacing="0"
+	width="100%"
+	elevation={active ? 3 : 2}
+	hover={active ? 0 : 1}
+	rounded
+	glass
+	borderless
 >
 	<div class="flex items-center justify-between gap-2 px-4 pt-3 pb-0 sm:px-5 sm:pt-3.5">
 		<div class="flex min-w-0 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
-			<Badge variant={active ? 'default' : 'secondary'} class="h-5 px-2 text-[10px] tracking-wide uppercase">Take {index}</Badge>
+			<NeoPill size="small" rounded elevation={active ? -1 : 1} color={active ? 'primary' : undefined} class="take-pill">Take {index}</NeoPill>
 			<span class="text-faint">·</span>
 			<span>{attempt.durationSec.toFixed(0)} sec</span>
 			<span class="text-faint">·</span>
@@ -241,70 +314,41 @@
 		</div>
 
 		<div class="flex shrink-0 items-center gap-1">
-			<Tooltip.Root>
-				<Tooltip.Trigger
+			<NeoTooltip tooltip={attemptPlaying() ? 'Pause' : 'Play natural version'} {...quickTooltip}>
+				<NeoButton
+					text
+					rounded
+					class="card-icon-button play-button"
 					aria-label={attemptPlaying() ? 'Pause natural version' : 'Play natural version'}
-					class="grid size-8 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
 					onclick={toggleAttemptAudio}
 				>
-					{#if attemptPlaying()}<Pause class="size-4" />{:else}<Volume2 class="size-4" />{/if}
-				</Tooltip.Trigger>
-				<Tooltip.Content>{attemptPlaying() ? 'Pause' : 'Play natural version'}</Tooltip.Content>
-			</Tooltip.Root>
+					{#snippet icon()}{#if attemptPlaying()}<Pause size={16} />{:else}<Volume2 size={16} />{/if}{/snippet}
+				</NeoButton>
+			</NeoTooltip>
 
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger
+			<PopMenu items={translationItems} placement="bottom-end" onSelect={onMenuSelect} rounded>
+				<NeoButton
+					text={translationView === 'off'}
+					rounded
+					color={translationView !== 'off' ? 'primary' : undefined}
+					class="translate-trigger {translationView !== 'off' ? 'on is-selected' : ''}"
 					aria-label="Translation options"
-					class="flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-all focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none {translationView !== 'off' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground'}"
 				>
-					{#if generatingTranslations}<Loader2 class="size-3.5 animate-spin" />{:else}<Languages class="size-3.5" />{/if}
+					{#snippet icon()}{#if generatingTranslations}<Loader2 size={14} class="animate-spin" />{:else}<Languages size={14} />{/if}{/snippet}
 					<span class="hidden sm:inline">{generatingTranslations ? 'Working…' : translationLabel}</span>
-					<ChevronDown class="size-3" />
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-72 p-1.5" loop>
-					<DropdownMenu.Label>Translation style</DropdownMenu.Label>
-					<DropdownMenu.RadioGroup value={translationView} onValueChange={(value) => void chooseTranslation(value)}>
-						{#each TRANSLATION_OPTIONS as option (option.id)}
-							<DropdownMenu.RadioItem value={option.id} class="min-h-11 items-start py-2">
-								<span class="min-w-0">
-									<span class="block text-sm font-medium">{option.label}</span>
-									<span class="mt-0.5 block text-xs leading-snug text-muted-foreground">{option.detail}</span>
-								</span>
-							</DropdownMenu.RadioItem>
-						{/each}
-					</DropdownMenu.RadioGroup>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item class="min-h-10" onSelect={() => void regenerateTranslations()}>
-						<RotateCcw /> Regenerate saved translations
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
+					<ChevronDown size={12} />
+				</NeoButton>
+			</PopMenu>
 
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger aria-label="More attempt actions" class="grid size-8 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none">
-					<Ellipsis class="size-4" />
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-60 p-1.5" loop>
-					<DropdownMenu.Item class="min-h-10" onSelect={() => void playRecording(attempt.id)}><RotateCcw /> Replay your recording</DropdownMenu.Item>
-					<DropdownMenu.CheckboxItem class="min-h-10" checked={showSegments} onCheckedChange={(checked) => (showSegments = checked)}><ListMusic /> Sentence playback</DropdownMenu.CheckboxItem>
-					{#if $appSettings.ttsMode === 'local'}
-						<DropdownMenu.Sub>
-							<DropdownMenu.SubTrigger class="min-h-10"><Volume2 /> Read-back voice</DropdownMenu.SubTrigger>
-							<DropdownMenu.SubContent class="w-64 p-1.5">
-								<DropdownMenu.RadioGroup value={selectedVoice} onValueChange={(value) => void rerender(value)}>
-									{#each voices as voice (voice.id)}
-										<DropdownMenu.RadioItem value={voice.id} class="min-h-10">{voice.label}</DropdownMenu.RadioItem>
-									{/each}
-								</DropdownMenu.RadioGroup>
-							</DropdownMenu.SubContent>
-						</DropdownMenu.Sub>
-					{/if}
-				</DropdownMenu.Content>
-					</DropdownMenu.Root>
+			<PopMenu items={actionItems} placement="bottom-end" onSelect={onMenuSelect} rounded>
+				<NeoButton text rounded class="card-icon-button" aria-label="More attempt actions">
+					{#snippet icon()}<Ellipsis size={16} />{/snippet}
+				</NeoButton>
+			</PopMenu>
 		</div>
 	</div>
 
-	<Card.Content class="px-4 pt-2 pb-3.5 sm:px-5 sm:pb-4">
+	<div class="px-4 pt-2 pb-3.5 sm:px-5 sm:pb-4">
 		<div
 			bind:clientWidth={transcriptWidth}
 			class="transcript-fit"
@@ -321,7 +365,7 @@
 		</div>
 
 		{#if active}
-			<div in:slide={{ duration: 280, axis: 'y' }} out:fade={{ duration: 130 }}>
+			<div in:slide={{ duration: 170, axis: 'y' }} out:fade={{ duration: 130 }}>
 				<AudioBar attemptId={attempt.id} />
 			</div>
 		{/if}
@@ -329,19 +373,19 @@
 		{#if translationError}
 			<div class="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[var(--error-soft)] px-3 py-2" role="alert" in:fly={{ y: 6, duration: 240 }} out:fade={{ duration: 120 }}>
 				<p class="text-sm text-[var(--error)]">{translationError}</p>
-				<Button size="xs" variant="outline" onclick={() => void requestTranslations(true)}>Retry</Button>
+				<NeoButton rounded class="retry-button" onclick={() => void requestTranslations(true)}>Retry</NeoButton>
 			</div>
 		{/if}
 
 		{#if translationView !== 'off'}
-			<div class="mt-3 min-w-0" aria-live="polite" in:slide={{ duration: 320 }} out:fade={{ duration: 140 }}>
-				<Separator class="mb-2.5" />
+			<div class="mt-3 min-w-0" aria-live="polite" in:slide={{ duration: 170 }} out:fade={{ duration: 140 }}>
+				<NeoDivider style="margin: 0 0 0.625rem" /><!-- neo folds a multi-value `margin` prop into its height calc() -->
 				{#if generatingTranslations}
 					<p class="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 class="size-4 animate-spin text-[var(--brand)]" /> Generating and saving translations…</p>
 				{:else}
 					<div class="grid gap-2">
 						{#each visibleTranslations as translation (translation.label)}
-							<div class="translation-surface min-w-0 rounded-xl px-3 py-2" in:fly={{ y: 5, duration: 260 }}>
+							<div class="translation-surface min-w-0 rounded-xl px-3 py-2" in:fly={{ y: 5, duration: 150 }}>
 								<!-- Secondary detail takes space that is already there: the label row, or the text's first line. -->
 								{#if visibleTranslations.length > 1}
 									<div class="flex min-h-5 items-center justify-between gap-2">
@@ -357,20 +401,17 @@
 					</div>
 
 					{#if (translationView === 'idiomatic' || translationView === 'all') && translations.idiomaticVariants.length > 0}
-						<Collapsible.Root bind:open={showIdiomaticVariants}>
-							<Collapsible.Content class="disclosure overflow-hidden">
+						<NeoCollapse transition={quickCollapse} bind:open={showIdiomaticVariants}>
 								<div class="grid gap-2 pt-2 sm:grid-cols-2">
 									{#each translations.idiomaticVariants as variant (variant)}
 										<p class="translation-surface rounded-xl px-3 py-2 text-sm">{variant}</p>
 									{/each}
 								</div>
-							</Collapsible.Content>
-						</Collapsible.Root>
+						</NeoCollapse>
 					{/if}
 
 					{#if translationView === 'wordForWord' || translationView === 'all'}
-						<Collapsible.Root open={showWordBreakdown}>
-							<Collapsible.Content class="disclosure overflow-hidden">
+						<NeoCollapse transition={quickCollapse} open={showWordBreakdown}>
 								{#if translations.wordBreakdown.length > 0}
 									<dl class="translation-surface mt-2 grid grid-cols-[minmax(0,auto)_1fr] gap-x-3 gap-y-1.5 rounded-xl p-3 text-xs">
 										{#each translations.wordBreakdown as item, position (`${item.source}-${position}`)}
@@ -378,23 +419,22 @@
 										{/each}
 									</dl>
 								{/if}
-							</Collapsible.Content>
-						</Collapsible.Root>
+						</NeoCollapse>
 					{/if}
 				{/if}
 			</div>
 		{/if}
 
 		{#if showSegments && segments.length > 1}
-			<div class="mt-3" in:slide={{ duration: 300 }} out:fade={{ duration: 140 }}>
-				<Separator class="mb-2.5" />
+			<div class="mt-3" in:slide={{ duration: 170 }} out:fade={{ duration: 140 }}>
+				<NeoDivider style="margin: 0 0 0.625rem" /><!-- neo folds a multi-value `margin` prop into its height calc() -->
 				<p class="eyebrow mb-2"><ListMusic class="size-3.5" /> Sentence playback</p>
 				<div class="space-y-1">
 					{#each segments as segment, position (position)}
 						<div class="flex min-w-0 items-start gap-2 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-[var(--surface-2)]">
-							<Button size="icon-sm" variant="ghost" class="mt-0.5 shrink-0 text-[var(--brand)]" aria-label={`${segmentPlaying(position) ? 'Pause' : 'Play'} sentence ${position + 1}`} onclick={() => toggleSegment(position, segment)}>
-								{#if segmentPlaying(position)}<Pause class="size-3.5" />{:else}<Play class="size-3.5" />{/if}
-							</Button>
+							<NeoButton text rounded class="card-icon-button segment-button mt-0.5 shrink-0" aria-label={`${segmentPlaying(position) ? 'Pause' : 'Play'} sentence ${position + 1}`} onclick={() => toggleSegment(position, segment)}>
+								{#snippet icon()}{#if segmentPlaying(position)}<Pause size={14} />{:else}<Play size={14} />{/if}{/snippet}
+							</NeoButton>
 							<p class="min-w-0 font-serif text-sm leading-relaxed break-words">{segment}</p>
 						</div>
 					{/each}
@@ -405,15 +445,49 @@
 		{#if rerendering}
 			<p class="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite"><Loader2 class="size-3.5 animate-spin" /> Preparing the new voice…</p>
 		{/if}
-	</Card.Content>
-</Card.Root>
+	</div>
+</NeoCard>
 
 <style>
-	/* The selected take: a sheet with a teal edge (it is the selected item). */
-	:global(.active-card) {
-		border-color: var(--brand);
-		box-shadow: 0 0 0 1px var(--brand), var(--shadow-sheet-hover);
+	/* The selected take: a glass neo card with a teal edge (it is the selected item). */
+	/* One radius for the card, its shadow, its selection outline and its focus ring. */
+	:global(.neo-card.attempt-card) {
+		--neo-card-border-radius: var(--attempt-radius, 22px);
+		border-radius: var(--attempt-radius, 22px);
+		overflow: visible;
+		transition: box-shadow 120ms ease;
 	}
+	:global(.neo-card.attempt-card .neo-card-content) { overflow: visible; }
+	:global(.neo-card.attempt-card.active-card) {
+		outline: 1.5px solid var(--brand);
+		outline-offset: -1px;
+	}
+	:global(.neo-card.attempt-card .neo-pill.take-pill) {
+		height: 20px;
+		padding: 0 8px;
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	:global(.neo-card.attempt-card .neo-button.card-icon-button) {
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		justify-content: center;
+		color: var(--muted-foreground);
+	}
+	:global(.neo-card.attempt-card .neo-button.play-button:hover),
+	:global(.neo-card.attempt-card .neo-button.segment-button) { color: var(--brand); }
+	:global(.neo-card.attempt-card .neo-button.translate-trigger) {
+		height: 32px;
+		padding: 0 10px;
+		gap: 6px;
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+	:global(.neo-card.attempt-card .neo-button.translate-trigger:not(.on)) { color: var(--muted-foreground); }
+	:global(.neo-card.attempt-card .neo-button.retry-button) { height: 28px; padding: 0 10px; font-size: 0.75rem; }
+	:global(.menu-check) { color: var(--primary); flex-shrink: 0; }
 	/*
 	 * Translation surfaces are deliberately tinted with the brand colour. The
 	 * neutral surface token is almost the page background, so a neutral box read
@@ -424,26 +498,16 @@
 		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 20%, transparent);
 	}
 	/* A compact control chip for a translation's secondary detail. */
-	.inline-chip {
-		display: inline-flex;
-		align-items: center;
+	:global(.neo-button.inline-chip) {
 		gap: 3px;
 		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--control);
 		color: var(--on-control);
 		font-size: 0.75rem;
 		font-weight: 500;
 		font-style: normal;
 		line-height: 1.5;
 		white-space: nowrap;
-		transition: background-color 160ms ease;
+		border-radius: 999px;
 	}
-	.inline-chip:hover { background: var(--control-hover); }
-	.inline-chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent); outline-offset: 1px; }
-	:global(.disclosure[data-state='open']) { animation: disclose 300ms cubic-bezier(0.22, 1, 0.36, 1); }
-	:global(.disclosure[data-state='closed']) { animation: conceal 170ms cubic-bezier(0.4, 0, 1, 1); }
-	@keyframes disclose { from { height: 0; opacity: 0; transform: translateY(-4px); } to { height: var(--bits-collapsible-content-height); opacity: 1; transform: translateY(0); } }
-	@keyframes conceal { from { height: var(--bits-collapsible-content-height); opacity: 1; } to { height: 0; opacity: 0; } }
-	@media (prefers-reduced-motion: reduce) { :global(.attempt-card) { transition-duration: 1ms; } :global(.disclosure) { animation-duration: 1ms !important; } }
+	@media (prefers-reduced-motion: reduce) { :global(.neo-card.attempt-card) { transition-duration: 1ms; } }
 </style>

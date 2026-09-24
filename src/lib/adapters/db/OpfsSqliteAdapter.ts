@@ -1,5 +1,5 @@
 import { SqlDatabaseAdapter } from './SqlDatabaseAdapter';
-import type { SqlDriver, SqlValue } from './types';
+import { DatabaseImportError, type SqlDriver, type SqlValue } from './types';
 import SqliteWorker from './sqlite.worker?worker';
 
 interface WorkerResponse {
@@ -8,7 +8,11 @@ interface WorkerResponse {
 	rows?: Record<string, unknown>[];
 	bytes?: Uint8Array;
 	error?: string;
+	storage?: boolean;
+	rolledBack?: boolean;
 }
+
+
 
 /** Promise-based request/response wrapper around the SQLite Worker. */
 class WorkerSqlDriver implements SqlDriver {
@@ -27,6 +31,15 @@ class WorkerSqlDriver implements SqlDriver {
 			if (!entry) return;
 			this.pending.delete(response.id);
 			if (response.ok) entry.resolve(response);
+			else if (response.rolledBack !== undefined)
+				entry.reject(
+					new DatabaseImportError(
+						response.error ?? 'The backup could not be restored.',
+						Boolean(response.storage),
+						response.rolledBack,
+						response.bytes
+					)
+				);
 			else entry.reject(new Error(response.error ?? 'SQLite worker error'));
 		};
 		this.worker.onerror = (event) => {
@@ -37,14 +50,15 @@ class WorkerSqlDriver implements SqlDriver {
 	}
 
 	private request(
-		op: 'execute' | 'select' | 'export',
+		op: 'execute' | 'select' | 'export' | 'import',
 		sql = '',
-		params: SqlValue[] = []
+		params: SqlValue[] = [],
+		bytes?: Uint8Array
 	): Promise<WorkerResponse> {
 		const id = this.nextId++;
 		return new Promise((resolve, reject) => {
 			this.pending.set(id, { resolve, reject });
-			this.worker.postMessage({ id, op, sql, params });
+			this.worker.postMessage({ id, op, sql, params, bytes }, bytes ? [bytes.buffer] : []);
 		});
 	}
 
@@ -64,6 +78,11 @@ class WorkerSqlDriver implements SqlDriver {
 		return response.bytes;
 	}
 
+	/** Replaces the OPFS database file from a standard SQLite image. */
+	async importDatabase(bytes: Uint8Array): Promise<void> {
+		await this.request('import', '', [], bytes);
+	}
+
 	async close(): Promise<void> {
 		this.worker.terminate();
 	}
@@ -79,6 +98,14 @@ export class OpfsSqliteAdapter extends SqlDatabaseAdapter {
 	async exportSqliteFile(): Promise<Uint8Array> {
 		const driver = (await this.sql()) as WorkerSqlDriver;
 		return driver.exportDatabase();
+	}
+
+	async importSqliteFile(data: Uint8Array): Promise<void> {
+		const driver = (await this.sql()) as WorkerSqlDriver;
+		await driver.importDatabase(data);
+		// The imported schema may predate this build; migrate it before the next
+		// query reaches the restored database.
+		await this.init();
 	}
 
 	protected async openDriver(): Promise<SqlDriver> {

@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
+@import './neo-depth.css';
 
 /*
  * Tailwind v4 scans the whole project for class candidates, and its Vite
@@ -71,7 +71,7 @@
 	--on-control: #1e4a43;
 	--rail-bg: #e3dbcb;
 	--surface-2: #e6e0d4;
-	--faint: #9e9588;
+	--faint: #7f7669;
 	--brand: #0f766e;
 	--brand-2: #0891b2;
 	--brand-3: #0284c7;
@@ -79,7 +79,7 @@
 	--brand-hover: #0c615a;
 	--error: #c2412d;
 	--error-soft: rgba(194, 65, 45, 0.09);
-	--warn: #b7791f;
+	--warn: #94600f;
 	--warn-soft: rgba(183, 121, 31, 0.1);
 	--good: #2f855a;
 	--good-soft: rgba(47, 133, 90, 0.09);
@@ -113,6 +113,24 @@
 	--paper-emboss-hover: 2px 2px 5px rgba(120, 108, 85, 0.36), -1.5px -1.5px 3px rgba(255, 255, 255, 0.65);
 	--paper-deboss: inset 2px 2px 5px rgba(20, 50, 45, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.28);
 	--paper-press-tint: rgba(120, 108, 85, 0.07);
+	/*
+	 * neo components. A raised key is lighter card stock than the page, a well
+	 * is darker and recessed; both carry the --paper-key grain. Shadows use a
+	 * warm ink so the relief reads on paper; --neo-depth scales their offsets.
+	 */
+	/* Interactive ink moves toward stronger contrast on hover/press: darker on paper, lighter at night. */
+	--ink-hover: oklch(from currentcolor calc(l - 0.08) c h);
+	--ink-active: oklch(from currentcolor calc(l - 0.05) c h);
+	--neo-depth: 1.7;
+	--key: #faf6ef;
+	--key-hover: #fffcf6;
+	--key-line: rgba(120, 100, 70, 0.14);
+	--well: #e0d8c8;
+	--shade-dark: rgba(105, 86, 55, 0.5);
+	--shade-light: rgba(255, 255, 255, 0.95);
+	--glass-shade-dark: rgba(80, 62, 35, 0.3);
+	--glass-shade-light: rgba(255, 255, 255, 0.8);
+	--key-blend: multiply;
 
 	--radius: 0.625rem;
 }
@@ -144,7 +162,7 @@
 	--on-control: #bfe3d9;
 	--rail-bg: #0f0e0d;
 	--surface-2: #24221e;
-	--faint: #6f685e;
+	--faint: #8a8276;
 	--brand: #2db3a3;
 	--brand-2: #22d3ee;
 	--brand-3: #38bdf8;
@@ -179,6 +197,202 @@
 	--paper-emboss-hover: 2px 2px 5px rgba(0, 0, 0, 0.7), -1.5px -1.5px 3px rgba(255, 245, 225, 0.09);
 	--paper-deboss: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -1.5px -1.5px 4px rgba(255, 255, 255, 0.08);
 	--paper-press-tint: rgba(0, 0, 0, 0.18);
+	--ink-hover: oklch(from currentcolor calc(l + 0.08) c h);
+	--ink-active: oklch(from currentcolor calc(l + 0.05) c h);
+	--neo-depth: 1.6;
+	--key: #2b2723;
+	--key-hover: #332e29;
+	--key-line: rgba(255, 240, 215, 0.07);
+	--well: #121110;
+	--shade-dark: rgba(0, 0, 0, 0.8);
+	--shade-light: rgba(255, 238, 210, 0.11);
+	--glass-shade-dark: rgba(0, 0, 0, 0.62);
+	--glass-shade-light: rgba(255, 238, 210, 0.09);
+	--key-blend: screen;
+}
+
+/*
+ * neo-svelte theme bridge. NeoThemeProvider (root layout) marks <html> with
+ * [neo-theme-root] and loads the library's own tokens; these overrides point
+ * them at onspot's palette so neo components share the paper hierarchy above.
+ * `html[...]` out-ranks the library's `[neo-theme-root]` rules, and both the
+ * light and the `--neo-dark-*` slots read our tokens, which already switch
+ * with `data-theme`.
+ */
+html[neo-theme-root] {
+	--neo-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI';
+	--neo-font-size: 0.875rem;
+	--neo-line-height: 1.5;
+	--neo-border-radius: var(--radius);
+	/* neo pads buttons/cards with an outer margin for their shadow; layouts here space with gap. */
+	--neo-shadow-margin: 0;
+	--neo-shadow-margin-lg: 0;
+
+	--neo-color-primary: var(--primary);
+	--neo-dark-color-primary: var(--primary);
+	--neo-color-secondary: var(--brand-2);
+	--neo-dark-color-secondary: var(--brand-2);
+	--neo-color-error: var(--error);
+	--neo-dark-color-error: var(--error);
+	--neo-color-warning: var(--warn);
+	--neo-dark-color-warning: var(--warn);
+	--neo-color-success: var(--good);
+	--neo-dark-color-success: var(--good);
+	--neo-color-default: var(--foreground);
+	--neo-dark-color-default: var(--foreground);
+
+	--neo-text-color: var(--foreground);
+	--neo-dark-text-color: var(--foreground);
+	--neo-text-color-inverse: var(--primary-foreground);
+	--neo-dark-text-color-inverse: var(--primary-foreground);
+	/*
+	 * neo's light theme lightens secondary/hover/active text by mixing in white
+	 * (pale text on pale keys); both slots use the app's per-theme ink instead.
+	 */
+	--neo-text-color-secondary: var(--muted-foreground);
+	--neo-dark-text-color-secondary: var(--muted-foreground);
+	--neo-text-color-secondary-hover: var(--foreground);
+	--neo-dark-text-color-secondary-hover: var(--foreground);
+	--neo-text-color-secondary-highlight: var(--foreground);
+	--neo-dark-text-color-secondary-highlight: var(--foreground);
+	--neo-text-color-hover: var(--ink-hover);
+	--neo-dark-text-color-hover: var(--ink-hover);
+	--neo-text-color-active: var(--ink-active);
+	--neo-dark-text-color-active: var(--ink-active);
+	--neo-text-color-hover-active: var(--ink-hover);
+	--neo-dark-text-color-hover-active: var(--ink-hover);
+	--neo-text-color-highlight: var(--ink-hover);
+	--neo-dark-text-color-highlight: var(--ink-hover);
+	--neo-text-color-disabled: color-mix(in srgb, currentcolor 70%, transparent);
+	--neo-dark-text-color-disabled: color-mix(in srgb, currentcolor 70%, transparent);
+
+	/* Neumorphic shadows are derived from this, so it must be the paper colour. */
+	--neo-background-color: var(--background);
+	--neo-dark-background-color: var(--background);
+	--neo-background-color-secondary: var(--key);
+	--neo-dark-background-color-secondary: var(--key);
+	--neo-background-color-secondary-hover: var(--key-hover);
+	--neo-dark-background-color-secondary-hover: var(--key-hover);
+
+	/* Stronger, warm relief in both themes (offsets scaled in neo-depth.css). */
+	--neo-shadow-color-dark: var(--shade-dark);
+	--neo-dark-shadow-color-dark: var(--shade-dark);
+	--neo-shadow-color-light: var(--shade-light);
+	--neo-dark-shadow-color-light: var(--shade-light);
+	--neo-glass-shadow-color-dark: var(--glass-shade-dark);
+	--neo-dark-glass-shadow-color-dark: var(--glass-shade-dark);
+	--neo-glass-shadow-color-light: var(--glass-shade-light);
+	--neo-dark-glass-shadow-color-light: var(--glass-shade-light);
+
+	/* Floating surfaces are sheets, not page: they must separate from what they cover. */
+	--neo-tooltip-bg-color: var(--card);
+	--neo-dialog-bg-color: var(--card);
+	--neo-notification-bg-color: var(--card);
+
+	/* The library paints [neo-theme-root]; the paper texture layer does that here. */
+	background-color: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-sans);
+	line-height: 1.5;
+}
+
+/*
+ * neo's theme sheet sizes bare h1–h6 unlayered, which beats every layered
+ * Tailwind utility. `revert-layer` hands headings back to Tailwind's layers.
+ */
+html[neo-theme-root] :is(h1, h2, h3, h4, h5, h6) {
+	margin-bottom: revert-layer;
+	font-size: revert-layer;
+	font-weight: revert-layer;
+	line-height: revert-layer;
+}
+
+/*
+ * neo component surfaces. Library rules are scoped (`.neo-x.svelte-hash`, 0,2,0)
+ * and unlayered, so these use `html[neo-theme-root]` plus a doubled class.
+ *   key   raised buttons: lighter card stock + grain, a hairline edge
+ *         (`.solid-action` opts a button with its own fill out, e.g. Start speaking)
+ *   well  recessed controls (inputs, selects, sliders, pressed buttons, tab tracks)
+ * Flat/text, tinted and glass variants keep the library's own backgrounds.
+ */
+html[neo-theme-root] .neo-button.neo-button:not(.neo-flat, .neo-tinted, .neo-glass, .neo-filled, .neo-inset, .neo-tab-button, .neo-list-item-content, .solid-action),
+html[neo-theme-root] .neo-input-group.neo-input-group:not(.neo-flat, .neo-inset, .neo-tinted, .neo-glass) {
+	background-color: var(--key);
+	background-image: var(--paper-key, none);
+	background-size: cover;
+	background-attachment: fixed;
+	background-blend-mode: var(--key-blend);
+	border-color: var(--key-line);
+}
+html[neo-theme-root] .neo-button.neo-button:not(.neo-flat, .neo-tinted, .neo-glass, .neo-filled, .neo-inset, .neo-tab-button, .neo-list-item-content, .solid-action):hover {
+	background-color: var(--key-hover);
+}
+html[neo-theme-root] .neo-button.neo-button.neo-inset:not(.neo-tinted, .neo-glass),
+html[neo-theme-root] .neo-input-group.neo-input-group.neo-inset:not(.neo-tinted, .neo-glass),
+html[neo-theme-root] .neo-range-slider.neo-range-slider:not(.neo-tinted),
+html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group,
+html[neo-theme-root] .neo-button-group.neo-button-group:not(.neo-tinted, .neo-glass, .neo-flat) {
+	background-color: var(--well);
+	background-image: var(--paper-key, none);
+	background-size: cover;
+	background-attachment: fixed;
+	background-blend-mode: var(--key-blend);
+}
+/* The selected tab is the one raised key on its recessed track. */
+html[neo-theme-root] .neo-tab.neo-active {
+	--neo-tab-bg-color: var(--key);
+	--neo-tabs-slide-box-shadow: var(--neo-box-shadow-raised-2);
+}
+/* Every tab track is a recessed channel, so the selected key stands out of it. */
+html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group.neo-button-group,
+html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group.neo-button-group:hover {
+	box-shadow: var(--neo-box-shadow-inset-2);
+}
+/* neo stacks the slide layer in front (it was transparent); keep the label above the opaque key. */
+html[neo-theme-root] .neo-tab .neo-button.neo-tab-button {
+	position: relative;
+	z-index: 2;
+	background: transparent;
+}
+
+/*
+ * Selected state: any selected button or toggle gets an accent (primary) border.
+ * It keys off real state, never neo's transient `.neo-pressed`: aria-pressed /
+ * aria-checked / aria-current="page", or `.is-selected` for selected-state
+ * triggers that aren't toggles. Controls with their own selection colour
+ * (Exam/Casual, feedback severities) opt out with `.custom-selection`.
+ */
+html[neo-theme-root] :is([aria-pressed='true'], [aria-checked='true'], [aria-current='page'], .is-selected):is(button, a, [role='button'], [role='radio'], .neo-button):not(.custom-selection, .custom-selection *) {
+	border-color: var(--primary) !important;
+}
+html[neo-theme-root] .neo-tabs:not(.custom-selection, .custom-selection *) .neo-tab.neo-active {
+	--neo-tab-border-color: var(--primary);
+}
+
+/* Cards are sheets: frosted, lighter than the paper they sit on, with a hairline. */
+html[neo-theme-root] .neo-card.neo-card.neo-glass:not(.neo-tinted) {
+	background-color: var(--sheet-frost);
+	border-color: var(--sheet-line);
+}
+html[neo-theme-root] .neo-card.neo-card.neo-inset:not(.neo-tinted) {
+	background-color: var(--well);
+}
+
+/*
+ * neo transitions run 0.15–1s, some with delays, so pressing one control and
+ * then another, or sweeping across menu items, visibly lags. Every neo element
+ * (and its pseudo-elements) answers in ≤ 70ms with no delay. Looping loaders
+ * are animations, not transitions, so they are unaffected.
+ */
+html[neo-theme-root] [class*='neo-'],
+html[neo-theme-root] [class*='neo-']::before,
+html[neo-theme-root] [class*='neo-']::after {
+	transition-duration: 70ms !important;
+	transition-delay: 0s !important;
+}
+/* The tabs' sliding key is a keyframe animation. */
+html[neo-theme-root] .neo-tabs .neo-tab::before {
+	animation-duration: 120ms !important;
 }
 
 @theme inline {
@@ -314,95 +528,6 @@
 		background-attachment: fixed;
 		background-blend-mode: var(--paper-blend);
 	}
-
-	/*
-	 * Reusable paper segmented control. The moving knob deliberately uses a
-	 * scroll-attached texture rather than `background-attachment: fixed`: fixed
-	 * backgrounds are repainted at the end of a transform in Chromium, which was
-	 * the visible paper-texture snap in the old Exam / Casual switch.
-	 *
-	 * Its edge is built from paper contours and shadows, not a white top-left
-	 * highlight. This keeps light mode calm while retaining a tactile folded edge.
-	 */
-	.paper-segmented {
-		position: relative;
-		display: grid;
-		grid-template-columns: repeat(var(--paper-segment-count), minmax(0, 1fr));
-		height: 40px;
-		/* Tabs supplies rounded/padding utilities; these define this control's geometry. */
-		padding: 4px !important;
-		border: 1px solid var(--control-line);
-		border-radius: 14px !important;
-		background-color: var(--control);
-		/* A quiet inward fold around the raised key. */
-		box-shadow: inset 1px 1px 3px color-mix(in srgb, var(--foreground) 18%, transparent), inset -1px -1px 2px color-mix(in srgb, var(--foreground) 6%, transparent);
-		isolation: isolate;
-	}
-	.paper-segmented[data-size='sm'] { height: 32px; border-radius: 11px !important; padding: 3px !important; }
-	.paper-segmented[data-size='lg'] { height: 48px; border-radius: 16px !important; padding: 5px !important; }
-	.paper-segmented-knob {
-		position: absolute;
-		z-index: 0;
-		top: 4px;
-		bottom: 4px;
-		left: 4px;
-		width: calc((100% - 8px) / var(--paper-segment-count));
-		/* A raised paper key, with the lower/right edge carrying its depth. */
-		border: 1px solid var(--border);
-		border-top-color: color-mix(in srgb, var(--card) 50%, var(--border));
-		border-left-color: color-mix(in srgb, var(--card) 42%, var(--border));
-		border-right-color: color-mix(in srgb, var(--foreground) 18%, var(--border));
-		border-bottom-color: color-mix(in srgb, var(--foreground) 27%, var(--border));
-		/* A 4px folded board remains visible around the smaller, raised key. */
-		border-radius: 10px !important;
-		background-color: var(--card);
-		background-image: var(--paper-page, none);
-		background-size: cover;
-		background-position: center;
-		/* Keep the printed grain attached to the knob while it travels. */
-		background-attachment: scroll;
-		box-shadow: 0 2px 4px -2px color-mix(in srgb, var(--foreground) 42%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--foreground) 13%, transparent);
-		/* Deliberately direct: a mode change is a position change, not a toy spring. */
-		transition: translate 160ms ease-out;
-	}
-	/* Semantic tint belongs to the raised key, so the selected mode reads at a glance. */
-	.paper-segmented-knob[data-tone='error'] {
-		background-color: color-mix(in srgb, var(--error) 12%, var(--card));
-		border-right-color: color-mix(in srgb, var(--error) 38%, var(--border));
-		border-bottom-color: color-mix(in srgb, var(--error) 48%, var(--border));
-		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--error) 42%, transparent), 0 0 15px -3px color-mix(in srgb, var(--error) 55%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--error) 20%, transparent);
-	}
-	.paper-segmented-knob[data-tone='brand'] {
-		background-color: color-mix(in srgb, var(--brand) 12%, var(--card));
-		border-right-color: color-mix(in srgb, var(--brand) 38%, var(--border));
-		border-bottom-color: color-mix(in srgb, var(--brand) 48%, var(--border));
-		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--brand) 42%, transparent), 0 0 15px -3px color-mix(in srgb, var(--brand) 55%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--brand) 20%, transparent);
-	}
-	.paper-segmented[data-size='sm'] .paper-segmented-knob { top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / var(--paper-segment-count)); border-radius: 8px !important; }
-	.paper-segmented[data-size='lg'] .paper-segmented-knob { top: 5px; bottom: 5px; left: 5px; width: calc((100% - 10px) / var(--paper-segment-count)); border-radius: 12px !important; }
-	.paper-segmented-option {
-		position: relative;
-		z-index: 1;
-		height: 100%;
-		gap: 6px;
-		border: 0;
-		border-radius: 10px !important;
-		background: transparent !important;
-		box-shadow: none;
-		padding-inline: 12px;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--on-control);
-		transition: color 180ms ease;
-	}
-	.paper-segmented-option:hover:not(:disabled) { color: var(--foreground); }
-	.paper-segmented-option[data-state='active'] { background: transparent !important; box-shadow: none !important; }
-	.paper-segmented-option[data-state='active'][data-tone='brand'] { color: var(--brand); }
-	.paper-segmented-option[data-state='active'][data-tone='error'] { color: var(--error); }
-	.paper-segmented-option[data-state='active'][data-tone='neutral'] { color: var(--foreground); }
-	.paper-segmented-option:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent); outline-offset: -2px; }
-	.paper-segmented[data-locked] .paper-segmented-option { cursor: not-allowed; }
-	.paper-segmented[data-locked] .paper-segmented-option:not([data-state='active']) { opacity: 0.45; }
 
 	.eyebrow {
 		display: flex;

@@ -209,6 +209,29 @@ export interface IDatabaseAdapter {
 	 * and are never part of it.
 	 */
 	exportSqliteFile(): Promise<Uint8Array>;
+	/**
+	 * Replace the whole database with a `.sqlite` file produced by
+	 * `exportSqliteFile`, then run migrations and leave it open. Destructive:
+	 * data on this device that is absent from the file is discarded.
+	 */
+	importSqliteFile(data: Uint8Array): Promise<void>;
 	/** Replace the database contents from a dump produced by `export`. */
 	import(data: Uint8Array): Promise<void>;
+}
+
+/**
+ * A `.sqlite` restore that failed. `storage` marks a write the browser refused
+ * (Firefox's per-site quota, or a full disk). When `rolledBack` is false the
+ * previous database could not be written back and `rescue` holds it.
+ */
+export class DatabaseImportError extends Error {
+	constructor(
+		message: string,
+		readonly storage: boolean,
+		readonly rolledBack: boolean,
+		readonly rescue?: Uint8Array
+	) {
+		super(message);
+		this.name = 'DatabaseImportError';
+	}
 }

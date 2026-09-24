@@ -1,4 +1,5 @@
 <script lang="ts">
+	
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
@@ -20,12 +21,13 @@
 	import AttemptStream from '$lib/components/AttemptStream.svelte';
 	import FeedbackPanel from '$lib/components/FeedbackPanel.svelte';
 	import PaperSegmentedControl from '$lib/components/PaperSegmentedControl.svelte';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Input } from '$lib/components/ui/input';
-	import { Progress } from '$lib/components/ui/progress';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoCard } from '@dvcol/neo-svelte/cards';
+	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
+	import PopMenu from '$lib/components/PopMenu.svelte';
+	import { NeoInput } from '@dvcol/neo-svelte/inputs';
+	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import {
 		AlertTriangle,
 		Download,
@@ -123,6 +125,16 @@
 		return Math.max(0.1, (0.2 + envelope * texture) * (0.35 + $practice.level * 1.8));
 	}
 
+	const sessionActions: NeoMenuItem[] = [
+		{ value: 'rename', label: 'Rename session', before: sessionActionIcon, divider: { bottom: true } },
+		{ value: 'delete', label: 'Delete session', before: sessionActionIcon, color: 'error' }
+	];
+
+	function onSessionAction(item: NeoMenuItem): void {
+		if (item.value === 'rename') beginRename();
+		else if (item.value === 'delete') deleteOpen = true;
+	}
+
 	const stats = $derived.by(() => {
 		const attempts = $practice.attempts;
 		return {
@@ -139,6 +151,10 @@
 
 <svelte:head><title>Practice · onspot</title></svelte:head>
 
+{#snippet sessionActionIcon({ item }: { item: { value: unknown } })}
+	{#if item.value === 'rename'}<Pencil size={16} />{:else}<Trash2 size={16} />{/if}
+{/snippet}
+
 <div class="practice-grid grid h-full grid-cols-1" class:coach-closed={!coachOpen}>
 	<section class="practice-stage relative flex min-h-0 min-w-0 flex-col overflow-hidden">
 		<div class="ambient ambient-one" aria-hidden="true"></div>
@@ -148,16 +164,20 @@
 			<div class="min-w-0 flex-1">
 				{#if renaming}
 					<form class="flex max-w-md items-center gap-1" onsubmit={(event) => { event.preventDefault(); void commitRename(); }} in:fly={{ y: -5, duration: 220 }} out:fade={{ duration: 120 }}>
-						<Input
+						<NeoInput
 							bind:value={renameValue}
 							aria-label="Session name"
-							class="h-8 bg-background/80 font-medium shadow-sm"
+							containerProps={{ class: 'rename-input' }}
+							elevation={-2}
+							rounded
 							onkeydown={(event) => {
 								if (event.key === 'Escape') renaming = false;
 							}}
 						/>
-						<Button size="sm" type="submit">Save</Button>
-						<Button size="icon-sm" variant="ghost" aria-label="Cancel rename" onclick={() => (renaming = false)}><X /></Button>
+						<NeoButton type="submit" color="primary" rounded>Save</NeoButton>
+						<NeoButton text rounded aria-label="Cancel rename" onclick={() => (renaming = false)}>
+							{#snippet icon()}<X size={16} />{/snippet}
+						</NeoButton>
 					</form>
 				{:else}
 					<div in:fade={{ duration: 220 }}>
@@ -185,16 +205,11 @@
 				/>
 
 				{#if locked}
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger class="grid size-9 place-items-center rounded-xl text-muted-foreground transition-all hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" aria-label="Session actions">
-							<MoreHorizontal class="size-4" />
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content align="end" class="w-48 p-1.5" loop>
-							<DropdownMenu.Item class="min-h-9" onSelect={beginRename}><Pencil /> Rename session</DropdownMenu.Item>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item class="min-h-9" variant="destructive" onSelect={() => (deleteOpen = true)}><Trash2 /> Delete session</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+					<PopMenu items={sessionActions} placement="bottom-end" onSelect={onSessionAction} rounded>
+						<NeoButton text rounded class="icon-button" aria-label="Session actions">
+							{#snippet icon()}<MoreHorizontal size={16} />{/snippet}
+						</NeoButton>
+					</PopMenu>
 				{/if}
 			</div>
 		</header>
@@ -213,8 +228,7 @@
 		</div>
 
 		<footer class="composer-wrap relative z-20 px-3 pb-0 sm:px-6 sm:pb-0">
-			<Card.Root class="composer-card gap-0 rounded-[22px] rounded-b-none border-b-0 py-0 shadow-[var(--shadow-float)]">
-				<Card.Content class="p-4 pb-3 sm:p-5 sm:pb-3">
+			<NeoCard class="composer-card" spacing="1rem 1rem 0.75rem" width="100%" elevation={3} glass borderless>
 					{#key $practice.phase}
 						<div in:fly={{ y: 10, duration: 320, opacity: 0 }} out:fade={{ duration: 140 }}>
 							{#if busy}
@@ -225,7 +239,13 @@
 											<span class="truncate font-medium">{$practice.statusText || 'Working…'}</span>
 											{#if $practice.progress}<span class="shrink-0 font-mono text-xs text-muted-foreground">{$practice.progress.progress}%</span>{/if}
 										</div>
-										<Progress value={$practice.progress?.progress ?? ($practice.phase === 'evaluating' ? 92 : 8)} class="mt-2 h-1.5 bg-[var(--surface-2)] [&>div]:bg-[linear-gradient(90deg,var(--brand),var(--brand-2))] [&>div]:duration-500" />
+										<NeoProgressBar
+											class="composer-progress mt-2"
+											value={$practice.progress?.progress ?? ($practice.phase === 'evaluating' ? 92 : 8)}
+											color="linear-gradient(90deg, var(--brand), var(--brand-2))"
+											elevation={-1}
+											rounded
+										/>
 									</div>
 								</div>
 							{:else if recording}
@@ -237,7 +257,10 @@
 									</div>
 									<div class="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
 										<span class="font-mono text-sm text-muted-foreground tabular-nums"><span class="text-foreground">{fmtTime($practice.elapsed)}</span> / 1:00</span>
-										<Button variant="destructive" class="h-10 rounded-xl px-4" onclick={() => stopAndAnalyze()}><Square class="size-3.5" /> Stop & analyze</Button>
+										<NeoButton color="error" rounded class="composer-action" onclick={() => stopAndAnalyze()}>
+											{#snippet icon()}<Square size={14} />{/snippet}
+											Stop & analyze
+										</NeoButton>
 									</div>
 								</div>
 							{:else}
@@ -247,13 +270,20 @@
 										<p class="mt-1.5 max-w-[58ch] font-serif text-lg leading-snug font-medium sm:text-xl">{$practice.prompt.text}</p>
 									</div>
 									<div class="flex shrink-0 flex-wrap gap-2">
-										<Button variant="outline" class="h-10 rounded-xl px-3" onclick={() => nextPrompt()}><SkipForward /> New prompt</Button>
+										<NeoButton rounded class="composer-action" onclick={() => nextPrompt()}>
+											{#snippet icon()}<SkipForward size={16} />{/snippet}
+											New prompt
+										</NeoButton>
 										{#if sessionReady}
-											<Button class="record-button h-10 rounded-xl px-4 shadow-lg" onclick={() => startRecording()}><Mic /> Start speaking</Button>
+											<NeoButton rounded class="composer-action record-button solid-action" onclick={() => startRecording()}>
+												{#snippet icon()}<Mic size={16} />{/snippet}
+												Start speaking
+											</NeoButton>
 										{:else}
-											<Button variant="secondary" class="h-10 rounded-xl px-4" onclick={() => goto('/settings/')}>
-												<Download /> Language data
-											</Button>
+											<NeoButton rounded color="primary" class="composer-action" onclick={() => goto('/settings/')}>
+												{#snippet icon()}<Download size={16} />{/snippet}
+												Language data
+											</NeoButton>
 										{/if}
 									</div>
 								</div>
@@ -282,33 +312,38 @@
 								<p class="max-h-32 overflow-y-auto break-words whitespace-pre-wrap">{$practice.error}</p>
 								<a class="mt-1 inline-block text-xs font-medium text-[var(--brand)] underline underline-offset-4" href="/settings/">Open settings</a>
 							</div>
-							<Button size="icon-sm" variant="ghost" aria-label="Dismiss error" onclick={clearError}><X /></Button>
+							<NeoButton text rounded class="icon-button" aria-label="Dismiss error" onclick={clearError}>
+								{#snippet icon()}<X size={16} />{/snippet}
+							</NeoButton>
 						</div>
 					{/if}
-				</Card.Content>
-			</Card.Root>
+			</NeoCard>
 		</footer>
 	</section>
 
 	<FeedbackPanel attempt={active} {activeCorrectionId} {stats} bind:open={coachOpen} onSelectCorrection={selectCorrection} />
 </div>
 
-<AlertDialog.Root bind:open={deleteOpen}>
-	<AlertDialog.Content class="rounded-2xl">
-		<AlertDialog.Header>
-			<AlertDialog.Media class="bg-[var(--error-soft)] text-[var(--error)]"><Trash2 /></AlertDialog.Media>
-			<AlertDialog.Title>Delete this session?</AlertDialog.Title>
-			<AlertDialog.Description>Every attempt, correction, and saved recording in this session will be removed. This cannot be undone.</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Keep session</AlertDialog.Cancel>
-			<AlertDialog.Action variant="destructive" onclick={() => void deleteCurrent()}>Delete session</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+<!-- neo-svelte 1.2.0 does not export NeoDialogConfirm, so the confirm is composed from NeoDialog. -->
+<NeoDialog bind:open={deleteOpen} portal rounded filled elevation={3} aria-labelledby="delete-session-title" aria-describedby="delete-session-body">
+	<div class="confirm-dialog">
+		<span class="grid size-10 place-items-center rounded-xl bg-[var(--error-soft)] text-[var(--error)]"><Trash2 size={18} /></span>
+		<p id="delete-session-title" class="mt-3 text-base font-semibold">Delete this session?</p>
+		<p id="delete-session-body" class="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+			Every attempt, correction, and saved recording in this session will be removed. This cannot be undone.
+		</p>
+		<div class="mt-5 flex justify-end gap-2">
+			<NeoButton rounded onclick={() => (deleteOpen = false)}>Keep session</NeoButton>
+			<NeoButton rounded color="error" onclick={() => { deleteOpen = false; void deleteCurrent(); }}>Delete session</NeoButton>
+		</div>
+	</div>
+</NeoDialog>
 
 <style>
 	.practice-grid {
+		/* Neo components reserve a shadow margin by default; this layout spaces them itself. */
+		--neo-shadow-margin: 0;
+		--neo-shadow-margin-lg: 0;
 		/* Transparent so the app's paper texture shows behind the practice stage. */
 		background: transparent;
 		transition: grid-template-columns 420ms cubic-bezier(0.22, 1, 0.36, 1), grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -331,16 +366,27 @@
 		background: var(--background) var(--paper-page, none) center / cover fixed;
 		mask-image: linear-gradient(180deg, transparent, #000 35%);
 	}
-	:global(.record-button) { background: linear-gradient(120deg, var(--brand), var(--brand-2)); color: white; }
-	:global(.record-button:hover) { filter: brightness(1.07); transform: translateY(-1px); }
+	/* The composer is a glass neo card docked to the window bottom. */
+	.composer-wrap :global(.neo-card.composer-card.composer-card) {
+		margin: 0;
+		border-radius: 22px 22px 0 0;
+	}
+	@media (min-width: 640px) {
+		.composer-wrap :global(.neo-card.composer-card.composer-card) { padding: 1.25rem 1.25rem 0.75rem; }
+	}
+	.composer-wrap :global(.neo-button.composer-action) { height: 40px; padding-inline: 14px; gap: 6px; font-weight: 500; }
+	.composer-wrap :global(.neo-button.record-button) { background: linear-gradient(120deg, var(--brand), var(--brand-2)); color: var(--primary-foreground); font-weight: 600; }
+	.composer-wrap :global(.neo-button.record-button:hover) { filter: brightness(1.07); }
+	.composer-wrap :global(.composer-progress) { height: 6px; }
+	.practice-grid :global(.neo-button.icon-button) { width: 36px; height: 36px; padding: 0; justify-content: center; color: var(--muted-foreground); }
+	:global(.rename-input) { min-width: 0; flex: 1; }
+	.confirm-dialog { max-width: 24rem; padding: 0.5rem; }
 	.empty-orb { background: linear-gradient(145deg, var(--brand), var(--brand-2) 60%, var(--brand-3)); }
 	.ambient { position: absolute; z-index: -1; border-radius: 999px; pointer-events: none; opacity: 0.5; }
 	.ambient-one { top: 10%; right: 8%; width: 15rem; height: 15rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-2) 14%, transparent), transparent 68%); }
 	.ambient-two { bottom: 18%; left: 2%; width: 12rem; height: 12rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-3) 12%, transparent), transparent 68%); }
 	@media (prefers-reduced-motion: reduce) {
 		.practice-grid { transition-duration: 1ms; }
-		:global(.paper-segmented-knob) { transition-duration: 1ms; }
-		:global(.record-button:hover) { transform: none; }
 		.waveform span { transition-duration: 1ms !important; }
 	}
 	@media (min-width: 1024px) {

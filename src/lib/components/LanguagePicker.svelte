@@ -1,10 +1,14 @@
 <script lang="ts">
-	import { APPROVED_LANGUAGES, DEFAULT_LANGUAGE_ID } from '$lib/languages';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { OFFERED_LANGUAGES, DEFAULT_LANGUAGE_ID, isCandidate } from '$lib/languages';
 	import { setTargetLanguage } from '$lib/stores/practice';
-	import { Check, Loader2 } from '@lucide/svelte';
+	import { Check } from '@lucide/svelte';
 
 	let selected = $state(DEFAULT_LANGUAGE_ID);
 	let saving = $state(false);
+	// A required first-run choice: the dialog cannot be dismissed, only answered.
+	let open = $state(true);
 
 	async function confirm(): Promise<void> {
 		if (saving) return;
@@ -17,8 +21,18 @@
 	}
 </script>
 
-<div class="language-gate fixed inset-0 z-[120] grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Choose the language you want to study">
-	<div class="w-full max-w-md sheet rounded-[26px] p-6 shadow-[var(--shadow-float)] sm:p-8">
+<NeoDialog
+	bind:open
+	modal
+	closedby="none"
+	rounded
+	elevation={3}
+	width={{ max: 'min(28rem, calc(100vw - 2rem))' }}
+	padding="0"
+	aria-label="Choose the language you want to study"
+	class="language-gate"
+>
+	<div class="p-6 sm:p-8">
 		<div class="brand-orb grid size-12 place-items-center rounded-2xl text-lg font-semibold text-white shadow-lg" aria-hidden="true">o</div>
 		<h1 class="mt-5 font-serif text-2xl font-medium">What do you want to study?</h1>
 		<p class="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -26,26 +40,31 @@
 			mis-click costs nothing.
 		</p>
 
-		<div class="mt-5 space-y-2" role="radiogroup" aria-label="Supported languages">
-			{#each APPROVED_LANGUAGES as language (language.id)}
-				<button
-					type="button"
+		<div class="mt-5 flex flex-col gap-2.5" role="radiogroup" aria-label="Supported languages">
+			{#each OFFERED_LANGUAGES as language (language.id)}
+				{@const active = selected === language.id}
+				<NeoButton
+					class="language-option"
 					role="radio"
-					aria-checked={selected === language.id}
-					class="language-option flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all"
-					class:selected={selected === language.id}
+					aria-checked={active}
+					rounded
+					elevation={active ? -2 : 2}
+					hover={active ? 0 : -1}
+					color={active ? 'primary' : undefined}
 					onclick={() => (selected = language.id)}
 				>
-					<span class="min-w-0 flex-1">
+					<span class="min-w-0 flex-1 text-left">
 						<span class="block text-sm font-semibold">{language.name}</span>
-						<span class="block text-xs text-muted-foreground">{language.nativeName}</span>
+						<span class="block text-xs text-muted-foreground">
+							{language.nativeName}{#if isCandidate(language)} · candidate, not yet approved{/if}
+						</span>
 					</span>
-					{#if selected === language.id}
+					{#if active}
 						<span class="grid size-6 place-items-center rounded-full bg-[var(--brand)] text-white">
 							<Check class="size-3.5" />
 						</span>
 					{/if}
-				</button>
+				</NeoButton>
 			{/each}
 		</div>
 
@@ -54,42 +73,26 @@
 			bundled with the app.
 		</p>
 
-		<button
-			type="button"
-			class="confirm-button mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all hover:brightness-105 disabled:opacity-60"
-			disabled={saving}
-			onclick={() => void confirm()}
-		>
-			{#if saving}<Loader2 class="size-4 animate-spin" />{/if}
+		<NeoButton class="confirm-button mt-5" rounded elevation={3} tinted color="primary" loading={saving} disabled={saving} onclick={() => void confirm()}>
 			{saving ? 'Saving…' : 'Continue'}
-		</button>
+		</NeoButton>
 	</div>
-</div>
+</NeoDialog>
 
 <style>
-	.language-gate {
-		background:
-			radial-gradient(circle at 20% 10%, var(--brand-soft), transparent 45%),
-			color-mix(in srgb, var(--background) 88%, transparent);
-		backdrop-filter: blur(18px) saturate(140%);
-	}
 	.brand-orb {
 		background: linear-gradient(145deg, var(--brand), var(--brand-2) 62%, var(--brand-3));
 	}
-	.confirm-button {
-		background: linear-gradient(120deg, var(--brand), var(--brand-2));
+	:global(.neo-button.language-option) {
+		width: 100%;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		justify-content: flex-start;
 	}
-	.language-option:hover {
-		background: var(--surface-2);
-	}
-	.language-option.selected {
-		border-color: var(--brand);
-		background: var(--brand-soft);
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.language-option,
-		.confirm-button {
-			transition-duration: 1ms;
-		}
+	:global(.neo-button.confirm-button) {
+		width: 100%;
+		height: 2.75rem;
+		justify-content: center;
+		font-weight: 600;
 	}
 </style>

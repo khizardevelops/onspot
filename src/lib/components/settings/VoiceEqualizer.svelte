@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { Slider } from '$lib/components/ui/slider';
+	import type { Component } from 'svelte';
+	import { NeoRange, type NeoRangeProps } from '@dvcol/neo-svelte/inputs';
+	import { NeoDivider } from '@dvcol/neo-svelte/divider';
 	import type { VoiceTuning } from '$lib/languages';
 	import { tuningResponseDb, type TuningBand } from '$lib/utils/audioEffects';
 
@@ -13,6 +15,9 @@
 	}
 
 	let { tuning, bands, playing = false, onchange }: Props = $props();
+	// neo-svelte 1.2.0 marks the validation `context` prop as required in NeoRange's types;
+	// the component fills it itself.
+	const Range = NeoRange as unknown as Component<Partial<NeoRangeProps>, object, 'value'>;
 	const uid = $props.id();
 	const gradientId = `eq-area-${uid}`;
 
@@ -71,59 +76,61 @@
 		return frequency >= 1000 ? `${+(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`;
 	}
 
-	/** Bipolar fill from the 0 dB detent to the thumb. */
-	function fillStyle(value: number): string {
-		const position = ((value + RANGE) / (RANGE * 2)) * 100;
-		return value >= 0
-			? `bottom: 50%; height: ${position - 50}%`
-			: `bottom: ${position}%; height: ${50 - position}%`;
-	}
-
 	function update(key: keyof VoiceTuning, next: number): void {
 		if (next !== tuning[key]) onchange(key, next);
 	}
 
-	/** Double-clicking a thumb returns that band to 0 dB. */
-	function resetOnThumb(event: MouseEvent, key: keyof VoiceTuning): void {
-		if ((event.target as HTMLElement).closest('[data-slot="slider-thumb"]')) update(key, 0);
+	/** Double-clicking a handle returns that band to 0 dB. */
+	function resetOnHandle(event: MouseEvent, key: keyof VoiceTuning): void {
+		if ((event.target as HTMLElement).closest('.neo-range-handle')) update(key, 0);
 	}
 
 	/**
-	 * shadcn's Slider keeps its thumb internal, so name it here for assistive
-	 * technology: the thumb is the element with `role="slider"`.
+	 * NeoRange's handle is a plain button named "Drag to set value"; expose it to
+	 * assistive technology as the slider it is (arrow keys already step it).
 	 */
-	function nameThumb(node: HTMLElement, text: { label: string; value: string }) {
-		const apply = ({ label, value }: { label: string; value: string }) => {
-			const thumb = node.querySelector('[role="slider"]');
-			thumb?.setAttribute('aria-label', label);
-			thumb?.setAttribute('aria-valuetext', value);
+	function nameHandle(node: HTMLElement, text: { label: string; value: number }) {
+		const apply = ({ label, value }: { label: string; value: number }) => {
+			const handle = node.querySelector('.neo-range-handle');
+			if (!handle) return;
+			handle.setAttribute('role', 'slider');
+			handle.setAttribute('aria-label', label);
+			handle.setAttribute('aria-valuemin', String(-RANGE));
+			handle.setAttribute('aria-valuemax', String(RANGE));
+			handle.setAttribute('aria-valuenow', String(value));
+			handle.setAttribute('aria-valuetext', formatDb(value));
 		};
 		apply(text);
 		return { update: apply };
 	}
 </script>
 
-{#snippet fader(key: keyof VoiceTuning, label: string)}
+{#snippet fader(key: keyof VoiceTuning, label: string, detail: string)}
 	{@const value = tuning[key]}
-	<div
-		class="eq-fader"
-		role="presentation"
-		use:nameThumb={{ label: `${label} adjustment`, value: `${value > 0 ? '+' : ''}${value} dB` }}
-		ondblclick={(event) => resetOnThumb(event, key)}
-	>
-		<Slider
-			type="single"
-			orientation="vertical"
-			thumbPositioning="exact"
-			min={-RANGE}
-			max={RANGE}
-			step={1}
-			{value}
-			onValueChange={(next: number) => update(key, next)}
-			class="cursor-ns-resize data-[orientation=vertical]:min-h-0 data-[orientation=vertical]:w-full"
-		/>
-		<span class="eq-detent" aria-hidden="true"></span>
-		<span class="eq-fill" style={fillStyle(value)} aria-hidden="true"></span>
+	<div class="eq-row">
+		<span class="eq-name">
+			<span class="name">{label}</span>
+			<span class="hz">{detail}</span>
+		</span>
+		<div
+			class="eq-fader"
+			role="presentation"
+			use:nameHandle={{ label: `${label} adjustment`, value }}
+			ondblclick={(event) => resetOnHandle(event, key)}
+		>
+			<Range
+				min={-RANGE}
+				max={RANGE}
+				step={1}
+				ticks={[50]}
+				tooltips={false}
+				rounded
+				color="var(--brand)"
+				width="100%"
+				bind:value={() => value, (next) => update(key, typeof next === 'number' ? next : next[0])}
+			/>
+		</div>
+		<span class="eq-value" class:changed={value !== 0}>{formatDb(value)}</span>
 	</div>
 {/snippet}
 
@@ -136,16 +143,6 @@
 		</div>
 
 		<div class="eq-plot">
-			<div class="eq-row eq-values" aria-hidden="true">
-				{#each bands as band (band.key)}
-					<span
-						class="eq-value"
-						class:changed={tuning[band.key] !== 0}
-						style="left: {xFor(band.frequency) * 100}%">{formatDb(tuning[band.key])}</span
-					>
-				{/each}
-			</div>
-
 			<div class="eq-stage">
 				<svg
 					class="eq-graph"
@@ -176,57 +173,46 @@
 					<path class="area" d={curve.area} fill="url(#{gradientId})" />
 					<path class="line" d={curve.line} />
 				</svg>
-
+				<!-- Each band's gain, marked where its fader acts on the curve. -->
 				{#each bands as band (band.key)}
-					<div class="eq-column" style="left: {xFor(band.frequency) * 100}%">
-						{@render fader(band.key, BAND_LABELS[band.key])}
-					</div>
+					<span
+						class="eq-point"
+						class:changed={tuning[band.key] !== 0}
+						style="left: {xFor(band.frequency) * 100}%; top: {(yFor(tuning[band.key]) / VIEW_H) * 100}%"
+						aria-hidden="true"
+					></span>
 				{/each}
 			</div>
-
-			<div class="eq-row eq-labels">
+			<div class="eq-ticks" aria-hidden="true">
 				{#each bands as band (band.key)}
-					<span class="eq-label" style="left: {xFor(band.frequency) * 100}%">
-						<span class="name">{BAND_LABELS[band.key]}</span>
-						<span class="hz">{formatHz(band.frequency)}</span>
-					</span>
+					<span style="left: {xFor(band.frequency) * 100}%">{BAND_LABELS[band.key]}</span>
 				{/each}
 			</div>
 		</div>
+	</div>
 
-		<div class="eq-output">
-			<div class="eq-row eq-values" aria-hidden="true">
-				<span class="eq-value" class:changed={tuning.volumeDb !== 0} style="left: 50%"
-					>{formatDb(tuning.volumeDb)}</span
-				>
-			</div>
-			<div class="eq-stage">
-				<div class="eq-column" style="left: 50%">{@render fader('volumeDb', 'Volume')}</div>
-			</div>
-			<div class="eq-row eq-labels">
-				<span class="eq-label" style="left: 50%">
-					<span class="name">Volume</span>
-					<span class="hz">Output</span>
-				</span>
-			</div>
-		</div>
+	<div class="eq-faders">
+		{#each bands as band (band.key)}
+			{@render fader(band.key, BAND_LABELS[band.key], formatHz(band.frequency))}
+		{/each}
+		<div class="my-1"><NeoDivider /></div>
+		{@render fader('volumeDb', 'Volume', 'Output')}
 	</div>
 </div>
 
 <style>
 	.eq {
-		--eq-stage: 148px;
-		--eq-thumb: 18px;
+		--eq-stage: 120px;
 		position: relative;
 		border: 1px solid var(--border);
 		border-radius: 16px;
 		background: color-mix(in srgb, var(--surface-2) 70%, var(--card));
 		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
-		padding: 18px 16px 14px 8px;
+		padding: 16px 16px 12px 8px;
 		transition:
-			background-color 400ms cubic-bezier(0.4, 0, 0.2, 1),
-			border-color 400ms cubic-bezier(0.4, 0, 0.2, 1),
-			box-shadow 400ms cubic-bezier(0.4, 0, 0.2, 1);
+			background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+			border-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+			box-shadow 140ms cubic-bezier(0.4, 0, 0.2, 1);
 	}
 	.eq.playing {
 		background: color-mix(in srgb, var(--brand) 7%, var(--card));
@@ -238,23 +224,12 @@
 
 	.eq-body {
 		display: grid;
-		grid-template-columns: 30px minmax(0, 1fr) 1px 64px;
-		column-gap: 0;
-	}
-	.eq-body::after {
-		content: '';
-		grid-column: 3;
-		grid-row: 1;
-		margin: 26px 0 36px;
-		background: var(--border);
+		grid-template-columns: 30px minmax(0, 1fr);
 	}
 
 	/* dB axis sits beside the stage, aligned to its top/middle/bottom. */
 	.eq-axis {
 		position: relative;
-		grid-column: 1;
-		grid-row: 1;
-		margin-top: 26px;
 		height: var(--eq-stage);
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
@@ -268,64 +243,24 @@
 	}
 
 	.eq-plot {
-		grid-column: 2;
-		grid-row: 1;
 		min-width: 0;
 	}
-	.eq-output {
-		grid-column: 4;
-		grid-row: 1;
-	}
-
-	.eq-row {
-		position: relative;
-	}
-	.eq-values {
-		height: 26px;
-	}
-	.eq-labels {
-		height: 36px;
-	}
-
-	.eq-value {
-		position: absolute;
-		top: 0;
-		translate: -50% 0;
-		white-space: nowrap;
-		font-family: var(--font-mono);
-		font-size: 0.75rem;
-		font-weight: 500;
-		font-variant-numeric: tabular-nums;
-		color: var(--muted-foreground);
-		transition: color 200ms ease;
-	}
-	.eq-value.changed {
-		color: var(--brand);
-	}
-
-	.eq-label {
-		position: absolute;
-		top: 10px;
-		translate: -50% 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		white-space: nowrap;
-		line-height: 1.2;
-	}
-	.eq-label .name {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--foreground);
-	}
-	.eq-label .hz {
-		font-size: 0.75rem;
-		color: var(--faint);
-	}
-
 	.eq-stage {
 		position: relative;
 		height: var(--eq-stage);
+	}
+	.eq-ticks {
+		position: relative;
+		height: 22px;
+	}
+	.eq-ticks span {
+		position: absolute;
+		top: 6px;
+		translate: -50% 0;
+		white-space: nowrap;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--muted-foreground);
 	}
 
 	.eq-graph {
@@ -361,82 +296,94 @@
 	.eq.playing .eq-graph .area {
 		animation: eq-breathe 2.4s ease-in-out infinite;
 	}
-
-	/* A fader column is a 44px hit target centred on its frequency. */
-	.eq-column {
+	.eq-point {
 		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 44px;
-		translate: -50% 0;
+		width: 10px;
+		height: 10px;
+		translate: -50% -50%;
+		border-radius: 50%;
+		background: var(--card);
+		border: 2px solid var(--border-strong);
+		transition:
+			top 160ms ease-out,
+			border-color 200ms ease;
 	}
+	.eq-point.changed {
+		border-color: var(--brand);
+	}
+
+	.eq-faders {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: 10px;
+		padding-left: 8px;
+	}
+	.eq-row {
+		display: grid;
+		grid-template-columns: 76px minmax(0, 1fr) 56px;
+		align-items: center;
+		gap: 8px;
+	}
+	.eq-name {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+	.eq-name .name {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+	.eq-name .hz {
+		font-size: 0.75rem;
+		color: var(--faint);
+	}
+	.eq-value {
+		text-align: right;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 500;
+		font-variant-numeric: tabular-nums;
+		color: var(--muted-foreground);
+		transition: color 200ms ease;
+	}
+	.eq-value.changed {
+		color: var(--brand);
+	}
+
 	.eq-fader {
-		position: relative;
-		height: 100%;
+		min-width: 0;
 		user-select: none;
 	}
-
 	/*
-	 * shadcn Slider parts. Its range fills from the bottom, which misreads a
-	 * ±dB fader, so the range is hidden and `.eq-fill` draws from the 0 dB detent.
+	 * A ±dB fader must read from its 0 dB detent, not from the left edge, so the
+	 * NeoRange left fill is hidden and the rail paints the span between the
+	 * centre and the handle instead. The one tick marks the detent.
 	 */
-	.eq-fader :global([data-slot='slider-track']) {
-		background: color-mix(in srgb, var(--foreground) 9%, transparent);
+	.eq-fader :global(.neo-range-container) {
+		--neo-range-checked-background: transparent;
+		min-width: 0;
+		width: 100%;
+		padding-inline: 0;
 	}
-	.eq-fader :global([data-slot='slider-range']) {
-		background: transparent;
+	.eq-fader :global(.neo-range-slider .neo-range-rail) {
+		background-image: linear-gradient(
+			to right,
+			transparent min(50%, var(--neo-range-progress)),
+			color-mix(in srgb, var(--brand) 45%, transparent) min(50%, var(--neo-range-progress)),
+			color-mix(in srgb, var(--brand) 45%, transparent) max(50%, var(--neo-range-progress)),
+			transparent max(50%, var(--neo-range-progress))
+		);
 	}
-	.eq-detent,
-	.eq-fill {
-		position: absolute;
-		left: 50%;
-		z-index: 1;
-		border-radius: 999px;
-		pointer-events: none;
+	.eq-fader :global(.neo-range-tick-mark) {
+		width: 2px;
+		height: 10px;
+		border-radius: 1px;
+		background-color: var(--border-strong);
 	}
-	.eq-detent {
-		top: 50%;
-		width: 14px;
-		height: 2px;
-		translate: -50% -50%;
-		background: var(--border-strong);
-	}
-	.eq-fill {
-		width: 4px;
-		translate: -50% 0;
-		background: var(--brand);
-		opacity: 0.55;
-	}
-
-	.eq-fader :global([data-slot='slider-thumb']) {
-		z-index: 2;
-		width: var(--eq-thumb);
-		height: var(--eq-thumb);
-		background: var(--card);
-		border: 2px solid var(--brand);
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
-		cursor: grab;
-		transition:
-			transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-			background-color 200ms ease,
-			box-shadow 200ms ease;
-	}
-	.eq-fader :global([data-slot='slider-thumb']:hover) {
-		transform: scale(1.12);
-	}
-	.eq-fader :global([data-slot='slider-thumb'][data-active]) {
-		cursor: grabbing;
-		transform: scale(1.18);
-		box-shadow:
-			0 2px 8px rgba(0, 0, 0, 0.2),
-			0 0 0 6px var(--brand-soft);
-	}
-	.eq-fader :global([data-slot='slider-thumb']:focus-visible) {
-		box-shadow:
-			0 2px 6px rgba(0, 0, 0, 0.16),
-			0 0 0 4px color-mix(in srgb, var(--ring) 45%, transparent);
-	}
-	.eq.playing .eq-fader :global([data-slot='slider-thumb']) {
+	.eq.playing .eq-fader :global(.neo-range-handle) {
 		background: var(--brand);
 		box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 55%, transparent);
 	}
@@ -453,26 +400,23 @@
 
 	@media (max-width: 520px) {
 		.eq {
-			--eq-stage: 128px;
-			padding-right: 8px;
+			--eq-stage: 100px;
+			padding-right: 10px;
 		}
 		.eq-body {
-			grid-template-columns: 22px minmax(0, 1fr) 1px 48px;
+			grid-template-columns: 22px minmax(0, 1fr);
 		}
-		.eq-label .hz {
+		.eq-row {
+			grid-template-columns: 58px minmax(0, 1fr) 48px;
+		}
+		.eq-name .hz {
 			display: none;
-		}
-		.eq-labels {
-			height: 28px;
-		}
-		.eq-body::after {
-			margin-bottom: 28px;
 		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.eq,
-		.eq-fader :global([data-slot='slider-thumb']) {
+		.eq-point {
 			transition-duration: 1ms;
 		}
 		.eq.playing .eq-graph .area {

@@ -2,9 +2,9 @@ import { ort } from '../../ort';
 import { BaseTTSAdapter } from './BaseTTSAdapter';
 import { cachedFetch, isCached } from './cachedFetch';
 import { phonemize } from './phonemize';
+import { PIPER_VOICES_BASE as VOICES_BASE } from './assets';
 import type { ModelProgress, TtsChoice, TtsModelConfig } from '../../types';
 
-const VOICES_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/';
 
 interface PiperVoiceConfig {
   audio: { sample_rate: number };

@@ -20,6 +20,23 @@ Document coding, naming, file organization, tooling, and communication preferenc
   controls that compete with the learner's transcript or feedback.
 - Keep compact text labels where an icon alone would make an action unclear.
 
+### Components
+- Build UI from @dvcol/neo-svelte (subpath imports). Don't reintroduce shadcn/bits-ui or
+  hand-roll a widget neo provides. Neo colours come from the app tokens via the bridge in
+  `app.css`; set `color="primary"|"error"|…` props rather than hard-coding colours.
+- Text contrast ≥ 3:1 in both themes (body text ≥ 4.5:1); interactive ink gets stronger on hover,
+  never paler. Verify with the contrast scan, not by eye.
+- Interactive feedback ≤ ~100ms, no hover/transition delays (global cap in app.css; don't add
+  slower transitions to controls). A button with its own fill gets `.solid-action`.
+- Selected buttons/toggles/tabs: accent (`--primary`) border via real state — `aria-pressed`,
+  `aria-checked`, `aria-current="page"`, or `.is-selected`; controls with their own selection
+  colours add `.custom-selection`. Selected rail key: accent icon + accent border; other rail icons stay neutral ink (never a
+  teal-tinted colour, or the accent stops meaning "current").
+- Menus: `PopMenu` (not NeoMenu). Tooltips/collapses: spread `quickTooltip`/`quickCollapse`
+  from `$lib/neo`. Interactions answer in ≤ ~180ms; no hover-delayed opens.
+- Relief: raised = `--key` card stock (convex), recessed = `--well` (concave), selected tab =
+  raised key in an inset track. Don't flatten components to the page colour.
+
 ### Colour hierarchy (tokens in `src/app.css`; one meaning per colour)
 - **Paper** `--background`: the crumpled-paper page (Paper Shaders texture), quietest layer.
   **Deep paper** `--rail-bg`: the navigation rail.

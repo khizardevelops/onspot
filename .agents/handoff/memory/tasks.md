@@ -1,10 +1,26 @@
 # Tasks
 
+## Japanese (candidate → approved)
+- [ ] Listening test of CSS10 / Mera / Tsukuyomi-chan; choose default + any processing profile.
+- [ ] whisper-small q4 Japanese transcript review (CER) on real human-transcribed learner speech.
+- [ ] Record evidence in docs/benchmarks, flip `approval.status`, test the download in a prod build.
+- [ ] Verify a real Japanese evaluation with an LLM key (corrections offsets on unspaced text).
+- [ ] Optional: furigana (ruby) for kanji in transcripts/corrections, neo-styled.
+
 ## Current priority — Phase 3: BYOC sync
 - [ ] Google Drive OAuth 2.0 PKCE, client-side upload/download.
 - [ ] WebDAV support for Nextcloud, ownCloud, and pCloud.
-- [ ] SQLite **import** (restore a `.sqlite` backup). Legacy format-1 JSON restore is now available
-  in Settings → Storage and merges safely; importing the current raw `.sqlite` export remains open.
+- [x] SQLite **import** (restore a `.sqlite` backup). Settings → Storage → Restore database and
+  History's empty state replace the local DB from the exported file. Legacy format-1 JSON restore
+  remains available and merges safely. Browser-verified 17/17 + 7/7; the Tauri path is untested.
+
+## UI library follow-ups (neo-svelte, 2026-09-24)
+- [x] Replace shadcn-svelte with @dvcol/neo-svelte across the app; remove shadcn/bits-ui.
+- [ ] Visually check LanguageDownloadBar during a real download and LanguagePicker (forced).
+- [ ] Revisit when neo-svelte 2.0 (cascade layers, NeoDialogConfirm) is published: simplify the
+  specificity overrides and the composed confirm dialogs.
+- [ ] Sweep remaining hand-rolled buttons (AttemptStream, AudioBar, Transcript word buttons) for
+  neo equivalents where they don't fight the conveyor/transcript layout.
 
 ## Language system follow-ups
 - [ ] Evaluate and approve the next language (STT + voice) with a human quality pass, then add one
@@ -18,9 +34,9 @@
   voice preview, SQLite export. Browser-verified (37 + 12 checks, export verified separately).
 - [x] History neumorphic cards + disclosed search options; Practice neumorphic Exam/Casual switch;
   feedback sidebar width fix; Paper texture background + rail; rail buttons as analogue keys.
-- [ ] Run the desktop (Tauri) export once for real: dialog save, `VACUUM INTO` temp file, fs
-  read/write. `cargo check` passes but the flow is not runtime-tested.
-- [ ] SQLite **import** (restore a `.sqlite` backup) to pair with the new export.
+- [ ] Run the desktop (Tauri) export and import once for real: dialog save, `VACUUM INTO` temp
+  file, fs read/write, close + overwrite `onspot.db`, reopen. `cargo check` passes but neither
+  flow is runtime-tested.
 - [x] Advanced Voice audio: in-page General/Advanced toggle, per-voice volume + 3-band EQ,
   reset-to-approved, tuned cache keys. Browser-verified (26/26), including
   neutral→tuned→neutral cache behavior.

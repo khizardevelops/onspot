@@ -3,7 +3,7 @@ import { getDatabaseAdapter } from '$lib/adapters/db';
 import type { RunMode } from '$lib/adapters/db';
 import type { LlmModelId, LlmProviderId } from '$lib/adapters/llm';
 import { getProvider } from '$lib/adapters/llm';
-import { APPROVED_LANGUAGES, DEFAULT_LANGUAGE_ID, NEUTRAL_TUNING, type VoiceTuning } from '$lib/languages';
+import { OFFERED_LANGUAGES, DEFAULT_LANGUAGE_ID, NEUTRAL_TUNING, type VoiceTuning } from '$lib/languages';
 
 /** How much translation to show under an attempt. */
 export type TranslationMode = 'off' | 'idiomatic' | 'all';
@@ -100,7 +100,7 @@ export async function initSettings(): Promise<void> {
 	// Settings written before the language registry used ids stored the English
 	// name ("French"). Normalise to the registry id, or clear it so the first-run
 	// picker appears.
-	const match = APPROVED_LANGUAGES.find(
+	const match = OFFERED_LANGUAGES.find(
 		(language) => language.id === loaded.targetLanguage || language.name === loaded.targetLanguage
 	);
 	// A corrupt/obsolete setting must not leave the app without a language. When

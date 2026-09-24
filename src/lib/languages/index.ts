@@ -9,8 +9,9 @@
  * Rules carried from the model lab (see .agents/handoff):
  * - No model is listed as approved until a human has tested its output and the
  *   evidence file exists under `docs/`.
- * - A language with `approval.status !== 'approved'` is not shown to users and
- *   is filtered out of `APPROVED_LANGUAGES` below.
+ * - A language with `approval.status !== 'approved'` is not shown to users of
+ *   production builds (see `OFFERED_LANGUAGES`; dev builds show candidates so
+ *   they can be tested).
  * - Nothing here is hosted by the app. Every entry is a download descriptor;
  *   the bytes are fetched from the public model hosts by the user's device.
  */
@@ -93,16 +94,35 @@ export interface LanguageStt {
 	approval: LanguageApproval;
 }
 
+/**
+ * How a voice turns text into speech. Both run in the lazy TTS worker, on the
+ * worker's own onnxruntime-web instance.
+ *   piper       rhasspy Piper VITS; eSpeak G2P (`espeakVoice`) — Latin-script languages
+ *   piper-plus  piper-plus VITS; OpenJTalk (jpreprocess) G2P compiled to WASM, with
+ *               pitch-accent prosody features — Japanese
+ */
+export type VoiceEngine = 'piper' | 'piper-plus';
+
 export interface LanguageVoice {
 	id: string;
 	name: string;
-	/** Path inside `rhasspy/piper-voices`. */
+	/** Defaults to `piper`. */
+	engine?: VoiceEngine;
+	/**
+	 * `piper`: path inside `rhasspy/piper-voices`.
+	 * `piper-plus`: the ONNX file's full URL (its `config.json` sits beside it).
+	 */
 	voicePath: string;
 	downloadSize: string;
-	/** Approximate download size in bytes, used for the combined progress bar. */
+	/**
+	 * Approximate download size in bytes, used for the combined progress bar.
+	 * Includes the voice's phonemizer when it is a separate download.
+	 */
 	downloadBytes: number;
-	/** eSpeak voice code used by the phonemizer, e.g. `fr`. */
+	/** eSpeak voice code used by the Piper phonemizer, e.g. `fr`. Unused by piper-plus. */
 	espeakVoice: string;
+	/** piper-plus only: the `language_id_map` key the voice is driven with, e.g. `ja`. */
+	modelLanguage?: string;
 	/** `null` leaves the raw model output untouched. */
 	processing: AudioProcessingProfile | null;
 	approval: LanguageApproval;
@@ -113,9 +133,20 @@ export interface LanguagePrompt {
 	text: string;
 }
 
+/**
+ * How the language is written, which decides how transcripts are split into
+ * clickable words and sentences.
+ *   spaced    words are separated by spaces (French)
+ *   unspaced  no spaces between words; split with `Intl.Segmenter` (Japanese)
+ */
+export type WritingSystem = 'spaced' | 'unspaced';
+
 export interface LanguageDefinition {
 	/** ISO 639-1 code, stored in settings and used as the DB key. */
 	id: string;
+	/** BCP 47 locale for `Intl.Segmenter` and similar APIs. */
+	locale: string;
+	writing: WritingSystem;
 	/** English name, e.g. `French`. */
 	name: string;
 	/** Endonym shown under the English name, e.g. `Français`. */
@@ -149,6 +180,8 @@ const TOM_PROCESSING: AudioProcessingProfile = {
 
 const FRENCH: LanguageDefinition = {
 	id: 'fr',
+	locale: 'fr',
+	writing: 'spaced',
 	name: 'French',
 	nativeName: 'Français',
 	translationTarget: 'English',
@@ -249,24 +282,136 @@ const FRENCH: LanguageDefinition = {
 	]
 };
 
-/** Every language that has ever been declared, approved or not. */
-export const LANGUAGES: readonly LanguageDefinition[] = [FRENCH];
+/**
+ * Japanese G2P for every piper-plus voice: the OpenJTalk/jpreprocess
+ * phonemizer (NAIST-JDIC bundled) compiled to WASM by piper-plus. One shared
+ * 60 MB download (≈20 MB compressed), verified by SHA-256 before it runs;
+ * see `adapters/tts/japaneseG2p.ts`.
+ */
+export const JAPANESE_G2P_BYTES = 60_077_874;
+/** What the dictionary costs over the network: the CDN compresses it. */
+export const JAPANESE_G2P_TRANSFER_BYTES = 19_806_684;
 
-/** Languages offered to users. Only human-approved entries pass. */
+/** Recorded for a candidate: nothing has been human-tested yet. */
+const JAPANESE_PENDING: LanguageApproval = {
+	status: 'candidate',
+	by: 'Not yet tested — needs a human listening test / transcript review',
+	at: '2026-09-25',
+	evidence: 'docs/benchmarks/tts.md, docs/benchmarks/stt.md (Japanese sections to be added)'
+};
+
+const PIPER_PLUS_BASE = 'https://huggingface.co';
+
+const JAPANESE: LanguageDefinition = {
+	id: 'ja',
+	locale: 'ja',
+	writing: 'unspaced',
+	name: 'Japanese',
+	nativeName: '日本語',
+	translationTarget: 'English',
+	approval: JAPANESE_PENDING,
+	stt: {
+		// The same multilingual weights as French: already-downloaded French data
+		// is reused, only the decoder language changes.
+		engine: 'whisper',
+		modelRepoId: 'onnx-community/whisper-small',
+		dtype: 'q4',
+		decoderLanguage: 'japanese',
+		code: 'ja',
+		downloadBytes: 299_000_000,
+		approval: JAPANESE_PENDING
+	},
+	voices: [
+		{
+			id: 'piper-plus-css10-ja',
+			name: 'CSS10 (F) · piper-plus',
+			engine: 'piper-plus',
+			voicePath: `${PIPER_PLUS_BASE}/ayousanz/piper-plus-css10-ja-6lang/resolve/main/css10-ja-6lang-fp16.onnx`,
+			downloadSize: '~40 MB voice + 20 MB Japanese dictionary · 22 kHz',
+			downloadBytes: 39_700_000 + JAPANESE_G2P_BYTES,
+			espeakVoice: '',
+			modelLanguage: 'ja',
+			processing: null,
+			approval: {
+				...JAPANESE_PENDING,
+				by: `${JAPANESE_PENDING.by}. Dataset: CSS10 Japanese (public-domain audiobook)`
+			}
+		},
+		{
+			id: 'piper-plus-mera',
+			name: 'Mera (F) · piper-plus',
+			engine: 'piper-plus',
+			voicePath: `${PIPER_PLUS_BASE}/kizuna-intelligence/piper-plus-mera-multilingual/resolve/main/mera-multilingual.onnx`,
+			downloadSize: '~39 MB voice + 20 MB Japanese dictionary · 22 kHz',
+			downloadBytes: 39_400_000 + JAPANESE_G2P_BYTES,
+			espeakVoice: '',
+			modelLanguage: 'ja',
+			processing: null,
+			approval: { ...JAPANESE_PENDING, by: `${JAPANESE_PENDING.by}. Licence: Apache-2.0` }
+		},
+		{
+			id: 'piper-plus-tsukuyomi',
+			name: 'Tsukuyomi-chan (F) · piper-plus',
+			engine: 'piper-plus',
+			voicePath: `${PIPER_PLUS_BASE}/ayousanz/piper-plus-tsukuyomi-chan/resolve/main/tsukuyomi-chan-6lang-fp16.onnx`,
+			downloadSize: '~40 MB voice + 20 MB Japanese dictionary · 22 kHz',
+			downloadBytes: 39_700_000 + JAPANESE_G2P_BYTES,
+			espeakVoice: '',
+			modelLanguage: 'ja',
+			processing: null,
+			approval: {
+				...JAPANESE_PENDING,
+				by: `${JAPANESE_PENDING.by}. Licence: Tsukuyomi-chan corpus terms (credit required)`
+			}
+		}
+	],
+	defaultVoice: 'piper-plus-css10-ja',
+	preview:
+		'こんにちは。これから一緒に話す練習をする声です。毎回の録音のあとで、発音とリズムを直した文を読み上げます。',
+	prompts: [
+		{ title: 'Morning routine', text: 'Describe your morning routine.' },
+		{ title: 'Favorite city', text: 'Talk about your favorite city.' },
+		{ title: 'Last weekend', text: 'What did you do last weekend?' },
+		{ title: 'Your hobby', text: 'Talk about a hobby you enjoy and why.' },
+		{ title: 'A memorable meal', text: "Describe a meal you'll never forget." },
+		{ title: 'Your hometown', text: 'Describe the town where you grew up.' },
+		{ title: 'A trip to Japan', text: 'Plan a short trip in Japan: where would you go and why?' },
+		{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
+	]
+};
+
+/** Every language that has ever been declared, approved or not. */
+export const LANGUAGES: readonly LanguageDefinition[] = [FRENCH, JAPANESE];
+
+/** Human-approved languages. */
 export const APPROVED_LANGUAGES: readonly LanguageDefinition[] = LANGUAGES.filter(
 	(language) => language.approval.status === 'approved'
 );
+
+/**
+ * Languages the app offers. Production builds offer approved languages only.
+ * Development builds also offer candidates, marked as such, so the human
+ * listening test / transcript review that approval needs can be run in the
+ * real app (docs/languages.md, step 5).
+ */
+export const OFFERED_LANGUAGES: readonly LanguageDefinition[] = import.meta.env.DEV
+	? LANGUAGES
+	: APPROVED_LANGUAGES;
+
+export function isCandidate(language: LanguageDefinition): boolean {
+	return language.approval.status !== 'approved';
+}
 
 export const DEFAULT_LANGUAGE_ID = FRENCH.id;
 
 export function getLanguage(id: string | null | undefined): LanguageDefinition | undefined {
 	if (!id) return undefined;
-	return APPROVED_LANGUAGES.find((language) => language.id === id);
+	return OFFERED_LANGUAGES.find((language) => language.id === id);
 }
 
 export function requireLanguage(id: string | null | undefined): LanguageDefinition {
-	const language = getLanguage(id) ?? APPROVED_LANGUAGES[0];
-	if (!language) throw new Error('No approved languages are configured.');
+	const language = getLanguage(id) ?? OFFERED_LANGUAGES[0];
+	if (!language) throw new Error('No languages are configured.');
 	return language;
 }
 
@@ -283,7 +428,7 @@ export function voicesFor(languageId: string | null | undefined): LanguageVoice[
 	return getLanguage(languageId)?.voices ?? [];
 }
 
-/** Total bytes the user downloads for one language (STT + default voice). */
+/** Total bytes the user downloads for one language (STT + default voice, incl. its phonemizer). */
 export function languageDownloadBytes(language: LanguageDefinition): number {
 	const voice =
 		language.voices.find((entry) => entry.id === language.defaultVoice) ?? language.voices[0];

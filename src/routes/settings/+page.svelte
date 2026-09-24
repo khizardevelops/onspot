@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { quickCollapse } from '$lib/neo';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
@@ -15,7 +16,8 @@
 		languageData
 	} from '$lib/stores/languageData';
 	import {
-		APPROVED_LANGUAGES,
+		OFFERED_LANGUAGES,
+		isCandidate,
 		getLanguage,
 		getVoice,
 		isNeutralTuning,
@@ -38,25 +40,25 @@
 	import { exportDatabaseFile, importLegacyJsonBackup } from '$lib/utils/export';
 	import { toast } from '$lib/stores/toast';
 	import VoicePreview from '$lib/components/VoicePreview.svelte';
+	import RestoreDatabaseButton from '$lib/components/RestoreDatabaseButton.svelte';
 	import SettingsSection from '$lib/components/settings/SettingsSection.svelte';
 	import SettingRow from '$lib/components/settings/SettingRow.svelte';
 	import SecretInput from '$lib/components/settings/SecretInput.svelte';
 	import VoiceEqualizer from '$lib/components/settings/VoiceEqualizer.svelte';
-	import { Input } from '$lib/components/ui/input';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Progress } from '$lib/components/ui/progress';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as Item from '$lib/components/ui/item';
-	import * as Select from '$lib/components/ui/select';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
+	import SettingSelect from '$lib/components/settings/SettingSelect.svelte';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoCard } from '@dvcol/neo-svelte/cards';
+	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
+	import { NeoInput } from '@dvcol/neo-svelte/inputs';
+	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
+	import { NeoPill } from '@dvcol/neo-svelte/pill';
+	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import {
 		AlertTriangle,
 		Check,
 		Download,
 		ExternalLink,
 		HardDrive,
-		Loader2,
 		RefreshCw,
 		RotateCcw,
 		Upload,
@@ -64,8 +66,7 @@
 	} from '@lucide/svelte';
 
 	const levels = ['A2', 'B1', 'B2', 'C1'];
-	const SELECT_CLASS = 'w-full bg-background data-[size=default]:h-9 @md/field-group:w-72';
-	const INPUT_CLASS = 'h-9 w-full @md/field-group:w-72';
+	const INPUT_CLASS = 'w-full @md/field-group:w-72';
 
 	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
 	const language = $derived(getLanguage($appSettings.targetLanguage));
@@ -237,114 +238,117 @@
 
 <div class="h-full overflow-y-auto">
 	<div class="mx-auto max-w-[760px] px-4 pt-10 pb-16 sm:px-8 sm:pt-14">
-		<h1 class="font-serif text-2xl font-medium">Settings</h1>
+		<h1 class="page-title font-serif text-2xl font-medium">Settings</h1>
 		<p class="mt-1.5 mb-8 max-w-xl text-sm leading-relaxed text-muted-foreground">
 			Everything runs on this device unless you add a cloud key. Keys never leave your device and
 			are never written to the synced database.
 		</p>
 
-		<ToggleGroup.Root
-			type="single"
-			bind:value={() => (showAdvanced ? 'advanced' : 'general'),
-			(next) => {
-				if (next === 'advanced') showAdvancedSettings();
-				else if (next === 'general') showAdvanced = false;
-			}}
-			class="segmented paper-grain relative mb-10 grid w-full grid-cols-2 rounded-xl bg-control p-1"
-			aria-label="Settings detail level"
-		>
-			<span class="segmented-pill paper-grain" class:right={showAdvanced} aria-hidden="true"></span>
-			<ToggleGroup.Item value="general" class="segment">General</ToggleGroup.Item>
-			<ToggleGroup.Item value="advanced" class="segment">Advanced</ToggleGroup.Item>
-		</ToggleGroup.Root>
+		<div class="detail-tabs mb-10">
+			<NeoTabs
+				bind:active={() => (showAdvanced ? 'advanced' : 'general'),
+				(next) => {
+					if (next === 'advanced') showAdvancedSettings();
+					else if (next === 'general') showAdvanced = false;
+				}}
+				rounded
+				slide
+				aria-label="Settings detail level"
+			>
+				<NeoTab tabId="general" value="general">General</NeoTab>
+				<NeoTab tabId="advanced" value="advanced">Advanced</NeoTab>
+			</NeoTabs>
+		</div>
 
 		<!-- LANGUAGE -->
 		<SettingsSection id="language" title="Language">
 			<SettingRow label="I am studying" for="targetLanguage">
-				<Select.Root
-					type="single"
-					items={APPROVED_LANGUAGES.map((entry) => ({
+				<SettingSelect id="targetLanguage" label="Language you are studying" options={OFFERED_LANGUAGES.map((entry) => ({
 						value: entry.id,
-						label: `${entry.name} (${entry.nativeName})`
-					}))}
-					value={$appSettings.targetLanguage}
-					onValueChange={(value) => void setTargetLanguage(value)}
-				>
-					<Select.Trigger id="targetLanguage" aria-label="Language you are studying" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-					<Select.Content>
-						{#each APPROVED_LANGUAGES as entry (entry.id)}
-							<Select.Item value={entry.id} label={`${entry.name} (${entry.nativeName})`} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+						label: `${entry.name} (${entry.nativeName})${isCandidate(entry) ? ' · candidate, not yet approved' : ''}`
+					}))} value={$appSettings.targetLanguage} onchange={(value) => void setTargetLanguage(value)} />
 			</SettingRow>
 			<SettingRow label="Your level" for="level">
-				<Select.Root type="single" items={levels.map((level) => ({ value: level, label: level }))} value={$appSettings.level} onValueChange={(value) => setSetting('level', value)}>
-					<Select.Trigger id="level" aria-label="Your level" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-					<Select.Content>
-						{#each levels as level (level)}<Select.Item value={level} label={level} />{/each}
-					</Select.Content>
-				</Select.Root>
+				<SettingSelect id="level" label="Your level" options={levels.map((level) => ({ value: level, label: level }))} value={$appSettings.level} onchange={(value) => setSetting('level', value)} />
 			</SettingRow>
 			<SettingRow label="Default mode" for="defaultMode">
-				<Select.Root type="single" items={[{ value: 'exam', label: 'Exam' }, { value: 'casual', label: 'Casual' }]} value={$appSettings.mode} onValueChange={(value) => setSetting('mode', value as 'exam' | 'casual')}>
-					<Select.Trigger id="defaultMode" aria-label="Default mode" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-					<Select.Content>
-						<Select.Item value="exam" label="Exam" />
-						<Select.Item value="casual" label="Casual" />
-					</Select.Content>
-				</Select.Root>
+				<SettingSelect id="defaultMode" label="Default mode" options={[{ value: 'exam', label: 'Exam' }, { value: 'casual', label: 'Casual' }]} value={$appSettings.mode} onchange={(value) => setSetting('mode', value as 'exam' | 'casual')} />
 			</SettingRow>
 
-			<Item.Root variant="muted" class="info-item my-4">
-				<Item.Content class="min-w-56">
-					<Item.Title class="font-semibold">
+			<NeoCard class="info-item my-4" rounded elevation={-1} spacing="var(--info-spacing)" width="100%">
+				<div class="info-body">
+				<div class="info-content">
+					<p class="flex flex-wrap items-center gap-2 text-sm font-semibold">
 						{language?.name ?? 'Language'} data
 						{#if dataReady}
-							<Badge class="bg-[var(--good-soft)] text-[var(--good)]">Installed</Badge>
+							<NeoPill size="small" rounded elevation={0} color="success" tinted>Installed</NeoPill>
 						{:else if downloading}
-							<Badge variant="secondary">{Math.round($languageData.progress)}%</Badge>
+							<NeoPill size="small" rounded elevation={0}>{Math.round($languageData.progress)}%</NeoPill>
 						{:else if $languageData.status === 'checking'}
-							<Badge variant="secondary">Checking…</Badge>
+							<NeoPill size="small" rounded elevation={0}>Checking…</NeoPill>
 						{:else}
-							<Badge variant="outline">Not installed</Badge>
+							<NeoPill size="small" rounded elevation={0}>Not installed</NeoPill>
 						{/if}
-					</Item.Title>
-					<Item.Description class="line-clamp-none max-w-md text-xs">
-						The approved speech-recognition model and voice
-						{#if language}
-							({language.stt.modelRepoId} and {voices[0]?.label ?? language.defaultVoice},
-							about {formatBytes(languageDownloadBytes(language))})
-						{/if}
+					</p>
+					<p class="max-w-md text-xs leading-normal text-muted-foreground">
+						The speech-recognition model and voice
+						{#if language}({language.stt.modelRepoId} and {voices[0]?.label ?? language.defaultVoice}){/if}
 						download from the internet onto this device. Nothing is bundled with the app.
-					</Item.Description>
-				</Item.Content>
-				<Item.Actions>
+					</p>
+					{#if language}
+						<!-- What installing costs on this device, from the last cache check. Languages share
+						     assets (the same Whisper model), so this is only what is actually missing. -->
+						<p class="storage-line max-w-md text-xs leading-normal">
+							{#if $languageData.languageId === language.id && $languageData.pending}
+								{@const pending = $languageData.pending}
+								{#if pending.storage === 0}
+									Everything is on this device; nothing more to download.
+								{:else}
+									<strong>Adds about {formatBytes(pending.storage)}</strong> to this device ·
+									about {formatBytes(pending.transfer)} to download.
+									{#if pending.stt === 0}
+										The speech model is already here (shared with another language), so only the voice{language.voices.some((v) => v.engine === 'piper-plus') ? ' and its Japanese dictionary are' : ' is'} new.
+									{/if}
+								{/if}
+							{:else}
+								Up to about {formatBytes(languageDownloadBytes(language))} on this device; less if another language already installed the speech model.
+							{/if}
+						</p>
+					{/if}
+				</div>
+				<div class="info-actions">
 					{#if downloading}
-						<Button variant="outline" size="lg" class="px-3.5" onclick={cancelLanguageDownload}>
-							<X class="size-4" /> Cancel
-						</Button>
+						<NeoButton rounded onclick={cancelLanguageDownload}>
+							{#snippet icon()}<X class="size-4" />{/snippet}
+							Cancel
+						</NeoButton>
 					{:else if dataReady}
-						<Button variant="outline" size="lg" class="px-3.5 text-[var(--good)]" disabled>
-							<Check class="size-4" /> Downloaded
-						</Button>
+						<NeoButton rounded color="success" disabled>
+							{#snippet icon()}<Check class="size-4" />{/snippet}
+							Downloaded
+						</NeoButton>
 					{:else}
-						<Button
-							size="lg"
-							class="px-3.5"
+						<NeoButton
+							rounded
+							color="primary"
 							disabled={!language}
 							onclick={() => void downloadLanguageData(language?.id)}
 						>
-							<Download class="size-4" /> Download
-						</Button>
+							{#snippet icon()}<Download class="size-4" />{/snippet}
+							Download
+						</NeoButton>
 					{/if}
-				</Item.Actions>
+				</div>
+				</div>
 				{#if downloading || dataError}
-					<Item.Footer class="flex-col items-stretch">
+					<div class="info-footer">
 						{#if downloading}
-							<Progress
+							<NeoProgressBar
 								value={$languageData.progress}
-								class="h-1.5 bg-[var(--surface-2)] [&>div]:bg-[linear-gradient(90deg,var(--brand),var(--brand-2))] [&>div]:duration-300"
+								rounded
+								height="6px"
+								color="var(--brand)"
+								aria-label="Language data download progress"
 							/>
 							<p class="text-xs text-muted-foreground">{$languageData.statusText || 'Fetching model files…'}</p>
 						{/if}
@@ -354,22 +358,15 @@
 								<span class="break-words">{dataError}</span>
 							</p>
 						{/if}
-					</Item.Footer>
+					</div>
 				{/if}
-			</Item.Root>
+			</NeoCard>
 		</SettingsSection>
 
 		<!-- AI PROVIDER -->
 		<SettingsSection id="ai-provider" title="AI provider (BYOK)">
 			<SettingRow label="Provider" for="provider">
-				<Select.Root type="single" items={Object.values(LLM_PROVIDERS).map((provider) => ({ value: provider.id, label: provider.name }))} value={$appSettings.llmProvider} onValueChange={onProviderChange}>
-					<Select.Trigger id="provider" aria-label="Provider" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-					<Select.Content>
-						{#each Object.values(LLM_PROVIDERS) as provider (provider.id)}
-							<Select.Item value={provider.id} label={provider.name} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<SettingSelect id="provider" label="Provider" options={Object.values(LLM_PROVIDERS).map((provider) => ({ value: provider.id, label: provider.name }))} value={$appSettings.llmProvider} onchange={onProviderChange} />
 			</SettingRow>
 
 			{#if $appSettings.llmProvider === 'groq'}
@@ -382,14 +379,19 @@
 				</SettingRow>
 			{:else}
 				<SettingRow label="Base URL" for="baseUrl">
-					<Input
-						id="baseUrl"
-						class={INPUT_CLASS}
-						placeholder="https://…/v1"
-						value={$appSettings.customBaseUrl}
-						oninput={(event: Event) =>
-							setSetting('customBaseUrl', (event.target as HTMLInputElement).value)}
-					/>
+					<div class={INPUT_CLASS}>
+						<NeoInput
+							id="baseUrl"
+							rounded
+							pressed
+							elevation={-2}
+							width="100%"
+							placeholder="https://…/v1"
+							value={$appSettings.customBaseUrl}
+							oninput={(event: Event) =>
+								setSetting('customBaseUrl', (event.target as HTMLInputElement).value)}
+						/>
+					</div>
 				</SettingRow>
 				<SettingRow label="API key" for="customKey">
 					<SecretInput id="customKey" label="API key" bind:value={$customApiKey} />
@@ -398,45 +400,44 @@
 
 			{#if $appSettings.llmProvider === 'custom'}
 				<SettingRow label="Model name" for="customModel">
-					<Input
-						id="customModel"
-						class={INPUT_CLASS}
-						placeholder="e.g. my-model"
-						value={$appSettings.customModel}
-						oninput={(event: Event) =>
-							setSetting('customModel', (event.target as HTMLInputElement).value)}
-					/>
+					<div class={INPUT_CLASS}>
+						<NeoInput
+							id="customModel"
+							rounded
+							pressed
+							elevation={-2}
+							width="100%"
+							placeholder="e.g. my-model"
+							value={$appSettings.customModel}
+							oninput={(event: Event) =>
+								setSetting('customModel', (event.target as HTMLInputElement).value)}
+						/>
+					</div>
 				</SettingRow>
 			{:else}
 				<SettingRow label="Model" for="model">
-					<Select.Root type="single" items={modelOptions.map((option) => ({ value: option.id, label: `${option.label}${option.note ? ` — ${option.note}` : ''}` }))} value={$appSettings.llmModel} onValueChange={(value) => setSetting('llmModel', value)}>
-						<Select.Trigger id="model" aria-label="Model" class={`${SELECT_CLASS} @md/field-group:w-80`}><Select.Value /></Select.Trigger>
-						<Select.Content class="max-w-[min(24rem,calc(100vw-2rem))]">
-							{#each modelOptions as option (option.id)}
-								<Select.Item value={option.id} label={`${option.label}${option.note ? ` — ${option.note}` : ''}`} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+					<SettingSelect id="model" label="Model" options={modelOptions.map((option) => ({ value: option.id, label: `${option.label}${option.note ? ` — ${option.note}` : ''}` }))} value={$appSettings.llmModel} onchange={(value) => setSetting('llmModel', value)} class="@md/field-group:w-80" />
 					{#snippet below()}
 						<div class="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 @md/field-group:justify-end">
 							{#if refreshMessage}
 								<span class="min-w-0 text-xs break-words text-muted-foreground">{refreshMessage}</span>
 							{/if}
-							<Button variant="outline" size="sm" onclick={refreshModels} disabled={refreshing}>
-								<RefreshCw class="size-3.5 {refreshing ? 'animate-spin' : ''}" />
+							<NeoButton rounded class="small-button" onclick={refreshModels} disabled={refreshing}>
+								{#snippet icon()}<RefreshCw class="size-3.5 {refreshing ? 'animate-spin' : ''}" />{/snippet}
 								{refreshing ? 'Refreshing…' : 'Refresh model list'}
-							</Button>
+							</NeoButton>
 						</div>
 					{/snippet}
 				</SettingRow>
 			{/if}
 
-			<Item.Root variant="muted" class="info-item my-4 items-start">
-				<Item.Content class="min-w-56">
-					<Item.Description class="line-clamp-none max-w-md text-xs">
+			<NeoCard class="info-item my-4" rounded elevation={-1} spacing="var(--info-spacing)" width="100%">
+				<div class="info-body items-start">
+				<div class="info-content">
+					<p class="max-w-md text-xs leading-normal text-muted-foreground">
 						{providerConfig.note ??
 							'Sends one tiny request with your key and model, exactly as evaluation does.'}
-					</Item.Description>
+					</p>
 					{#if providerConfig.keyUrl || providerConfig.modelsUrl}
 						<div class="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-xs">
 							{#if providerConfig.keyUrl}
@@ -451,15 +452,15 @@
 							{/if}
 						</div>
 					{/if}
-				</Item.Content>
-				<Item.Actions>
-					<Button variant="outline" size="lg" class="px-3.5" onclick={runConnectionTest} disabled={testing}>
-						{#if testing}<Loader2 class="size-4 animate-spin" />{/if}
+				</div>
+				<div class="info-actions">
+					<NeoButton rounded onclick={runConnectionTest} loading={testing}>
 						{testing ? 'Testing…' : 'Test connection'}
-					</Button>
-				</Item.Actions>
+					</NeoButton>
+				</div>
+				</div>
 				{#if testOk !== null}
-					<Item.Footer>
+					<div class="info-footer">
 						<p
 							class="flex min-w-0 items-start gap-1.5 text-xs {testOk
 								? 'text-[var(--good)]'
@@ -470,9 +471,9 @@
 								/>{/if}
 							<span class="max-h-32 overflow-y-auto break-words whitespace-pre-wrap">{testMessage}</span>
 						</p>
-					</Item.Footer>
+					</div>
 				{/if}
-			</Item.Root>
+			</NeoCard>
 		</SettingsSection>
 
 		<!-- TRANSCRIPTION -->
@@ -484,13 +485,7 @@
 					? 'Runs on this device. Your recordings never leave it.'
 					: 'Recordings are sent to Groq with your key.'}
 			>
-				<Select.Root type="single" items={[{ value: 'local', label: 'Local (Whisper Small)' }, { value: 'cloud', label: 'Cloud (Groq)' }]} value={$appSettings.sttMode} onValueChange={(value) => setSetting('sttMode', value as 'local' | 'cloud')}>
-					<Select.Trigger id="sttMode" aria-label="Speech recognition" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-					<Select.Content>
-						<Select.Item value="local" label="Local (Whisper Small)" />
-						<Select.Item value="cloud" label="Cloud (Groq)" />
-					</Select.Content>
-				</Select.Root>
+				<SettingSelect id="sttMode" label="Speech recognition" options={[{ value: 'local', label: 'Local (Whisper Small)' }, { value: 'cloud', label: 'Cloud (Groq)' }]} value={$appSettings.sttMode} onchange={(value) => setSetting('sttMode', value as 'local' | 'cloud')} />
 			</SettingRow>
 			{#if $appSettings.sttMode === 'cloud'}
 				{#if $appSettings.llmProvider === 'groq'}
@@ -514,23 +509,12 @@
 					? 'Piper runs on this device.'
 					: 'Text is sent to OpenAI with your key.'}
 			>
-				<Select.Root type="single" items={[{ value: 'local', label: 'Local (Piper)' }, { value: 'cloud', label: 'Cloud (OpenAI)' }]} value={$appSettings.ttsMode} onValueChange={(value) => setSetting('ttsMode', value as 'local' | 'cloud')}>
-					<Select.Trigger id="ttsMode" aria-label="Speech engine" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-					<Select.Content>
-						<Select.Item value="local" label="Local (Piper)" />
-						<Select.Item value="cloud" label="Cloud (OpenAI)" />
-					</Select.Content>
-				</Select.Root>
+				<SettingSelect id="ttsMode" label="Speech engine" options={[{ value: 'local', label: 'Local (Piper)' }, { value: 'cloud', label: 'Cloud (OpenAI)' }]} value={$appSettings.ttsMode} onchange={(value) => setSetting('ttsMode', value as 'local' | 'cloud')} />
 			</SettingRow>
 
 			{#if $appSettings.ttsMode === 'local'}
 				<SettingRow label="Voice" for="ttsVoice">
-					<Select.Root type="single" items={voices.map((voice) => ({ value: voice.id, label: voice.label }))} value={$appSettings.ttsVoice} onValueChange={(value) => setSetting('ttsVoice', value)}>
-						<Select.Trigger id="ttsVoice" aria-label="Voice" class={SELECT_CLASS}><Select.Value /></Select.Trigger>
-						<Select.Content>
-							{#each voices as voice (voice.id)}<Select.Item value={voice.id} label={voice.label} />{/each}
-						</Select.Content>
-					</Select.Root>
+					<SettingSelect id="ttsVoice" label="Voice" options={voices.map((voice) => ({ value: voice.id, label: voice.label }))} value={$appSettings.ttsVoice} onchange={(value) => setSetting('ttsVoice', value)} />
 					{#snippet below()}
 						{#if !showAdvanced && tuningActive}
 							<p class="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground @md/field-group:justify-end">
@@ -546,8 +530,7 @@
 				</SettingRow>
 			{/if}
 
-			<Collapsible.Root bind:open={showAdvanced}>
-				<Collapsible.Content class="advanced-settings overflow-hidden">
+			<NeoCollapse transition={quickCollapse} bind:open={showAdvanced} standalone class="advanced-settings">
 					<div bind:this={advancedSection} class="border-b pt-4 pb-5">
 						<div class="mb-3.5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 							<div class="min-w-0">
@@ -557,15 +540,15 @@
 									and preview.
 								</p>
 							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								class="self-start sm:self-auto"
+							<NeoButton
+								rounded
+								class="small-button self-start sm:self-auto"
 								disabled={!tuningActive || $appSettings.ttsMode !== 'local'}
 								onclick={() => resetVoiceTuning($appSettings.ttsVoice)}
 							>
-								<RotateCcw class="size-3.5" /> Reset to approved sound
-							</Button>
+								{#snippet icon()}<RotateCcw class="size-3.5" />{/snippet}
+								Reset to approved sound
+							</NeoButton>
 						</div>
 
 						{#if $appSettings.ttsMode === 'local'}
@@ -575,18 +558,15 @@
 								zero it.
 							</p>
 						{:else}
-							<Item.Root variant="muted" class="info-item">
-								<Item.Content class="min-w-56">
-									<Item.Description class="line-clamp-none text-xs text-[var(--warn)]">
-										The equalizer tunes local Piper voices. Switch the speech engine to Local to
-										use it.
-									</Item.Description>
-								</Item.Content>
-							</Item.Root>
+							<NeoCard class="info-item" rounded elevation={-1} spacing="var(--info-spacing)" width="100%">
+								<p class="text-xs text-[var(--warn)]">
+									The equalizer tunes local Piper voices. Switch the speech engine to Local to use
+									it.
+								</p>
+							</NeoCard>
 						{/if}
 					</div>
-				</Collapsible.Content>
-			</Collapsible.Root>
+			</NeoCollapse>
 
 			<div class="my-4">
 				<VoicePreview />
@@ -599,84 +579,113 @@
 				label="Database"
 				hint="Sessions, attempts, corrections, recordings and cached voice audio are stored locally."
 			>
-				<Badge variant="outline" class="h-8 gap-1.5 rounded-lg px-3 text-muted-foreground">
-					<HardDrive class="size-3.5!" /> On this device (SQLite)
-				</Badge>
+				<NeoPill rounded elevation={-1} class="text-muted-foreground">
+					{#snippet icon()}<HardDrive class="size-3.5" />{/snippet}
+					On this device (SQLite)
+				</NeoPill>
 			</SettingRow>
 			<SettingRow
 				label="Export database"
 				hint="One .sqlite file with everything: sessions, attempts, corrections, translations, prompts, settings, your recordings and every cached voice clip. API keys and downloaded models are not included."
 			>
-				<Button variant="outline" size="lg" class="px-3.5" onclick={exportData} disabled={exporting}>
-					{#if exporting}<Loader2 class="size-4 animate-spin" />{:else}<Download class="size-4" />{/if}
+				<NeoButton rounded onclick={exportData} loading={exporting}>
+					{#snippet icon()}<Download class="size-4" />{/snippet}
 					{exporting ? 'Exporting…' : 'Export .sqlite'}
-				</Button>
+				</NeoButton>
+			</SettingRow>
+			<SettingRow
+				label="Restore database"
+				hint="Put an onspot .sqlite backup back on this device, for example after moving browsers or computers. It replaces everything local, so you will be asked to confirm."
+			>
+				<RestoreDatabaseButton onrestored={() => goto('/history/')} />
 			</SettingRow>
 			<SettingRow
 				label="Restore legacy backup"
 				hint="Merge an older onspot .json export into this device. Existing unrelated sessions stay in place; you will then open History."
 			>
 				<input bind:this={restoreInput} class="sr-only" type="file" accept="application/json,.json" onchange={restoreLegacyBackup} />
-				<Button variant="outline" size="lg" class="px-3.5" onclick={() => restoreInput?.click()} disabled={restoring}>
-					{#if restoring}<Loader2 class="size-4 animate-spin" />{:else}<Upload class="size-4" />{/if}
+				<NeoButton rounded onclick={() => restoreInput?.click()} loading={restoring}>
+					{#snippet icon()}<Upload class="size-4" />{/snippet}
 					{restoring ? 'Restoring…' : 'Restore .json'}
-				</Button>
+				</NeoButton>
 			</SettingRow>
 			<SettingRow
 				label="Interface lab"
 				hint="A separate interactive copy of the UI with dummy data. Changes and experiments there never touch your sessions or settings."
 			>
-				<Button href="/ui-sandbox/" variant="outline" size="lg" class="px-3.5">
-					<ExternalLink class="size-4" /> Open UI sandbox
-				</Button>
+				<NeoButton href="/ui-sandbox/" rounded>
+					{#snippet icon()}<ExternalLink class="size-4" />{/snippet}
+					Open UI sandbox
+				</NeoButton>
 			</SettingRow>
 		</SettingsSection>
 	</div>
 </div>
 
 <style>
-	/* shadcn ToggleGroup styled as a segmented control; one pill slides between the options. */
-	:global(.segmented .segment) {
-		position: relative;
-		z-index: 1;
-		height: 2.25rem;
-		border-radius: 9px;
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: var(--on-control);
-		background: transparent;
-		transition: color 200ms ease;
-	}
-	:global(.segmented .segment:hover),
-	:global(.segmented .segment[data-state='on']) {
-		color: var(--foreground);
-		background: transparent;
-	}
-	.segmented-pill {
-		position: absolute;
-		top: 4px;
-		bottom: 4px;
-		left: 4px;
-		width: calc(50% - 4px);
-		border-radius: 9px;
-		background-color: var(--card);
-		box-shadow: var(--paper-emboss-hover);
-		transition: translate 320ms cubic-bezier(0.22, 1, 0.36, 1);
-	}
-	.segmented-pill.right {
-		translate: 100% 0;
+	/* neo's theme styles bare headings (size, weight, margin) outside any layer; restore ours. */
+	h1.page-title {
+		margin-bottom: 0;
+		font-size: 1.5rem;
+		line-height: 2rem;
+		font-weight: 500;
 	}
 
-	:global(.info-item) {
+	/* General / Advanced: neo tabs spanning the column, one sliding selection. */
+	.detail-tabs :global(.neo-tabs),
+	.detail-tabs :global(.neo-tabs .neo-tabs-group) {
+		display: flex;
+		width: 100%;
+	}
+	.detail-tabs :global(.neo-tabs .neo-tab) {
+		flex: 1 1 0;
+	}
+	.detail-tabs :global(.neo-tabs .neo-tab .neo-tab-button) {
+		width: 100%;
+		justify-content: center;
+		font-weight: 600;
+	}
+	.detail-tabs :global(.neo-tabs .neo-tab.neo-active .neo-tab-button) {
+		color: var(--primary);
+	}
+
+	:global(.neo-card.info-item) {
+		--neo-card-margin: 1rem 0;
+		--info-spacing: 16px 18px;
 		border-radius: 14px;
-		border-color: var(--border);
-		background: color-mix(in srgb, var(--surface-2) 40%, var(--card));
-		padding: 16px 18px;
 	}
 	@media (min-width: 640px) {
-		:global(.info-item) {
-			padding: 18px 22px;
+		:global(.neo-card.info-item) {
+			--info-spacing: 18px 22px;
 		}
+	}
+	.info-body {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 12px 16px;
+	}
+	.info-content {
+		display: flex;
+		flex: 1 1 14rem;
+		min-width: 14rem;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.info-actions {
+		display: flex;
+		gap: 8px;
+	}
+	.info-footer {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-top: 12px;
+	}
+
+	:global(.neo-button.small-button) {
+		font-size: 0.8125rem;
+		padding-block: 0.3rem;
 	}
 
 	:global(.settings-link) {
@@ -692,24 +701,6 @@
 		color: var(--brand-hover);
 		text-decoration: underline;
 	}
-
-	:global(.advanced-settings[data-state='open']) {
-		animation: expand-advanced 340ms cubic-bezier(0.22, 1, 0.36, 1);
-	}
-	:global(.advanced-settings[data-state='closed']) {
-		animation: collapse-advanced 200ms cubic-bezier(0.4, 0, 1, 1);
-	}
-	@keyframes expand-advanced {
-		from { height: 0; opacity: 0; transform: translateY(-4px); }
-		to { height: var(--bits-collapsible-content-height); opacity: 1; transform: translateY(0); }
-	}
-	@keyframes collapse-advanced {
-		from { height: var(--bits-collapsible-content-height); opacity: 1; }
-		to { height: 0; opacity: 0; }
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.segmented-pill { transition-duration: 1ms; }
-		:global(.advanced-settings) { animation-duration: 1ms !important; }
-	}
+	.storage-line { color: var(--foreground); margin-top: 4px; }
+	.storage-line strong { font-weight: 600; }
 </style>

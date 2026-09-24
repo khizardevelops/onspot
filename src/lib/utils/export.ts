@@ -7,8 +7,14 @@ import {
 	type Session,
 	type TranslationSet
 } from '$lib/adapters/db';
+import { initSettings } from '$lib/stores/settings';
+import { toast } from '$lib/stores/toast';
+import { DatabaseImportError } from '$lib/adapters/db/types';
+import { StorageFullError, requestPersistentStorage, storageRoom } from './storage';
+import { hydrateLatestSession } from '$lib/stores/practice';
 
 const SQLITE_MIME = 'application/vnd.sqlite3';
+const SQLITE_MAGIC = 'SQLite format 3\u0000';
 
 /**
  * Exports the learner's whole database as one standard `.sqlite` file:
@@ -58,6 +64,119 @@ export async function exportDatabaseFile(): Promise<boolean> {
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') return false;
 		throw error;
+	}
+}
+
+/** True when the bytes start with SQLite's file-format header. */
+export function isSqliteDatabase(data: Uint8Array): boolean {
+	if (data.byteLength < SQLITE_MAGIC.length) return false;
+	for (let i = 0; i < SQLITE_MAGIC.length; i++) {
+		if (data[i] !== SQLITE_MAGIC.charCodeAt(i)) return false;
+	}
+	return true;
+}
+
+/** How long a restore waits for the user to answer the persistent-storage prompt. */
+const PERSIST_PROMPT_WAIT = 60_000;
+
+/** Room kept free beyond the backup itself for SQLite's rewrite and OPFS bookkeeping. */
+const SAFETY_MARGIN = 1_048_576;
+
+/** Last-resort download of the previous database when a failed restore could not put it back. */
+function saveRescueFile(bytes: Uint8Array): void {
+	const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: SQLITE_MIME }));
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = `onspot-rescue-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.sqlite`;
+	document.body.append(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Counts reported after a `.sqlite` backup replaces the local database. */
+export interface SqliteRestoreResult {
+	sessions: number;
+	attempts: number;
+}
+
+/**
+ * Restores the onspot `.sqlite` backup that `exportDatabaseFile` writes. Unlike
+ * the legacy JSON restore, this *replaces* the device's database: anything not
+ * in the backup is discarded. Settings are reloaded and the newest restored
+ * session is opened so every screen reflects the backup immediately.
+ */
+export async function importSqliteBackup(file: File): Promise<SqliteRestoreResult> {
+	// Which step is running, so an unexpected browser error (Firefox's bare
+	// "Unknown failure" DOMException, say) says where it came from.
+	let step = 'starting the restore';
+	try {
+		// Ask first, while the confirm click still counts as user activation:
+		// Firefox only prompts for persistent storage then, and a persisted site is
+		// not held to the shared per-site allowance that makes restores fail there.
+		// Not awaited: the promise only settles once the user answers the prompt.
+		const web = !isTauriRuntime();
+		const persisting = web ? requestPersistentStorage() : Promise.resolve(false);
+		step = 'reading the backup file';
+		const bytes = new Uint8Array(await file.arrayBuffer());
+		if (!isSqliteDatabase(bytes)) {
+			throw new RestoreError('This is not a SQLite database. Choose an onspot .sqlite backup.');
+		}
+		step = 'opening the local database';
+		const db = await getDatabaseAdapter();
+		step = 'measuring the local database';
+		// The current database file is freed before the backup is written, so only
+		// growth beyond it needs new room. A site already over its allowance has none.
+		const current = web ? (await db.exportSqliteFile()).byteLength : 0;
+		const needed = Math.max(0, bytes.byteLength - current) + SAFETY_MARGIN;
+		if (web) {
+			step = 'checking browser storage';
+			let room = await storageRoom();
+			if (room && room.free < needed && !room.persisted) {
+				// Not enough room yet; the browser may be asking to allow persistent storage.
+				toast('Allow persistent storage if your browser asks: this site needs more room to restore.', 8000);
+				await Promise.race([persisting, new Promise((resolve) => setTimeout(resolve, PERSIST_PROMPT_WAIT))]);
+				room = await storageRoom();
+			}
+			if (room && room.free < needed) throw new StorageFullError(room, needed, 'Nothing was changed.');
+		}
+		step = 'writing the backup into the local database';
+		try {
+			await db.importSqliteFile(bytes);
+		} catch (error) {
+			if (!(error instanceof DatabaseImportError)) throw error;
+			let outcome = 'Nothing was changed: your current data is still here.';
+			if (!error.rolledBack) {
+				if (error.rescue) saveRescueFile(error.rescue);
+				outcome = error.rescue
+					? 'Your previous data could not be written back, so it was downloaded as an onspot-rescue .sqlite file; restore that once there is space.'
+					: 'Your previous data could not be written back.';
+			}
+			if (error.storage) throw new StorageFullError(await storageRoom(), needed, outcome);
+			throw new RestoreError(`Restore failed while ${step} (${error.message}). ${outcome}`);
+		}
+		step = 'reloading the restored data';
+		const [sessions, attempts] = await Promise.all([db.listSessions(), db.listAllAttempts()]);
+		// Imported settings must replace the in-memory ones, or the next preference
+		// change would write the old values back over the restored database.
+		await initSettings();
+		await hydrateLatestSession();
+		return { sessions: sessions.length, attempts: attempts.length };
+	} catch (error) {
+		if (error instanceof RestoreError || error instanceof StorageFullError) throw error;
+		// Unexpected: keep the whole error for the console and name the step in the message.
+		console.error(`[restore] failed while ${step}`, error);
+		const kind = error instanceof Error && error.name && error.name !== 'Error' ? `${error.name}: ` : '';
+		const detail = error instanceof Error ? error.message : String(error);
+		throw new RestoreError(`Restore failed while ${step} (${kind}${detail || 'no details'}). Details are in the browser console.`);
+	}
+}
+
+/** A restore failure whose message is already written for the learner. */
+class RestoreError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'RestoreError';
 	}
 }
 
@@ -114,7 +233,7 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 		throw new Error('This is not a readable onspot JSON backup.');
 	}
 	if (!isRecord(decoded) || decoded.app !== 'onspot' || decoded.format !== 1) {
-		throw new Error('Choose an onspot JSON backup with format 1. SQLite backups are exported separately.');
+		throw new Error('Choose an onspot JSON backup with format 1. For a .sqlite backup, use Restore database.');
 	}
 
 	const db = await getDatabaseAdapter();

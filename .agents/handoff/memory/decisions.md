@@ -1,5 +1,13 @@
 # Decisions
 
+### Japanese TTS: piper-plus engine, not Piper + jpreprocess (2026-09-25)
+No jpreprocess WASM exists for the browser; the official Piper Japanese voice needs Piper 1.7's
+own OpenJTalk scheme and is non-commercial. piper-plus (MIT) ships exactly the requested
+technology (jpreprocess/OpenJTalk G2P in WASM + VITS) and MIT/Apache/PD-data voices. It runs as a
+second adapter in the existing TTS worker on our ORT instance; its `PiperPlus` class is not used
+(it re-downloads without cache/progress and silently drops Japanese if G2P fails). The 60 MB
+phonemizer is fetched from unpkg and SHA-256-verified, never bundled.
+
 Settled calls and the evidence behind them. Reversing one needs new evidence, not a hunch. Raw
 measurements live in `docs/benchmarks/`; the summaries below link there rather than repeat tables.
 
@@ -439,6 +447,14 @@ the redundant `attempt.translation` field (#21), list virtualization (#23), cont
   `[data-state=active]` (or `data-[state=active]:`). This was the real reason the feedback
   severity tabs looked identical selected and unselected.
 
+### AlertDialog.Action does not close the dialog (2026-09-24, bits-ui 2.19)
+- Unlike Radix, bits-ui's `AlertDialog.Action` is only "the button responsible for taking an
+  action" and **does not close** the dialog out of the box (documented behaviour; `Action` uses
+  `DialogActionState`, which has no click handler, while `Cancel` uses one that closes). Every
+  Action handler must close its bound `open` state itself. This bit Restore database (dialog
+  trapped the learner with no result when the import failed) and the Voice preview regenerate
+  dialog; the Practice delete dialog already closed explicitly in `deleteCurrent()`.
+
 ### Long cards are flat; the conveyor is for short cards only (2026-09-15)
 - onspot takes run 60s–5min, so an attempt card can be several viewport-heights once translations
   and a word breakdown are open. The scroll-driven exit animation is meaningless for those cards
@@ -493,11 +509,66 @@ otherwise make the live sound differ from the rendered one.
 User request: one `.sqlite` with everything, including cached audio. Web uses sqlite-wasm's
 serializer; desktop uses `VACUUM INTO` + Tauri dialog/fs plugins. Keys and models stay out.
 
+### SQLite import replaces the database file (2026-09-24, revised same day)
+The `.sqlite` export is a whole-database image, so its restore is a whole-database replace, not a
+merge. **Web:** the worker calls `sqlite3_deserialize()` on the open connection (main becomes the
+backup in wasm memory), `pool.unlink('/onspot.db')`, writes the backup back with
+`VACUUM INTO '/onspot.db'` through the normal VFS write path, and reopens. The first version used
+`SAH.pool.importDb('/onspot.db', bytes)`, which writes the raw image with one large
+`FileSystemSyncAccessHandle.write()` and never truncates; a Zen/Firefox user hit
+`Unknown write() failure.` from that path (sqlite-wasm's SAH xWrite short-write guard), so it was
+removed. `VACUUM INTO` also preserves `schema_migrations`, so `init()` still migrates older
+backups (verified v5 → v6 backfill). **Desktop:** closes the sqlx pool, overwrites the plugin's
+`onspot.db` (app config dir) and removes stale `-journal`/`-wal`/`-shm` sidecars. A table-by-table
+copy was rejected: it would leave main's schema current and skip migration backfills, and on
+desktop a connection-scoped `ATTACH` can silently run on another pooled connection.
+`importSqliteBackup()` reloads settings and Practice after the replace. Because the import is
+destructive, it sits behind a shadcn AlertDialog that names the chosen file; the legacy JSON
+restore remains the non-destructive merge path. Web browser-verified (Chromium 19/19 + 8/8,
+Firefox 7/7 + 7/7 parity); Tauri awaits runtime verification.
+
 ### Paper texture is rendered once and cached as an image (2026-09-18)
 A live full-screen WebGL canvas slowed first content 2–4× under software GL (History: 0.9–2.4s →
 4–6.5s). Snapshotting to WebP (Cache API) makes later loads faster than before (≈0.4–1s) with no
 live GL context; the first render is deferred and done at the screen's real pixel ratio.
 
-### Prefer libraries and shadcn components (2026-09-18)
+### UI library: @dvcol/neo-svelte replaces shadcn-svelte (2026-09-24)
+User direction: remove shadcn-svelte and use neo-svelte's components throughout. Pinned to the
+npm release 1.2.0 (master 2.0 is unreleased). Constraints learnt while migrating:
+- `NeoThemeProvider` is mandatory and renders children only after its stylesheet loads; it needs
+  `sass-embedded` in devDeps. We pass `reset={false}` (Tailwind preflight) and `remember={false}`
+  (the app owns `onspot.theme`).
+- 1.2.0 has **no cascade layers**: neo's scoped CSS usually beats a plain `:global(.cls)`.
+  Override with `.scope :global(.neo-button.cls)` (or a prop). neo's theme sheet is unlayered, so
+  it beats every Tailwind utility — hence the `revert-layer` heading fix in `app.css`.
+- Neo buttons wrap children in `.neo-content`; NeoCard without header/footer renders children
+  directly (`contentProps` inert).
+- `NeoDialogConfirm`/`NeoConfirm` are not exported in 1.2.0 and deep imports are blocked: confirm
+  dialogs are `NeoDialog` + two NeoButtons, with `portal` (a glass/backdrop-filter ancestor
+  otherwise traps the fixed dialog). Handlers still close the bound `open` explicitly.
+- `NeoRange` has no vertical orientation → EQ faders are horizontal.
+- `NeoDivider`'s `margin` prop is folded into its height `calc()`; multi-value margins make the
+  height invalid (a 21px grey bar). Use `style="margin: …"`.
+- NeoTabs can report `undefined` through `onchange` when `active` is cleared; handlers ignore it.
+  Neo's deferred empty transition can crash Svelte if a block is removed and restored within a
+  microtask.
+- NeoPill's type only allows a `div` tag; clickable chips are small NeoButtons.
+- Never pass reactive props to NeoThemeProvider: a prop change destroys and remounts the whole
+  app (1.2.0). Theme switches go through `NeoThemeSync` → `context.update({ theme })`.
+- NeoTooltip 1.2.0 ignores the "click" open reason, so NeoMenu only opens by hover (500ms). Always
+  use `$lib/components/PopMenu.svelte`, never NeoMenu directly. Tooltips/collapses take the
+  `$lib/neo` timing presets.
+- Relief and surfaces are app-owned: `src/neo-depth.css` (generated, × `--neo-depth`) and the
+  key/well/sheet rules in `app.css`. Keys lighter card stock + `--paper-key`, wells darker and
+  recessed, active tab = raised key in an inset track (2026-09-24, user asked for stronger
+  concave/convex and distinct component paper).
+
+### Prefer libraries and existing components (2026-09-18; component library now neo-svelte)
 User direction: use web APIs, existing deps and shadcn-svelte components rather than hand-rolled
 equivalents (e.g. Web Audio `getFrequencyResponse` instead of hand-written biquad maths).
+
+### `.sqlite` restore never destroys the current database (2026-09-25)
+The worker exports the current DB to memory before replacing it and writes it back if the backup
+write fails (Firefox quota). `navigator.storage.persist()` is requested from the restore click —
+Firefox ignores it without user activation — and never awaited unless room is short (it resolves
+only when the user answers the prompt).

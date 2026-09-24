@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Tabs from '$lib/components/ui/tabs';
+	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
 
 	export interface PaperSegmentOption {
 		value: string;
@@ -28,32 +28,74 @@
 		onValueChange
 	}: Props = $props();
 
-	const activeIndex = $derived(Math.max(0, options.findIndex((option) => option.value === value)));
+	const TONE_COLOR = { brand: 'primary', error: 'error', neutral: undefined } as const;
+	const activeTone = $derived(options.find((option) => option.value === value)?.tone ?? 'neutral');
 </script>
 
-<Tabs.Root {value} onValueChange={onValueChange} aria-label={ariaLabel}>
-	<Tabs.List
-		class={`paper-segmented paper-grain ${className}`}
-		data-size={size}
-		data-locked={disabled ? '' : undefined}
-		style={`--paper-segment-count: ${options.length}`}
+<!-- neo tabs: a pressed track with a raised key that slides to the selected option. -->
+<!-- Exam red / Casual teal is this control's own selection colour (custom-selection opts out of the accent border). -->
+<div class="segmented custom-selection {className}" data-size={size} data-tone={activeTone} data-locked={disabled ? '' : undefined}>
+	<NeoTabs
+		active={value}
+		onchange={(tabId) => {
+			if (tabId !== undefined && tabId !== value) onValueChange?.(String(tabId));
+		}}
+		{disabled}
+		dim={false}
+		pressed
+		rounded
+		aria-label={ariaLabel}
 	>
-		<!-- The texture belongs to this moving layer and scrolls with it: no fixed-background repaint/snap. -->
-		<span
-			class="paper-segmented-knob"
-			style:translate={`${activeIndex * 100}% 0`}
-			data-tone={options[activeIndex]?.tone ?? 'neutral'}
-			aria-hidden="true"
-		></span>
 		{#each options as option (option.value)}
-			<Tabs.Trigger
-				value={option.value}
-				disabled={disabled}
-				class="paper-segmented-option"
-				data-tone={option.tone ?? 'neutral'}
+			<NeoTab
+				tabId={option.value}
+				class="segmented-option"
+				color={option.value === value ? TONE_COLOR[option.tone ?? 'neutral'] : undefined}
 			>
 				{option.label}
-			</Tabs.Trigger>
+			</NeoTab>
 		{/each}
-	</Tabs.List>
-</Tabs.Root>
+	</NeoTabs>
+</div>
+
+<style>
+	.segmented {
+		display: inline-flex;
+		/* A locked session is disabled, but its mode must stay legible; dimming is done by opacity. */
+		--neo-text-color-disabled: currentcolor;
+		--neo-dark-text-color-disabled: currentcolor;
+		--neo-shadow-margin: 0;
+		--segment-height: 40px;
+	}
+	.segmented[data-size='sm'] { --segment-height: 32px; }
+	.segmented[data-size='lg'] { --segment-height: 48px; }
+	.segmented :global(.neo-tabs-group) {
+		height: var(--segment-height);
+		padding: 3px;
+		gap: 2px;
+	}
+	.segmented :global(.neo-tab .neo-button.segmented-option) {
+		height: 100%;
+		min-height: 0;
+		padding: 0 12px;
+		font-size: 0.75rem;
+		font-weight: 600;
+	}
+	/* The selected key carries the mode's semantic tint and a soft halo. */
+	.segmented[data-tone='error'] :global(.neo-tab.neo-active .neo-button.segmented-option) {
+		background-color: color-mix(in srgb, var(--error) 12%, transparent);
+		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--error) 35%, transparent) !important;
+	}
+	.segmented[data-tone='brand'] :global(.neo-tab.neo-active .neo-button.segmented-option) {
+		background-color: color-mix(in srgb, var(--brand) 12%, transparent);
+		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--brand) 35%, transparent) !important;
+	}
+	.segmented[data-locked] :global(.neo-button.segmented-option) { cursor: not-allowed; }
+	.segmented[data-locked] :global(.neo-tab:not(.neo-active)) { opacity: 0.7; }
+	/* Neo greys a disabled group; a locked session keeps its selected mode legible. */
+	.segmented[data-locked] :global(.neo-tab.neo-active .neo-button.segmented-option) { opacity: 1; }
+	@media (max-width: 640px) {
+		.segmented { --segment-height: 36px; }
+		.segmented :global(.neo-tab .neo-button.segmented-option) { padding-inline: 9px; }
+	}
+</style>

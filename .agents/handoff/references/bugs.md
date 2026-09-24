@@ -4,6 +4,40 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### Web SQLite Restore Failed With `Unknown write() failure.`
+- **Symptom** (Zen/Firefox report): after choosing a `.sqlite` backup and confirming, the restore
+  toast showed `Unknown write() failure.` and the data was not replaced.
+- **Cause**: the web worker imported the backup with `SAH.pool.importDb('/onspot.db', bytes)`.
+  That path writes the whole image with one large
+  `FileSystemSyncAccessHandle.write()` (and never truncates); sqlite-wasm's SAH `xWrite` guard
+  throws `Unknown write() failure.` when that write comes back short. Some Firefox-family builds
+  short-write the large buffer even though ordinary page-sized SQLite writes succeed all day.
+- **Fix**: write the backup through SQLite itself. The worker deserializes the image into the
+  connection's in-memory main database (`sqlite3_deserialize`), `pool.unlink('/onspot.db')`,
+  rewrites the file with `VACUUM INTO` (normal VFS write path), and reopens it. No large raw
+  OPFS write remains; `init()` still migrates older backups because `VACUUM INTO` preserves
+  `schema_migrations`.
+- **Proof**: Playwright Firefox against the user's real backup — table-for-table parity
+  (`5|11|14|14|16|14`), `pragma integrity_check` ok, no orphaned attempts, and a hand-built v5
+  database imports then backfills `prompts.language='fr'` via migration v6.
+- **Files**: `sqlite.worker.ts`
+
+### The SQLite Restore Confirmation Trapped The User
+- **Symptom** (Firefox report): picking a `.sqlite` file showed “Replace this device’s
+  database?”, and the message would not go away — even after clicking **Replace database** — so
+  the app had to be reloaded. After reloading, the backup had not been imported.
+- **Cause**: bits-ui 2.19’s `AlertDialog.Action` deliberately does not close the dialog (only
+  `Cancel` does). On the success path Settings navigated to History and hid the modal, but an
+  error path (or the History empty-state flow) left it open forever. The user’s import had failed
+  and the error toast was hidden behind the modal they could no longer dismiss.
+- **Fix**: `RestoreDatabaseButton.restore()` closes its bound `confirmOpen` before running, and
+  VoicePreview’s regenerate dialog closes `regenerateOpen` the same way. The dialog now always
+  dismisses and the toast (success or failure) is visible.
+- **Proof**: Playwright Firefox 155 with the user’s real backup — dialog closes on success and on
+  a rejected file, 5 sessions restore, a failed import leaves the data intact (7/7); Chromium
+  suites 19/19 and 8/8.
+- **Files**: `RestoreDatabaseButton.svelte`, `VoicePreview.svelte`
+
 ### Refresh Showed An Empty Practice Screen Despite Persisted Sessions
 - **Symptom**: sessions existed in SQLite and appeared in History, but reloading/restarting the
   app returned Practice to a blank draft; a silently incremented Vite port could also expose a
@@ -192,3 +226,11 @@ Active defects that can be fixed within the current foundational technology.
 - **Cause**: `createASRPipeline` ran in the page context. ORT-Web uses worker threads for compute kernels when cross-origin isolated, but the pipeline's own JS — feature extraction, the decode loop, and ONNX session construction — stayed on the main thread.
 - **Fix (product)**: `src/lib/workers/stt.worker.ts` owns the pipeline, download progress and the decode loop; `src/lib/adapters/stt/WorkerWhisperAdapter.ts` is the main-thread proxy and moves PCM in by transfer. Browser-verified that the worker imports Transformers.js and relays real download progress (`31 / 302 MB`) with no console errors. See `state.md` and `tasks.md`.
 - **Files**: `src/lib/workers/stt.worker.ts`, `src/lib/adapters/stt/WorkerWhisperAdapter.ts`, `src/lib/adapters/stt/service.ts`
+
+## Fixed 2026-09-25: Firefox `.sqlite` restore "Unknown write() failure" + data loss on failure
+- **Symptom**: restore works in Chrome, fails in Firefox/Zen with `Unknown write() failure.`.
+- **Cause**: Firefox per-site (eTLD+1: all localhost ports) best-effort quota, sized from free disk;
+  at the limit OPFS `write()` returns short. Worse, the old DB was unlinked before the write, so a
+  failed restore emptied the database.
+- **Fix**: in-memory rollback + rescue download in the worker; persist() requested from the confirm
+  click; quota pre-check with an actionable `StorageFullError`. See last-session 2026-09-25.

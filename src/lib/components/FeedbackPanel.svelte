@@ -1,16 +1,18 @@
 <script lang="ts">
+	import { quickCollapse } from '$lib/neo';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 	import type { Correction, CorrectionSeverity } from '$lib/adapters/db';
 	import type { AttemptView } from '$lib/stores/practice';
 	import { playAttempt, playRecording, speakText } from '$lib/stores/practice';
 	import { correctionTitle, isDeletion, isInsertion } from '$lib/utils/corrections';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Separator } from '$lib/components/ui/separator';
-	import * as Tabs from '$lib/components/ui/tabs';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
+	import { NeoDivider } from '@dvcol/neo-svelte/divider';
+	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
+	import PopMenu from '$lib/components/PopMenu.svelte';
+	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
+	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import {
 		ArrowRight,
 		BarChart3,
@@ -109,28 +111,6 @@
 		{ id: 'suggestion', label: 'Suggestions', count: counts.suggestion }
 	]);
 
-	/*
-	 * The severity tabs are the same kind of control as Exam / Casual: a channel
-	 * with one raised knob that slides to the selected tab. Tabs are sized to
-	 * their labels, so the knob follows the measured tab rather than a fixed grid.
-	 */
-	let tabsList = $state<HTMLElement | null>(null);
-	let knob = $state({ x: 0, width: 0, visible: false });
-
-	function placeKnob(): void {
-		const active = tabsList?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
-		knob = active
-			? { x: active.offsetLeft, width: active.offsetWidth, visible: true }
-			: { ...knob, visible: false };
-	}
-
-	$effect(() => {
-		if (!tabsList) return;
-		const observer = new ResizeObserver(placeKnob);
-		observer.observe(tabsList);
-		return () => observer.disconnect();
-	});
-
 	const tabValue = $derived(
 		filter === 'all' || filter === 'error' || filter === 'warning' || filter === 'suggestion'
 			? filter
@@ -149,16 +129,31 @@
 	});
 
 	$effect(() => {
-		void tabValue;
-		void counts;
-		requestAnimationFrame(placeKnob);
-	});
-
-	$effect(() => {
 		if (activeCorrectionId && attempt?.corrections.some((item) => item.id === activeCorrectionId)) {
 			expandedId = activeCorrectionId;
 		}
 	});
+
+	const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
+	let filterMenuOpen = $state(false);
+	const filterItems = $derived<NeoMenuItem[]>([
+		{
+			value: 'type',
+			label: 'Feedback type',
+			section: true,
+			items: CATEGORIES.map((category) => ({
+				value: category,
+				label: CATEGORY_LABEL[category],
+				after: categoryAfter,
+				color: filter === category ? 'primary' : undefined
+			}))
+		},
+		...(categoryActive ? [{ value: 'all', label: 'Clear type filter', divider: { top: true } }] : [])
+	]);
+
+	function onFilterSelect(item: NeoMenuItem): void {
+		filter = item.value as Filter;
+	}
 
 	function select(correction: Correction, open = true): void {
 		if (!attempt) return;
@@ -173,41 +168,55 @@
 	}
 </script>
 
+{#snippet categoryAfter({ item }: { item: { value: unknown } })}
+	<span class="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+		{categoryCounts[item.value as keyof typeof categoryCounts]}
+		{#if filter === item.value}<Check class="size-3.5 text-[var(--primary)]" />{/if}
+	</span>
+{/snippet}
+
 <aside
 	class="feedback-shell flex min-h-0 flex-col overflow-hidden border-t lg:border-t-0 lg:border-l"
 	data-state={open ? 'open' : 'closed'}
 >
-	<Collapsible.Root bind:open class="contents">
-		<div class="coach-bar flex shrink-0 items-center gap-1 p-2 sm:px-3">
-			<Collapsible.Trigger
-				class="coach-trigger relative flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2 text-left text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
-				aria-label={open ? 'Close feedback' : 'Open feedback'}
-				title={open ? 'Close feedback' : 'Open feedback'}
-			>
-				<span class="coach-icon grid size-7 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
-					<MessageSquareText class="size-3.5" />
-				</span>
-				<span class="coach-title min-w-0 flex-1 text-xs font-semibold tracking-[0.14em] uppercase">Feedback</span>
-				{#if attempt && counts.all > 0}
-					<Badge variant="secondary" class="coach-count h-6 min-w-6 justify-center rounded-full px-1.5 tabular-nums">{counts.all}</Badge>
-				{/if}
-				<!-- The direction marker is part of the same full-width feedback control. -->
-				<ChevronDown class="coach-chevron size-4 shrink-0 transition-transform duration-200 {open ? 'rotate-180' : ''}" />
-			</Collapsible.Trigger>
-			<!-- Playback lives in the header so the summary below gets the full width. -->
-			{#if attempt}
-				<div class="coach-actions flex shrink-0 items-center gap-0.5">
-					<Button size="icon-sm" variant="ghost" aria-label="Play your recording" title="Your recording" onclick={() => playRecording(attempt.id)}>
-						<RotateCcw class="size-4" />
-					</Button>
-					<Button size="icon-sm" variant="ghost" aria-label="Play natural version" title="Natural version" onclick={() => playAttempt(attempt.id)}>
-						<Volume2 class="size-4" />
-					</Button>
-				</div>
+	<div class="coach-bar flex shrink-0 items-center gap-1 p-2 sm:px-3">
+		<button
+			type="button"
+			class="coach-trigger relative flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2 text-left text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+			aria-label={open ? 'Close feedback' : 'Open feedback'}
+			aria-expanded={open}
+			title={open ? 'Close feedback' : 'Open feedback'}
+			onclick={() => (open = !open)}
+		>
+			<span class="coach-icon grid size-7 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+				<MessageSquareText class="size-3.5" />
+			</span>
+			<span class="coach-title min-w-0 flex-1 text-xs font-semibold tracking-[0.14em] uppercase">Feedback</span>
+			{#if attempt && counts.all > 0}
+				<NeoPill class="coach-count" size="small" rounded elevation={0} tinted>{counts.all}</NeoPill>
 			{/if}
-		</div>
+			<!-- The direction marker is part of the same full-width feedback control. -->
+			<ChevronDown class="coach-chevron size-4 shrink-0 transition-transform duration-200 {open ? 'rotate-180' : ''}" />
+		</button>
+		<!-- Playback lives in the header so the summary below gets the full width. -->
+		{#if attempt}
+			<div class="coach-actions flex shrink-0 items-center gap-0.5">
+				<NeoButton text rounded class="coach-action" aria-label="Play your recording" title="Your recording" onclick={() => playRecording(attempt.id)}>
+					{#snippet icon()}<RotateCcw class="size-4" />{/snippet}
+				</NeoButton>
+				<NeoButton text rounded class="coach-action" aria-label="Play natural version" title="Natural version" onclick={() => playAttempt(attempt.id)}>
+					{#snippet icon()}<Volume2 class="size-4" />{/snippet}
+				</NeoButton>
+			</div>
+		{/if}
+	</div>
 
-		<Collapsible.Content class="coach-content min-h-0 flex-1 overflow-hidden">
+	<NeoCollapse transition={quickCollapse}
+		bind:open
+		standalone
+		class="coach-content flex min-h-0 flex-1 overflow-hidden"
+		containerProps={{ class: 'coach-collapse flex min-h-0 flex-1 flex-col' }}
+	>
 			<!-- `.coach-content` is a row flex box; without `w-full` this column shrinks to its content. -->
 			<div class="flex h-full min-h-0 w-full min-w-0 flex-col">
 	{#if attempt}
@@ -218,63 +227,53 @@
 
 			{#if attempt.corrections.length > 0}
 				<div class="flex items-stretch gap-1.5">
-					<Tabs.Root
-						value={tabValue}
-						onValueChange={(value) => (filter = value as Filter)}
-						class="severity-tabs min-w-0 flex-1"
-					>
-						<Tabs.List
-							bind:ref={tabsList}
-							class="feedback-tabs paper-grain relative flex h-[50px] w-full justify-start gap-0.5 rounded-[14px] p-1"
+					<!-- Severity tabs carry their own per-severity tint: no generic accent border. -->
+					<div class="severity-tabs custom-selection min-w-0 flex-1">
+						<NeoTabs
+							active={tabValue || undefined}
+							onchange={(id) => {
+								// A category filter clears the active tab; NeoTabs echoes that as `undefined`.
+								if (id) filter = id as Filter;
+							}}
+							class="feedback-tabs"
+							elevation={-2}
+							rounded
+							dim={false}
 						>
-							<span
-								class="tab-knob paper-grain"
-								class:visible={knob.visible}
-								style:translate={`${knob.x}px 0`}
-								style:width={`${knob.width}px`}
-								aria-hidden="true"
-							></span>
 							{#each TABS as tab (tab.id)}
-								<Tabs.Trigger value={tab.id} data-severity={tab.id} class="feedback-tab">
-									<span class="text-base leading-none font-semibold tabular-nums">{tab.count}</span>
-									<span class="feedback-tab-label">{tab.label}</span>
-								</Tabs.Trigger>
+								<NeoTab tabId={tab.id} data-severity={tab.id} tabProps={{ class: 'feedback-tab' }} aria-label="{tab.label}: {tab.count}">
+									<span class="flex flex-col items-center gap-[3px]">
+										<span class="text-base leading-none font-semibold tabular-nums">{tab.count}</span>
+										<span class="feedback-tab-label">{tab.label}</span>
+									</span>
+								</NeoTab>
 							{/each}
-						</Tabs.List>
-					</Tabs.Root>
+						</NeoTabs>
+					</div>
 
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger
+					<PopMenu
+						items={filterItems}
+						bind:open={filterMenuOpen}
+						placement="bottom-end"
+						onSelect={onFilterSelect}
+						rounded
+					>
+						<NeoButton
 							aria-label="Filter by feedback type"
 							title="Filter by type"
-							class="filter-key paper-grain grid w-10 shrink-0 place-items-center rounded-[14px] transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none {categoryActive ? 'bg-primary text-primary-foreground' : 'bg-control text-on-control hover:bg-control-hover'}"
+							class="filter-key {categoryActive ? 'active is-selected' : ''}"
+							rounded
+							elevation={categoryActive ? -2 : 2}
+							color={categoryActive ? 'primary' : undefined}
 						>
-							<ListFilter class="size-4" />
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content align="end" class="w-56 p-1.5" loop>
-							<DropdownMenu.Label>Feedback type</DropdownMenu.Label>
-							<DropdownMenu.RadioGroup
-								value={categoryActive ? filter : ''}
-								onValueChange={(value) => (filter = value as Filter)}
-							>
-								{#each ['grammar', 'register', 'filler', 'style'] as category (category)}
-									<DropdownMenu.RadioItem value={category} class="min-h-9">
-										<span>{CATEGORY_LABEL[category]}</span>
-										<span class="ml-auto text-xs text-muted-foreground tabular-nums">{categoryCounts[category as keyof typeof categoryCounts]}</span>
-									</DropdownMenu.RadioItem>
-								{/each}
-							</DropdownMenu.RadioGroup>
-							{#if categoryActive}
-								<DropdownMenu.Separator />
-								<DropdownMenu.Item onSelect={() => (filter = 'all')}>Clear type filter</DropdownMenu.Item>
-							{/if}
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+							{#snippet icon()}<ListFilter class="size-4" />{/snippet}
+						</NeoButton>
+					</PopMenu>
 				</div>
 			{/if}
 		</div>
 
-		<Separator />
+		<NeoDivider />
 
 		<div class="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5">
 			{#if attempt.corrections.length === 0}
@@ -295,20 +294,19 @@
 							animate:flip={{ duration: 220 }}
 							in:fly={{ y: 8, duration: 220 }}
 							out:fade={{ duration: 120 }}
+							class="overflow-hidden sheet rounded-2xl transition-colors {correction.id === activeCorrectionId ? 'border-[var(--brand)]/50' : ''}"
 						>
-						<Collapsible.Root
-							open={expanded}
-							onOpenChange={(open) => select(correction, open)}
-							class="group/correction overflow-hidden sheet rounded-2xl transition-colors {correction.id === activeCorrectionId ? 'border-[var(--brand)]/50' : ''}"
-						>
-							<Collapsible.Trigger
+							<button
+								type="button"
+								aria-expanded={expanded}
+								onclick={() => select(correction, !expanded)}
 								class="feedback-section-trigger flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none {correction.id === activeCorrectionId ? 'bg-[var(--brand-soft)]' : ''}"
 							>
 								<span class="min-w-0 flex-1">
 									<span class="flex flex-wrap items-center gap-1.5">
-										<Badge variant="secondary" class="h-5 bg-[var(--surface-2)] px-1.5 text-[10px] tracking-wide uppercase">
+										<NeoPill size="small" rounded elevation={0} class="category-pill">
 											{CATEGORY_LABEL[correction.category] ?? correction.category}
-										</Badge>
+										</NeoPill>
 										<span class="flex items-center gap-1 text-[11px] font-medium {SEVERITY_CLASS[correction.severity]}">
 											<span class="size-1.5 rounded-full bg-current"></span>{SEVERITY_LABEL[correction.severity]}
 										</span>
@@ -318,9 +316,13 @@
 									<span class="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 font-serif text-base leading-snug">
 										{#if isDeletion(correction)}
 											<span class="rounded-md bg-[var(--error-soft)] px-1.5 py-0.5 text-muted-foreground line-through decoration-[var(--error)] decoration-2">{correction.original}</span>
-											<Badge variant="destructive" class="gap-1"><Trash2 class="size-3" /> Remove</Badge>
+											<NeoPill size="small" rounded elevation={0} tinted color="error" class="gap-1">
+												<Trash2 class="size-3" /> Remove
+											</NeoPill>
 										{:else if isInsertion(correction)}
-											<Badge class="gap-1 bg-[var(--good-soft)] text-[var(--good)]"><Plus class="size-3" /> Add</Badge>
+											<NeoPill size="small" rounded elevation={0} tinted color="success" class="gap-1">
+												<Plus class="size-3" /> Add
+											</NeoPill>
 											<span class="font-semibold">{correction.replacement}</span>
 										{:else}
 											<span class="text-muted-foreground line-through decoration-current/50">{correction.original}</span>
@@ -332,10 +334,10 @@
 										<span class="mt-1 block text-xs text-muted-foreground">{correction.replacementTranslation}</span>
 									{/if}
 								</span>
-								<ChevronDown class="mt-2 size-4 shrink-0 text-faint transition-transform duration-300 group-data-[state=open]/correction:rotate-180" />
-							</Collapsible.Trigger>
+								<ChevronDown class="mt-2 size-4 shrink-0 text-faint transition-transform duration-300 {expanded ? 'rotate-180' : ''}" />
+							</button>
 
-							<Collapsible.Content class="correction-detail overflow-hidden px-3">
+							<NeoCollapse transition={quickCollapse} open={expanded} standalone class="correction-detail px-3">
 								<div class="border-t border-border/70 pt-2 pb-2.5">
 									{#if correction.explanation}
 										<p class="text-sm leading-relaxed text-muted-foreground">{correction.explanation}</p>
@@ -344,26 +346,30 @@
 										<div class="mt-2 flex flex-wrap items-center gap-1.5">
 											<span class="text-xs text-faint">Try instead</span>
 											{#each correction.formalAlternatives as alternative (alternative)}
-												<Badge variant="outline" class="font-normal">{alternative}</Badge>
+												<NeoPill size="small" rounded elevation={1}>{alternative}</NeoPill>
 											{/each}
 										</div>
 									{/if}
 									<div class="mt-2 flex flex-wrap items-center gap-2">
 										{#if correction.examStatus}
-											<Badge
-												variant={correction.examStatus === 'strictly-avoid' || correction.examStatus === 'avoid' ? 'destructive' : 'secondary'}
-												class="text-[10px] tracking-wide uppercase"
-											>{EXAM_BADGE[correction.examStatus] ?? correction.examStatus}</Badge>
+											<NeoPill
+												size="small"
+												rounded
+												elevation={0}
+												tinted
+												color={correction.examStatus === 'strictly-avoid' || correction.examStatus === 'avoid' ? 'error' : undefined}
+												class="exam-pill"
+											>{EXAM_BADGE[correction.examStatus] ?? correction.examStatus}</NeoPill>
 										{/if}
 										{#if correction.speakText || correction.replacement}
-											<Button size="xs" variant="ghost" class="text-[var(--brand)]" onclick={() => void speakText(correction.speakText ?? correction.replacement)}>
-												<Volume2 class="size-3.5" /> Hear it
-											</Button>
+											<NeoButton text rounded color="primary" class="hear-button" onclick={() => void speakText(correction.speakText ?? correction.replacement)}>
+												{#snippet icon()}<Volume2 class="size-3.5" />{/snippet}
+												Hear it
+											</NeoButton>
 										{/if}
 									</div>
 								</div>
-							</Collapsible.Content>
-						</Collapsible.Root>
+							</NeoCollapse>
 						</div>
 					{/each}
 				</div>
@@ -380,15 +386,17 @@
 	{/if}
 
 	<div class="shrink-0 border-t bg-background/45">
-		<Collapsible.Root bind:open={statsOpen}>
-			<Collapsible.Trigger
-				class="feedback-section-trigger flex h-9 w-full items-center justify-between gap-2 px-4 text-xs text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none sm:px-5"
-				aria-label={statsOpen ? 'Collapse session stats' : 'Expand session stats'}
-			>
-				<span class="flex items-center gap-1.5 font-medium"><BarChart3 class="size-3.5" /> Session stats</span>
-				<ChevronDown class="size-3.5 transition-transform duration-300 {statsOpen ? 'rotate-180' : ''}" />
-			</Collapsible.Trigger>
-			<Collapsible.Content class="stats-detail overflow-hidden">
+		<button
+			type="button"
+			class="feedback-section-trigger flex h-9 w-full items-center justify-between gap-2 px-4 text-xs text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none sm:px-5"
+			aria-label={statsOpen ? 'Collapse session stats' : 'Expand session stats'}
+			aria-expanded={statsOpen}
+			onclick={() => (statsOpen = !statsOpen)}
+		>
+			<span class="flex items-center gap-1.5 font-medium"><BarChart3 class="size-3.5" /> Session stats</span>
+			<ChevronDown class="size-3.5 transition-transform duration-300 {statsOpen ? 'rotate-180' : ''}" />
+		</button>
+		<NeoCollapse transition={quickCollapse} bind:open={statsOpen} standalone>
 				<div class="grid grid-cols-2 gap-1.5 px-4 pb-3 sm:px-5">
 					<div class="rounded-xl bg-[var(--surface-2)] px-3 py-1.5">
 						<p class="text-[10px] tracking-wide text-faint uppercase">Takes</p>
@@ -407,12 +415,10 @@
 						<p class="text-sm font-semibold tabular-nums {stats.errors > 0 ? 'text-[var(--error)]' : ''}">{stats.errors}</p>
 					</div>
 				</div>
-			</Collapsible.Content>
-		</Collapsible.Root>
+		</NeoCollapse>
 	</div>
 			</div>
-		</Collapsible.Content>
-	</Collapsible.Root>
+	</NeoCollapse>
 </aside>
 
 <style>
@@ -437,58 +443,41 @@
 	}
 
 	/*
-	 * Severity tabs: the Exam / Casual control. A sea-glass channel pressed into
-	 * the panel and one raised sheet knob that springs to the selected tab,
-	 * whose label takes its severity colour. Tabs size to their label within a
-	 * floor and a ceiling, so "All" stays narrow.
+	 * Severity tabs: a neo inset tab channel whose sliding raised key follows the
+	 * selected tab; the selected label takes its severity colour. Tabs size to
+	 * their label within a floor and a ceiling, so "All" stays narrow.
 	 */
-	:global(.severity-tabs) {
+	.severity-tabs {
 		container-type: inline-size;
 	}
-	:global(.feedback-tabs) {
-		background-color: var(--control);
-		box-shadow: var(--paper-deboss);
+	.severity-tabs :global(.neo-tabs.feedback-tabs),
+	.severity-tabs :global(.neo-tabs .neo-tabs-group) {
+		width: 100%;
 	}
-	.tab-knob {
-		position: absolute;
-		top: 4px;
-		bottom: 4px;
-		left: 0;
-		border-radius: 10px;
-		background-color: var(--card);
-		box-shadow: var(--paper-emboss-hover);
-		opacity: 0;
-		transition:
-			translate 440ms cubic-bezier(0.34, 1.35, 0.64, 1),
-			width 440ms cubic-bezier(0.34, 1.35, 0.64, 1),
-			opacity 200ms ease;
+	.severity-tabs :global(.neo-tabs-group) {
+		height: 50px;
+		padding: 4px;
+		gap: 2px;
+		flex-wrap: nowrap;
 	}
-	.tab-knob.visible {
-		opacity: 1;
-	}
-	:global(.feedback-tabs .feedback-tab) {
-		position: relative;
-		z-index: 1;
+	.severity-tabs :global(.neo-tab.feedback-tab) {
 		flex: 1 1 auto;
 		min-width: 40px;
 		max-width: 104px;
 		height: 100%;
-		flex-direction: column;
-		gap: 3px;
-		padding-inline: 6px;
-		border: 0;
-		border-radius: 10px;
-		background: transparent;
-		box-shadow: none;
-		color: var(--on-control);
-		transition: color 240ms ease;
 	}
-	:global(.feedback-tabs .feedback-tab:hover) { color: var(--foreground); }
-	:global(.feedback-tabs .feedback-tab[data-state='active']) { background: transparent; box-shadow: none; color: var(--foreground); }
-	:global(.feedback-tabs .feedback-tab[data-severity='error'][data-state='active']) { color: var(--error); }
-	:global(.feedback-tabs .feedback-tab[data-severity='warning'][data-state='active']) { color: var(--warn); }
-	:global(.feedback-tabs .feedback-tab[data-severity='suggestion'][data-state='active']) { color: var(--brand); }
-	:global(.feedback-tabs .feedback-tab-label) {
+	.severity-tabs :global(.neo-tab.feedback-tab .neo-button) {
+		width: 100%;
+		height: 100%;
+		padding-inline: 6px;
+		justify-content: center;
+		color: var(--on-control);
+	}
+	.severity-tabs :global(.neo-tab.feedback-tab.neo-active .neo-button) { color: var(--foreground); }
+	.severity-tabs :global(.neo-tab.feedback-tab.neo-active .neo-button[data-severity='error']) { color: var(--error); }
+	.severity-tabs :global(.neo-tab.feedback-tab.neo-active .neo-button[data-severity='warning']) { color: var(--warn); }
+	.severity-tabs :global(.neo-tab.feedback-tab.neo-active .neo-button[data-severity='suggestion']) { color: var(--brand); }
+	.severity-tabs :global(.feedback-tab-label) {
 		display: block;
 		max-width: 100%;
 		overflow: hidden;
@@ -498,65 +487,47 @@
 		letter-spacing: -0.01em;
 		white-space: nowrap;
 	}
-	:global(.filter-key) {
-		box-shadow: var(--paper-emboss);
-	}
 	@container (max-width: 250px) {
-		:global(.feedback-tabs .feedback-tab-label) { font-size: 10px; }
-		:global(.feedback-tabs .feedback-tab) { padding-inline: 4px; }
+		.severity-tabs :global(.feedback-tab-label) { font-size: 10px; }
+		.severity-tabs :global(.neo-tab.feedback-tab .neo-button) { padding-inline: 4px; }
 	}
 
-	:global(.coach-content[data-state='open']) {
-		display: flex;
-		animation: expand-coach 380ms cubic-bezier(0.22, 1, 0.36, 1);
+	.feedback-shell :global(.neo-button.filter-key) {
+		width: 40px;
+		height: 50px;
+		padding: 0;
+		justify-content: center;
+		color: var(--on-control);
 	}
-
-	:global(.coach-content[data-state='closed']) {
-		display: flex;
-		animation: collapse-coach 220ms cubic-bezier(0.4, 0, 1, 1);
+	.feedback-shell :global(.neo-button.filter-key.active) { color: var(--primary); }
+	.feedback-shell :global(.neo-button.coach-action) {
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		justify-content: center;
+		color: var(--muted-foreground);
 	}
-
-	@keyframes expand-coach {
-		from { height: 0; opacity: 0; transform: translateY(-6px); }
-		to { height: var(--bits-collapsible-content-height); opacity: 1; transform: translateY(0); }
+	.feedback-shell :global(.neo-button.hear-button) {
+		min-height: 26px;
+		padding: 2px 8px;
+		gap: 4px;
+		font-size: 12px;
 	}
-
-	@keyframes collapse-coach {
-		from { height: var(--bits-collapsible-content-height); opacity: 1; }
-		to { height: 0; opacity: 0; }
+	.feedback-shell :global(.neo-pill.coach-count) {
+		min-width: 24px;
+		height: 24px;
+		justify-content: center;
+		font-variant-numeric: tabular-nums;
 	}
-
-	:global(.correction-detail[data-state='open']) {
-		animation: expand-detail 320ms cubic-bezier(0.22, 1, 0.36, 1);
+	/* Pills sit inside serif correction text; keep their labels in the UI face. */
+	.feedback-shell :global(.neo-pill) { font-family: var(--font-sans); }
+	.feedback-shell :global(.neo-pill.category-pill),
+	.feedback-shell :global(.neo-pill.exam-pill) {
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 	}
-
-	:global(.correction-detail[data-state='closed']) {
-		animation: collapse-detail 180ms cubic-bezier(0.4, 0, 1, 1);
-	}
-
-	@keyframes expand-detail {
-		from { height: 0; opacity: 0; transform: translateY(-4px); }
-		to { height: var(--bits-collapsible-content-height); opacity: 1; transform: translateY(0); }
-	}
-
-	@keyframes collapse-detail {
-		from { height: var(--bits-collapsible-content-height); opacity: 1; }
-		to { height: 0; opacity: 0; }
-	}
-
-	:global(.stats-detail[data-state='open']) {
-		animation: expand-detail 280ms cubic-bezier(0.22, 1, 0.36, 1);
-	}
-
-	:global(.stats-detail[data-state='closed']) {
-		animation: collapse-detail 160ms cubic-bezier(0.4, 0, 1, 1);
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		:global(.coach-content) { animation-duration: 1ms !important; }
-		:global(.correction-detail) { animation-duration: 1ms !important; }
-		:global(.stats-detail) { animation-duration: 1ms !important; }
-	}
+	.feedback-shell :global(.neo-pill.category-pill) { background-color: var(--surface-2); }
 
 	@media (min-width: 1024px) {
 		.feedback-shell[data-state='closed'] .coach-bar { padding-inline: 7px; }
@@ -601,7 +572,4 @@
 	}
 
 	.feedback-shell[data-state='closed'] .coach-actions { display: none; }
-	@media (prefers-reduced-motion: reduce) {
-		.tab-knob { transition-duration: 1ms; }
-	}
 </style>

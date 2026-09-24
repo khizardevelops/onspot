@@ -1,6 +1,14 @@
 # State
 
 ## Current State
+**Japanese (2026-09-25):** candidate language (dev builds only): whisper-small q4 `japanese`,
+piper-plus voices with OpenJTalk/jpreprocess WASM G2P in the TTS worker; see
+`docs/supported-languages.md` and last-session.
+
+**UI library (2026-09-24):** every component is @dvcol/neo-svelte (NeoThemeProvider in the root
+layout, token bridge in `app.css`); shadcn-svelte, bits-ui and `src/lib/components/ui/` are gone.
+Older notes below that name shadcn primitives describe the pre-migration implementation.
+
 The **onspot** product UI and core practice pipeline are implemented. The current Practice view
 uses an Apple-inspired glass-and-gradient shell, a free-scrolling 3D attempt conveyor, explicit
 card selection, compact severity filters, and progressively disclosed feedback/translation detail.
@@ -8,12 +16,18 @@ Local Whisper, SQLite, and now Piper TTS all run in workers; the UI thread is ke
 Phase 3 BYOC sync is the next product phase; a real local Whisper + LLM end-to-end proof and the
 Piper Tom EQ/loudness pass remain verification/polish work.
 
-**Persistence boundary (diagnosed 2026-09-20):** the web build persists only to OPFS for its exact
-browser profile and origin. It neither discovers data from another port/profile nor syncs it. A
-fresh profile at `http://localhost:5173` initializes successfully but is empty. A legacy JSON
-backup at `/home/khizar/Downloads/onspot-export-2026-09-18.json` contains 5 sessions / 11 attempts
-/ 14 corrections. The Settings storage card now restores that legacy JSON format by merging it
-into the current local DB; it does not erase unrelated data. Web boot also asks the browser for
+**Persistence boundary (diagnosed 2026-09-20; SQLite restore added 2026-09-24):** the web build
+persists only to OPFS for its exact browser profile and origin. It neither discovers data from
+another port/profile nor syncs it. A fresh profile at `http://localhost:5173` initializes
+successfully but is empty. A legacy JSON backup at
+`/home/khizar/Downloads/onspot-export-2026-09-18.json` contains 5 sessions / 11 attempts
+/ 14 corrections. The Settings storage card restores that legacy JSON format by merging it into
+the current local DB; it does not erase unrelated data. It now also imports the `.sqlite` backup
+this app exports: `Restore database` replaces the whole local database from the file (OPFS
+`SAH.pool.importDb` on web, close + overwrite `onspot.db` on desktop), migration-runs it, reloads
+settings and reopens the newest session. The user can still need a restore when changing browser
+profile, origin, or web ↔ desktop runtime, because no sync service exists yet; the `.sqlite`
+backup is now the complete, one-file way to move between them. Web boot also asks the browser for
 durable storage and releases its OPFS worker at `pagehide`; transient startup failures retry rather
 than poisoning the DB singleton. The user can still need a restore when changing browser profile,
 origin, or web ↔ desktop runtime, because no sync service exists yet. `initPractice()` now
@@ -96,6 +110,21 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   Save-as where supported, download otherwise). Desktop: `VACUUM INTO` a temp file, read with
   `@tauri-apps/plugin-fs`, saved via `@tauri-apps/plugin-dialog`. API keys (localStorage) and
   downloaded models (Cache API) are not included. The old JSON export is gone.
+- **SQLite import.** Settings → Storage → Restore database and History's empty state accept the
+  `.sqlite` export back. `importSqliteBackup()` (utils/export.ts) checks the 16-byte SQLite
+  header, calls `importSqliteFile()` on the adapter, then `initSettings()` +
+  `hydrateLatestSession()`. Web: the worker makes the connection's main database the backup with
+  `sqlite3_deserialize()`, `pool.unlink('/onspot.db')`, rewrites it with `VACUUM INTO`, then
+  reopens — deliberately avoiding `pool.importDb()`, whose large raw OPFS write short-writes on
+  some Firefox-family browsers (`Unknown write() failure.`). Desktop: the SQL pool is closed, the
+  imported bytes overwrite the plugin's `onspot.db` in the app config dir, stale
+  `-journal`/`-wal`/`-shm` sidecars are removed, `init()` reopens and migrates.
+  `RestoreDatabaseButton.svelte` owns the file picker and an AlertDialog confirm because the
+  import replaces (not merges) local data; its Action handler closes the dialog itself (bits-ui
+  2.19 `Action` does not). The legacy JSON restore still merges separately. Browser-verified:
+  Chromium 19/19 + 8/8, Firefox 7/7 + 7/7 (real-backup table parity and integrity, v5→v6
+  migration, export → wipe → import, settings reload, invalid-file rejection, post-import
+  writes/export); the Tauri path awaits a runtime test.
 - **Paper texture.** `components/PaperTexture.svelte` wraps `@paper-design/shaders` (vanilla
   `ShaderMount`, same params→uniforms mapping and image prep as their React wrapper). It renders
   once, snapshots to WebP, disposes the WebGL context and caches the image in the Cache API
@@ -139,6 +168,8 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   toggle-group, field, item, input-group) were patched to `data-[orientation=…]`. Do **not** add a
   global `@custom-variant data-vertical` — it silently activates inert classes in the older
   tabs/separator components (e.g. forces the Feedback tabs to 32px).
+- **`AlertDialog.Action` does not close the dialog in bits-ui 2.19.** Handlers must close the
+  bound `open` state themselves (see `mem:decisions.md`); `Cancel` still closes on its own.
 - STT/TTS/prompts/LLM prompts are all parameterized by the selected language. Nothing is bundled;
   every model is fetched from its public host by the user's device. `docs/languages.md` tracks the
   approval system and the add-a-language recipe.
@@ -146,7 +177,8 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 ## Product shape (from `docs/prompts/inception.md`)
 - SvelteKit + `@sveltejs/adapter-static` (`fallback: 'index.html'`) → pure client-side SPA.
 - Tauri v2 desktop wrapper (.exe first, cross-platform ready).
-- Tailwind CSS v4 + shadcn-svelte.
+- Tailwind CSS v4 (layout) + @dvcol/neo-svelte 1.2.0 components (shadcn-svelte removed
+  2026-09-24; see decisions.md "UI library").
 - AGPL-3.0.
 - Record 30–60s spontaneous French → transcribe (local Whisper / Groq) → LLM evaluates →
   read corrected phrasing back (local Piper / cloud TTS).

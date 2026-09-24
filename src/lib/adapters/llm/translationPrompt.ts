@@ -1,3 +1,5 @@
+import { translationGuidance } from './languageGuidance';
+
 export const TRANSLATION_SCHEMA = `{
   "idiomatic": string,
   "idiomaticVariants": string[],
@@ -37,8 +39,11 @@ export function translationRules({ language, translationTarget }: TranslationLan
 - Literal and word-for-word must not be identical when preserving the source tokens requires ungrammatical ${translationTarget}.
 - Preserve names exactly. Do not add facts or correct the learner's meaning.`;
 
-	// The contrastive example is what fixed strict literal/word-for-word output
-	// for French in the model lab; keep it where it applies.
+	// A language's own rules and contrastive example (Japanese: SOV order,
+	// particles, romaji in the breakdown). Contrastive examples are what fixed
+	// strict literal/word-for-word output in the model lab.
+	const extra = translationGuidance(language, translationTarget);
+	if (extra) return `${rules}\n\n${extra}`;
 	if (language.toLowerCase() !== 'french') return rules;
 
 	return `${rules}

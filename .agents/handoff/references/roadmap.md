@@ -1,8 +1,8 @@
 # Roadmap
 
 ## Near-Term
-- **Phase 3 — BYOC sync.** Google Drive (OAuth 2.0 PKCE, client-side), WebDAV, and local
-  `.sqlite` export/import.
+- **Phase 3 — BYOC sync.** Google Drive (OAuth 2.0 PKCE, client-side) and WebDAV. The local
+  `.sqlite` export/import pair is done and browser-verified (2026-09-24).
 - Complete one real local Whisper + configured LLM practice run after the full model download.
 - Confirm the Piper Tom EQ/loudness processing profile by ear, then approve the next language
   (STT + voice) with a human quality pass and add it to the language registry.

@@ -464,6 +464,15 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 
 	abstract exportSqliteFile(): Promise<Uint8Array>;
 
+	/**
+	 * Each runtime replaces the physical database differently: the web worker
+	 * deserializes the backup in memory and rewrites the OPFS database with
+	 * `VACUUM INTO`, while Tauri overwrites the database file while its pool is
+	 * closed. Both end by running `init()` so the restored schema is migrated
+	 * and the connection is usable again.
+	 */
+	abstract importSqliteFile(data: Uint8Array): Promise<void>;
+
 	async import(data: Uint8Array): Promise<void> {
 		const db = await this.sql();
 		const text = new TextDecoder().decode(data);

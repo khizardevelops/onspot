@@ -43,7 +43,13 @@ model.
 | Language | Code | Local STT | Default voice | Status |
 |---|---|---|---|---|
 | French | `fr` | `onnx-community/whisper-small` q4 | Piper Tom (M, medium) | Approved (2026-09-13) |
+| Japanese | `ja` | `onnx-community/whisper-small` q4 | piper-plus CSS10 (F) | Candidate (2026-09-25) |
 
-Other languages are intentionally absent until they pass the manual quality test. Candidate
-entries can be committed with `approval.status = 'candidate'`; they are filtered out of the
-picker and the TTS worker.
+The full per-language stack (engines, G2P, voices, prompts) is in
+[`supported-languages.md`](supported-languages.md).
+
+Candidate entries are committed with `approval.status = 'candidate'`. Production builds offer
+approved languages only (`APPROVED_LANGUAGES`); development builds also offer candidates
+(`OFFERED_LANGUAGES`), labelled "candidate, not yet approved", so step 5 can be run in the real
+app. A voice's `engine` selects its TTS path: `piper` (eSpeak G2P) or `piper-plus` (OpenJTalk
+G2P in WASM, Japanese).

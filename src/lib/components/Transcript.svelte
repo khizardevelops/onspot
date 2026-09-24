@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Correction, CorrectionSeverity } from '$lib/adapters/db';
 	import { playWord } from '$lib/stores/pronunciation';
+	import { isJapaneseText, tokenizeWords } from '$lib/utils/words';
 
 	interface Props {
 		text: string;
@@ -30,7 +31,8 @@
 		deletion?: boolean;
 	}
 
-	const TOKEN_RE = /([\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*)|(\s+)|([^\s])/gu;
+	/** Japanese words run together; the per-word padding would read as spaces. */
+	const unspaced = $derived(isJapaneseText(text));
 
 	/**
 	 * Colour signals severity, not category — a `register` correction of
@@ -63,11 +65,7 @@
 
 	/** Tokenises the text and tags tokens covered by a correction range. */
 	const tokens = $derived.by<Token[]>(() => {
-		const list: Token[] = [];
-		for (const match of text.matchAll(TOKEN_RE)) {
-			const start = match.index ?? 0;
-			list.push({ text: match[0], word: Boolean(match[1]), start, end: start + match[0].length });
-		}
+		const list: Token[] = tokenizeWords(text);
 
 		const claimed: Array<[number, number]> = [];
 		for (const correction of corrections) {
@@ -92,7 +90,7 @@
 			<button
 				type="button"
 				title="Show this correction"
-				class="cursor-pointer rounded px-0.5 underline decoration-dotted decoration-1 transition-colors {token.correctionId ===
+				class="cursor-pointer rounded {unspaced ? '' : 'px-0.5'} underline decoration-dotted decoration-1 transition-colors {token.correctionId ===
 				activeCorrectionId
 					? 'bg-[var(--brand-soft)] ring-1 ring-[var(--brand)] ring-inset'
 					: 'hover:bg-[var(--surface-2)]'} {token.deletion
@@ -108,7 +106,7 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<span
 				title="Click to hear this word"
-				class="cursor-pointer rounded px-0.5 transition-colors hover:bg-[var(--surface-2)]"
+				class="cursor-pointer rounded {unspaced ? '' : 'px-0.5'} transition-colors hover:bg-[var(--surface-2)]"
 				onclick={(event) => {
 					event.stopPropagation();
 					playWord(token.text);

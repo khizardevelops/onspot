@@ -3,6 +3,7 @@ import { writable } from 'svelte/store';
 export interface Toast {
 	id: number;
 	message: string;
+	durationMs: number;
 }
 
 const store = writable<Toast[]>([]);
@@ -13,7 +14,7 @@ export const toasts = { subscribe: store.subscribe };
 /** Shows a transient message. Auto-dismisses. */
 export function toast(message: string, durationMs = 2600): void {
 	const id = nextId++;
-	store.update((list) => [...list, { id, message }]);
+	store.update((list) => [...list, { id, message, durationMs }]);
 	setTimeout(() => {
 		store.update((list) => list.filter((item) => item.id !== id));
 	}, durationMs);

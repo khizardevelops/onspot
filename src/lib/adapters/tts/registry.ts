@@ -1,10 +1,13 @@
 import type { ITTSAdapter } from './BaseTTSAdapter';
 import { PiperAdapter } from './PiperAdapter';
-import { PIPER_VOICES } from './voices';
+import { PiperPlusAdapter } from './PiperPlusAdapter';
+import { LOCAL_VOICES } from './voices';
 import type { ModelProgress, TtsModelConfig, TtsSynthesis } from '../../types';
 
 /**
- * French TTS candidates for onspot.
+ * Local TTS voices for onspot (French: Piper; Japanese: piper-plus).
+ *
+ * French choices:
  *
  * Decided by a human listening test (2026-09-13), scoring for pronunciation
  * modelling quality — not by the round-trip WER or rtf numbers alone, which
@@ -33,8 +36,13 @@ class TTSRegistry {
     // One card per download. A card's config only covers choices that reuse the
     // same weights (speaker within a multi-speaker voice); a different Piper
     // voice is a different download, so it stays its own card.
-    for (const { id, name, voicePath, downloadSize } of PIPER_VOICES) {
-      const a = new PiperAdapter({ id, name, voicePath, downloadSize });
+    // The engine decides the G2P: eSpeak for Piper voices, OpenJTalk (WASM)
+    // for piper-plus Japanese voices. Both share this worker's lifecycle.
+    for (const { id, name, engine, voicePath, downloadSize, modelLanguage } of LOCAL_VOICES) {
+      const a =
+        engine === 'piper-plus'
+          ? new PiperPlusAdapter({ id, name, voicePath, downloadSize, modelLanguage })
+          : new PiperAdapter({ id, name, voicePath, downloadSize });
       this.adapters.set(a.config.id, a);
     }
   }

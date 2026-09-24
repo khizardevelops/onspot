@@ -1,5 +1,6 @@
 import type { ChatMessage, EvaluationRequest } from './types';
 import { TRANSLATION_SCHEMA, translationRules, type TranslationLanguage } from './translationPrompt';
+import { evaluationGuidance, levelNote } from './languageGuidance';
 
 const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
 const SEVERITIES = ['error', 'warning', 'suggestion'] as const;
@@ -50,7 +51,9 @@ function rulesFor(language: string, translationTarget: string): string {
 - Write "summary", "explanation", "replacementTranslation" and "why" fields in ${translationTarget}; keep correctedText, naturalSpeech and suggested replacements in ${language}.
 ${translationRules({ language, translationTarget })}
 - Every correction with a non-empty "replacement" must include "replacementTranslation": the ${translationTarget} meaning of the suggested replacement.
-- Return ONLY the JSON object. No markdown, no commentary outside it.`;
+- Return ONLY the JSON object. No markdown, no commentary outside it.${
+		evaluationGuidance(language, translationTarget) ? `\n\n${evaluationGuidance(language, translationTarget)}` : ''
+	}`;
 }
 
 export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage[] {
@@ -64,7 +67,7 @@ export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage
 			: `This is CASUAL practice: prioritise natural, idiomatic spoken ${request.language}; note formality differences but do not insist on them.`;
 
 	const system = [
-		`You are a patient ${request.language} speaking coach for a ${request.translationTarget}-speaking learner at CEFR level ${request.level}.`,
+		`You are a patient ${request.language} speaking coach for a ${request.translationTarget}-speaking learner at CEFR level ${request.level}${levelNote(request.language, request.level)}.`,
 		toneNote,
 		`The learner was given this prompt: "${request.prompt}".`,
 		`Analyse the spoken ${request.language} transcript they produced and respond with JSON matching this schema:`,

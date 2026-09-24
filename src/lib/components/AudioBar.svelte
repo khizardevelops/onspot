@@ -80,7 +80,7 @@
 					type="button"
 					aria-label="Playback speed {rate}x"
 					aria-pressed={$audioPlayer.rate === rate}
-					class="rounded px-1.5 py-0.5 text-[11px] font-medium {$audioPlayer.rate === rate
+					class="rounded border border-transparent px-1.5 py-0.5 text-[11px] font-medium {$audioPlayer.rate === rate
 						? 'bg-[var(--brand-soft)] text-[var(--brand)]'
 						: 'text-muted-foreground hover:bg-[var(--surface-2)]'}"
 					onclick={() => setRate(rate)}
@@ -92,7 +92,7 @@
 				type="button"
 				aria-label="Loop"
 				aria-pressed={$audioPlayer.loop}
-				class="grid size-7 place-items-center rounded {$audioPlayer.loop
+				class="grid size-7 place-items-center rounded border border-transparent {$audioPlayer.loop
 					? 'bg-[var(--brand-soft)] text-[var(--brand)]'
 					: 'text-muted-foreground hover:bg-[var(--surface-2)]'}"
 				onclick={toggleLoop}

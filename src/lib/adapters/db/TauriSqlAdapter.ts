@@ -74,6 +74,29 @@ export class TauriSqlAdapter extends SqlDatabaseAdapter {
 		}
 	}
 
+	/**
+	 * Replaces the database file itself, which is the exact reverse of the
+	 * export. The plugin anchors `sqlite:onspot.db` to the app config dir and
+	 * pools connections, so the pool is closed first — a connection-scoped
+	 * `ATTACH` copy would be unreliable — and the restored file is reopened and
+	 * migrated through `init()`.
+	 */
+	async importSqliteFile(data: Uint8Array): Promise<void> {
+		const { join, appConfigDir } = await import('@tauri-apps/api/path');
+		const { writeFile, remove } = await import('@tauri-apps/plugin-fs');
+		const path = await join(await appConfigDir(), 'onspot.db');
+
+		await this.close();
+		await writeFile(path, data);
+		// Sidecar journals belong to the database that was just replaced; SQLite
+		// must never replay them onto the imported file.
+		await remove(`${path}-journal`).catch(() => undefined);
+		await remove(`${path}-wal`).catch(() => undefined);
+		await remove(`${path}-shm`).catch(() => undefined);
+
+		await this.init();
+	}
+
 	protected async openDriver(): Promise<SqlDriver> {
 		const db = await Database.load('sqlite:onspot.db');
 		return new TauriSqlDriver(db);

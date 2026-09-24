@@ -75,8 +75,11 @@ answers 504 "Outdated Optimize Dep" (Piper/onnxruntime fail). If that happens,
 `touch vite.config.ts` makes the running server restart itself. Test code can reach the app's own
 modules with `import(performance.getEntriesByType('resource').find(...))` (a second copy of the
 DB module would fight over the OPFS handles). Playwright cannot drive the File System Access
-picker; delete `window.showSaveFilePicker` in an init script to get a download instead. The test
-Chromium segfaulted on downloads in one long-lived persistent profile; a fresh context works.
+picker. To force `browser-fs-access` onto its legacy download path, both `showOpenFilePicker` and
+`showSaveFilePicker` must be removed in an init script — the package decides modern-vs-legacy from
+`'showOpenFilePicker' in self` on the app origin. For export tests it is simpler to take the bytes
+from `db.exportSqliteFile()` directly. The test Chromium segfaulted on downloads in one long-lived
+persistent profile; a fresh context works.
 
 ## Adding an eval clip (benchmark tooling)
 Create `eval/<name>/` with an audio file and a transcript; `import.meta.glob` discovers it.

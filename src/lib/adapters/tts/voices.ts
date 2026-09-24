@@ -1,24 +1,29 @@
-import { APPROVED_LANGUAGES, voicesFor } from '$lib/languages';
+import { OFFERED_LANGUAGES, voicesFor, type VoiceEngine } from '$lib/languages';
 import type { TtsChoice } from '../../types';
 
-export interface PiperVoiceDefinition {
+export interface LocalVoiceDefinition {
 	id: string;
 	name: string;
+	engine: VoiceEngine;
 	voicePath: string;
 	downloadSize: string;
+	/** piper-plus only: `language_id_map` key the voice is driven with. */
+	modelLanguage?: string;
 }
 
 /**
- * Flattened Piper voices across all approved languages. This is the list the
+ * Flattened local voices across all offered languages. This is the list the
  * TTS worker constructs adapters from; the language registry is the source of
  * truth for which voices exist and how they are approved.
  */
-export const PIPER_VOICES: readonly PiperVoiceDefinition[] = APPROVED_LANGUAGES.flatMap((language) =>
+export const LOCAL_VOICES: readonly LocalVoiceDefinition[] = OFFERED_LANGUAGES.flatMap((language) =>
 	language.voices.map((voice) => ({
 		id: voice.id,
 		name: voice.name,
+		engine: voice.engine ?? 'piper',
 		voicePath: voice.voicePath,
-		downloadSize: voice.downloadSize
+		downloadSize: voice.downloadSize,
+		modelLanguage: voice.modelLanguage
 	}))
 );
 

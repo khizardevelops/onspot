@@ -1,5 +1,270 @@
 # Last Session
 
+## 2026-09-25 (later): language data size is what's actually missing
+- The "~399 MB" Japanese figure was only the label (`languageDownloadBytes` sums everything).
+  The download already reused French's Whisper (Transformers.js cache is keyed by URL). Proven in
+  Chromium: FR install then JA install fetched 0 Whisper bytes, 19.8 MB dictionary + 39.7 MB voice.
+- `languageData` state now carries `pending` {stt, voice, storage, transfer} from the cache check
+  (`voiceAssets()` in `adapters/tts/assets.ts` gives per-asset on-device and transfer bytes;
+  `JAPANESE_G2P_TRANSFER_BYTES`). The progress bar is weighted by the missing parts only.
+- Settings → Language data shows "Adds about X to this device · about Y to download", notes when
+  the speech model is shared, and "Everything is on this device" when installed. Verified 3 states.
+- `docs/supported-languages.md`: per-model on-device/download size table and install-cost table.
+
+## 2026-09-25: Japanese language support (candidate)
+- Spec asked for jpreprocess-WASM G2P feeding the existing Piper engine. Findings: no browser
+  build of jpreprocess exists on npm; the official Piper JA voice (hi_fi_captain) needs Piper
+  1.7's own OpenJTalk scheme and is CC BY-NC-SA. Used **piper-plus 0.7.0** (MIT): its Rust
+  OpenJTalk/jpreprocess phonemizer compiled to WASM (NAIST-JDIC inside) + its VITS models, as a
+  second engine in the same TTS worker.
+- Registry: `LanguageVoice.engine` ('piper' | 'piper-plus'), `modelLanguage`; language `locale`
+  + `writing` ('spaced' | 'unspaced'); JAPANESE entry (whisper-small q4 `japanese` — same
+  weights as FR; voices CSS10 [default], Mera [Apache-2.0], Tsukuyomi-chan [corpus terms]),
+  all `candidate`. `OFFERED_LANGUAGES` = LANGUAGES in dev / APPROVED in prod; picker, Settings,
+  settings store, `getLanguage`/`requireLanguage` and the worker voice list use it.
+- TTS: `adapters/tts/assets.ts` (one source for voice/G2P URLs, used by adapters and the
+  language-data readiness check — it previously hard-coded the rhasspy base), `japaneseG2p.ts`
+  (unpkg download → Cache API → SHA-256 check → init; jsDelivr 403s files this size),
+  `vendor/piper-plus-wasm/` (glue patched so Vite never bundles the 60 MB .wasm),
+  `PiperPlusAdapter.ts` (our cachedFetch/progress/ORT session; feeds lid, prosody_features,
+  zero speaker_embedding width from `inputMetadata` + mask [1,1]; piper-plus padPhonemeIds /
+  adjustScalesForShortInput / trimPaddingByDurations / trimEosRegion; throws if JA G2P missing).
+- Transcript: `utils/words.ts` — Intl.Segmenter('ja') + re-join non-particle hiragana
+  inflections (食べました); French regex byte-identical. Sentences split on 。！？; fitText counts
+  CJK as double width.
+- LLM: `adapters/llm/languageGuidance.ts` (Japanese evaluation rules, translation rules +
+  contrastive example, CEFR→JLPT note), wired into prompt.ts and translationPrompt.ts (and
+  therefore translate.ts).
+- Verified: all 3 voices speak in Chromium, CSS10 in Firefox; TTS→Whisper(ja) round trip
+  (smoke only, not scored); in-app: JA listed as candidate, 3 voices, download 120 s → ready
+  after reload, Settings preview plays; Practice in JA; prompts render without placeholders;
+  build has no 60 MB wasm; check 0/0. Harmless build warning from piper-plus's unused Chinese
+  dictionary `new URL("../../assets/")`.
+- Docs: `docs/supported-languages.md` (per-language stack, user request), `docs/languages.md`.
+
+## 2026-09-25: attempt-card "ghost" corners
+- Cause: the card (NeoCard `rounded` → 32px) sat in `.attempt-slot` (`rounded-[22px]`) whose
+  `content-visibility: auto` clips painting to the slot box — the card's shadow was cut along the
+  slot's 22px curve, giving a hard, differently-rounded shadow corner.
+- Fix: one radius (`--attempt-radius`, 22px) for card, shadow, selection outline and focus ring
+  (ring moved from the slot to the card). The slot keeps `content-visibility` but is padded by the
+  shadow's reach (`--slot-pad` 16px / 24px ≥640px) with matching negative margins (1rem rhythm
+  unchanged). Because containment makes the slot the card's offset parent, AttemptStream now
+  reads sizes from `surfaceOf(slot)` and positions from `cardTop(slot)` (= slot.offsetTop +
+  padding) — spacer, tall threshold, arrival, fallback conveyor, select/arrival scroll targets.
+- Verified: corner crops light/dark (clean, concentric), Practice 1280/390 layout, 6-take session
+  opens on the newest take and clicking take 2 lifts it to the top; check 0/0.
+
+## 2026-09-25 (latest): download bar redesign; Zen restore resolved by the user
+- User: clearing Zen's cache fixed the `.sqlite` restore "Unknown failure" (so it was the live
+  profile's storage state, not the code).
+- `LanguageDownloadBar.svelte`: was a frosted `.sheet` (page content showed through → "clipping"),
+  neo's progress-bar margin glued the track to the title, heavy raised track shadow, uneven
+  padding. Now an opaque `--card` panel (hairline, `--shadow-float`), 3-column grid (40px icon ·
+  body · 36px cancel), body `gap: 8px`, and a 6px recessed `--well` track. NeoProgressBar's
+  `class` lands on the INNER `.neo-progress`; the wrapper `.neo-progress-bar.neo-track` carries
+  margin/border/shadow and needs a higher-specificity override. Verified light/dark/390px.
+
+## 2026-09-25 (later): Zen "Unknown failure" hunt, startup permissions, sass warnings
+- User's toast reads literally `Unknown failure` (a Gecko DOMException, not app/sqlite text).
+  NOT reproduced: copied the user's real `fs/` (OPFS) from `~/.zen/wlpthvid.Default (release)/
+  storage/default/http+++localhost+5173` into test profiles and restored in Playwright Firefox 155
+  AND the real Zen 1.22.2b (driven via puppeteer-core + WebDriver BiDi, `--new-instance`,
+  prefs via `extraPrefsFirefox`): normal, over existing data, persist granted mid-flow, tight
+  quota (fixedLimit) granted/denied, two tabs (second tab gets NoModificationAllowedError) — all
+  behave. Remaining difference is the live profile/session. Restore errors now name the failing
+  step + DOMException name and `console.error` the full error (`RestoreError` in export.ts) —
+  ask the user for that text.
+- sqlite-wasm leaks one empty `.opfs-sahpool-sync-check-*` file in the OPFS root per start in
+  Gecko (removeEntry refused); user had 850. The worker deletes them before installing the VFS.
+- `PermissionsPrompt.svelte` (layout, after settings, not with LanguagePicker): at launch asks,
+  in one click, for persistent storage (Firefox family only — Chromium decides silently) and the
+  microphone (remembered in `localStorage onspot.permissions.microphone` because Firefox keeps
+  reporting "prompt" for per-visit grants). Always closes after Allow; refusals → toast with how
+  to fix. "Not now" = sessionStorage for this launch. Verified Firefox allow/deny + Chromium.
+- vite.config: `css.preprocessorOptions.scss.silenceDeprecations: ['if-function']` (neo's sass).
+- Verified: restores Firefox ×2 / Chrome ×2 OK, check 0/0, build OK with 0 deprecation lines.
+- Harness notes: puppeteer+Zen can report a 0×0 window (clicks fail) — use Playwright Firefox for
+  interaction tests; Zen runs are fine for programmatic flows.
+
+## 2026-09-25: Firefox/Zen `.sqlite` restore — quota, rollback, clear errors
+- **Cause (reproduced in headed Playwright Firefox 155):** Firefox short-writes OPFS once the
+  site is at its storage quota; sqlite-wasm reports that as `Unknown write() failure.` /
+  `SQLITE_IOERR`. Firefox's best-effort limit is per *site* (all `localhost` ports share it) and
+  scales with free disk. The user's real browser is Zen (`~/.zen/wlpthvid.Default (release)`):
+  localhost:5173 861 MB + localhost:5174 978 MB (stale model caches from the old port), `/home`
+  98% full (9.8 GB free) → the localhost group is over its allowance. Chrome's quota differs.
+- **Data-loss bug fixed:** `replaceDatabase` unlinked the current DB before writing the backup, so
+  a failed write left an empty database. The worker now copies the current DB to memory first;
+  on failure it writes it back (`rolledBack`), or, if that also fails, returns it and the page
+  downloads `onspot-rescue-*.sqlite`. Errors cross the driver as `DatabaseImportError`
+  (`types.ts`: `storage`, `rolledBack`, `rescue`).
+- **Restore flow (`importSqliteBackup`):** calls `navigator.storage.persist()` inside the confirm
+  click (Firefox only prompts on user activation; boot-time persist never prompted) without
+  awaiting it (it settles only when the prompt is answered); pre-checks
+  `quota - usage >= max(0, backup - current DB) + 1 MB`; if short and not persisted, toasts to
+  allow persistent storage and waits up to 60s for the answer; otherwise `StorageFullError`
+  (`utils/storage.ts`) explains the Firefox localhost allowance and what to free, "Nothing was
+  changed". Error toasts last 15s.
+- Verified (Firefox headed, `dom.quotaManager.temporaryStorage.fixedLimit` + storage prompt
+  testing prefs): normal restore ×2 OK; tight quota + denied → clear message, marker session kept
+  across reload; tight quota + granted (quota 11.7→58.6 MB) → restore OK; forced mid-write
+  failure → rolledBack, data intact after reload. Chrome restore ×2 OK. check 0/0, build OK.
+- User action still needed in Zen: allow persistent storage when asked during restore, and/or
+  clear site data for localhost:5174; the disk is nearly full.
+
+## 2026-09-25: accent border on selected buttons/toggles
+- User rule: every selected button/toggle gets a primary (theme accent) border; selected rail key
+  = accent icon + accent border; controls with their own selection colours are exempt.
+- app.css: `[aria-pressed=true] | [aria-checked=true] | [aria-current=page] | .is-selected` on
+  buttons/links/radios/neo buttons → `border-color: var(--primary) !important` (beats neo's
+  `.neo-borderless`), and `.neo-tab.neo-active { --neo-tab-border-color: var(--primary) }`.
+  Never keyed off `.neo-pressed` (also set transiently on every click). `.custom-selection` opts
+  out: PaperSegmentedControl (Exam red/Casual teal) and the Feedback severity tabs.
+- Hooks added: history Regex/Case `aria-pressed`, search-options toggle / feedback category
+  filter / translate trigger (when a translation shows) `.is-selected`; AudioBar speed/loop
+  toggles got a transparent border so the accent can show. Rail keys already had
+  `aria-current="page"` + primary icon colour.
+- Follow-up: inactive rail icons were `--on-control` (itself teal-tinted), so the accent on the
+  current section didn't stand out. Inactive rail/phone-menu icons are now neutral
+  `--muted-foreground` (hover `--foreground`); only the current section is `--primary`.
+- Follow-up 2: right after clicking a rail key its icon showed neo's hover ink (darker, ~L 0.43)
+  instead of the accent, while the pointer stayed on it. The active key now pins `color` and
+  `--neo-btn-text-color`/`--neo-text-color-hover|active|hover-active` to `--primary` (and its
+  children). Verified click/hover/leave in Chromium + Firefox, light + dark. Also: the dev server
+  can miss writes in this synced folder — `touch` edited files if the browser shows old code.
+- Verified light + dark: rail active, options toggle, Regex on / Case off, Settings active tab,
+  translate trigger, segmented control unchanged; no page errors; check 0/0, build OK.
+
+## 2026-09-24 (latest+1): Start speaking contrast, zero-delay interactions
+- **Start speaking had white text on pale card stock** in light mode: the global raised-key rule
+  in app.css (0,4,1) out-ranked the button's scoped gradient (0,4,0). Added the opt-out class
+  `.solid-action` (excluded from the key rules); the record button uses it and
+  `color: var(--primary-foreground)` (light text on deep teal in light, dark on bright teal in
+  dark). The contrast scan missed it because the button only renders once local data is ready —
+  test by `setSetting('sttMode'|'ttsMode','cloud')` in the throwaway profile.
+- **Delays:** every neo element and pseudo-element has `transition-duration: 70ms !important;
+  transition-delay: 0s !important` (tabs' slide keyframes 120ms). `$lib/neo`: `quickPop`
+  (90ms in / 50ms out) in `quickTooltip`; `quickSelect` for NeoSelect; `quickCollapse` 120ms;
+  `quickSubmenu` passed by PopMenu as `menuProps.tooltipProps` — NeoMenu hands its root tooltip
+  settings to submenus, so click-only root settings had made submenus unopenable. Page switch is
+  a 90ms fade in, no outro. Measured: menu open 78ms, close 106ms, submenu hover 69ms, select
+  101ms, button/menu-item transitions 70ms. Contrast scan still clean; theme toggling still OK.
+
+## 2026-09-24 (latest): theme switch crash + light-mode text contrast
+- **Crash (reproduced):** toggling light→dark threw `Cannot read properties of undefined (reading
+  'unregister')` in NeoThemeProvider and unmounted the app (soft block). Cause: neo 1.2.0's
+  provider re-runs its setup `$effect.pre` when a prop changes; the cleanup `destroy()`s the
+  theme (removes `neo-*` attrs, `ready=false`), so the provider unmounts all children mid-view-
+  transition. Fix: the provider gets a constant `initialTheme` (resolved synchronously before
+  first render) and `NeoThemeSync.svelte` (child of the provider) applies switches with
+  `useNeoThemeContext().update({ theme })`. Verified 3× toggles in Chromium and Firefox, OS
+  scheme light and dark: app stays mounted, attrs in sync, no page errors.
+- **Contrast:** couldn't reproduce literal white text; measured with a WCAG scan (every visible
+  text node vs its composited background, all pages + open menus/tooltip/toast/select) and fixed
+  what was < 3:1: neo's light-mode secondary/hover/active text tokens mix toward white → mapped
+  (light and `--neo-dark-*` slots) to `--muted-foreground`/`--foreground` and per-theme
+  `--ink-hover/--ink-active` (darker on paper, lighter at night); disabled text 70%; light
+  `--faint` #7f7669, light `--warn` #94600f, dark `--faint` #8a8276; locked Exam/Casual keeps
+  legible text (scoped disabled-text token, inactive at 0.7 opacity). Result: 0 findings in both
+  themes. Scanner: /tmp/opencode/pw/contrast.mjs `<theme> <os-scheme> <toggles>`.
+
+## 2026-09-24 (later): neo components — speed, depth, distinct surfaces
+- User: animations had "such a huge delay"; components should pop in/out more (stronger concave/
+  convex); need their own shade/paper so they don't blend in; must be right in light and dark.
+- **Delay root causes:** NeoTooltip waits 500ms rest + 100ms; neo transitions 0.3–1s; NeoCollapse
+  300ms; and a 1.2.0 bug — NeoTooltip ignores the "click" open reason, so NeoMenu only opened via
+  its 500ms hover. Fixes: `src/lib/neo.ts` presets (`quickTooltip`, `quickMenu`, `quickCollapse`)
+  spread into usages; new `PopMenu.svelte` (NeoMenu that opens on click through the trigger's
+  attached `toggle()` — setting `open` from outside desyncs NeoMenu's internal state and breaks
+  outside-press/select closing); global neo `transition-duration: 110ms` (tabs 180ms) in app.css;
+  AttemptCard disclosures and EQ state transitions shortened. Measured: tooltip 79ms, menu 53ms.
+- **Depth:** `src/neo-depth.css` is GENERATED from neo's shadows.scss (top-left) with every rem
+  offset × `--neo-depth` (1.7 light / 1.6 dark). Shadow colours are explicit warm tokens per theme
+  (`--shade-dark/-light`, `--glass-shade-*`) mapped to both neo light and `--neo-dark-*` slots.
+- **Surfaces:** raised keys (non-flat/tinted/glass buttons, raised inputs/selects) = `--key`
+  card stock, lighter than paper, with a new `--paper-key` texture (third PaperTexture in the
+  layout, fine fibre, blended multiply/screen); wells (inset buttons/inputs, sliders, tab tracks)
+  = `--well`, darker; tab tracks forced inset, active tab = raised key (label lifted above neo's
+  opaque slide layer); cards = frosted sheet colour + hairline; tooltips/dialogs/notifications =
+  `--card`. Menu list-item content carries `.neo-button` and is excluded.
+- Verified: check 0/0, build OK, screenshots all pages light/dark/phone, menu open/close paths
+  (2nd click, outside, Escape, select + reopen, attempt/translate/session/phone menus), no errors.
+
+## 2026-09-24: UI library switched from shadcn-svelte to @dvcol/neo-svelte
+- User request: "remove the svelte-shadcn and instead fully use this [neo-svelte] and all of its
+  components ... properly implement it throughout the app". Installed `@dvcol/neo-svelte@1.2.0`
+  (latest npm; GitHub master is an unreleased 2.0 with cascade layers — its docs don't all apply)
+  and `sass-embedded` (the theme provider imports `.scss?url`). Removed `src/lib/components/ui/`,
+  `components.json`, `$lib/utils` `cn`/index, and deps `bits-ui`, `tailwind-variants`,
+  `tw-animate-css`, `clsx`, `tailwind-merge`, `@internationalized/date`. Tailwind stays for layout.
+- Foundation: `+layout.svelte` wraps the app in `NeoThemeProvider {theme} remember={false}
+  reset={false}` (theme follows the app toggle). `app.css` has a neo token bridge on
+  `html[neo-theme-root]` (neo colour/text/background tokens → app palette, both light and
+  `--neo-dark-*` slots), `--neo-shadow-margin: 0`, and a `revert-layer` fix for neo's unlayered
+  h1–h6 rules. Rail keys/new/theme are NeoButtons in NeoTooltips; phone menu is NeoMenu.
+- Migrated in 4 parallel groups: Settings (+ settings/*, VoicePreview, new `SettingSelect.svelte`
+  NeoSelect wrapper), Practice (+page, AttemptCard, PaperSegmentedControl → NeoTabs, props
+  unchanged), FeedbackPanel/LanguageDownloadBar/RestoreDatabaseButton, History/Insights/Toasts
+  (NeoNotificationStack; `toast()` API unchanged, `Toast.durationMs` added)/LanguagePicker
+  (NeoDialog). Mapping: Button→NeoButton, Card/Item→NeoCard, Badge→NeoPill, Dropdown→NeoMenu,
+  Collapsible→NeoCollapse (bound open), Tabs/ToggleGroup→NeoTabs, Toggle→NeoButton toggle,
+  Separator→NeoDivider, Tooltip→NeoTooltip, Progress→NeoProgressBar, Input→NeoInput,
+  key InputGroup→NeoPassword, Select→NeoSelect, Slider→NeoRange, AlertDialog→NeoDialog+NeoButtons.
+- Visible change: the voice EQ faders are now horizontal NeoRange rows (NeoRange has no vertical
+  mode; rotating it breaks drag maths). Response graph kept.
+- Verified: `npm run check` 0/0, `npm run build` OK, Playwright on the running :5173 with the
+  user's Sep 23 backup imported: Practice/History/Insights/Settings at 1280 light/dark and
+  390 phone, no console/page errors; per-group interaction tests (selects, tabs, EQ keyboard/
+  click/dblclick reset, dialogs open/cancel/Escape, restore invalid-file toast, feedback filter,
+  history search/sort persistence, toasts). Not verified: LanguageDownloadBar visuals (would start
+  the 363 MB download), LanguagePicker (only shown with no language), Tauri.
+- Noticed, not caused by this change: a reopened session whose prompt record is missing shows an
+  empty "Your prompt" (`practice.ts` ~761).
+
+## 2026-09-24: SQLite import (restore the .sqlite backup)
+- User complaint: the app exports a `.sqlite` database but only imports legacy `.json`; the native
+  format must be importable too. Added `importSqliteFile()` to `IDatabaseAdapter` and both
+  adapters, plus `importSqliteBackup()` in `utils/export.ts` (SQLite-header check, then
+  `initSettings()` + `hydrateLatestSession()`).
+- Web: the SQLite worker now keeps the SAH pool, closes the open `OpfsSAHPoolDb`, imports the
+  file with `pool.importDb('/onspot.db', bytes)` and reopens it; `init()` then migrates the
+  restored schema. Desktop: `TauriSqlAdapter` closes the sqlx pool, overwrites
+  `$APPCONFIG/onspot.db` via the fs plugin, removes stale `-journal`/`-wal`/`-shm` sidecars and
+  reopens. Capability gained scoped `fs:allow-write-file`/`fs:allow-remove` entries for those
+  paths.
+- UI: new `RestoreDatabaseButton.svelte` (file input + AlertDialog confirm, since the import
+  replaces rather than merges). Wired into Settings → Storage row **Restore database** and both
+  buttons in History's empty state. The legacy `.json` restore stays as the merge path, and its
+  wrong-format error now points at Restore database.
+- Verified with Playwright reuse of the running `:5173` dev server (throwaway profiles, app's own
+  modules imported for seeding): 17/17 — seed → export (file checked with sqlite3) → replace local
+  rows → import via the UI → data/settings restored, reload-safe, invalid file rejected with the
+  database untouched; plus 7/7 — History empty-state buttons, cancel, and write-after-import.
+  `npm run check` 0/0, `npm run build` OK, `cargo check` OK. Not runtime-tested: the Tauri import
+  path (same standing gap as the Tauri export).
+- Trap for future tests: on the app origin the File System Access pickers exist, and
+  `browser-fs-access` decides its modern-vs-legacy path from `'showOpenFilePicker' in self` — a
+  Playwright download fallback needs that property removed too (simpler: take export bytes from
+  the adapter, as this test does).
+- **User-reported trap (Firefox): the confirm dialog never went away.** bits-ui 2.19's
+  `AlertDialog.Action` does not close the dialog (documented; only `Cancel` closes). On a failed
+  import nothing navigated, so the modal stayed and blocked the app. `RestoreDatabaseButton` now
+  closes `confirmOpen` explicitly at the start of `restore()`; the same fix was applied to
+  VoicePreview's regenerate dialog (the Practice delete dialog already closed explicitly).
+  Re-verified in Playwright **Firefox 155** with the user's real
+  `~/Downloads/onspot-backup-2026-09-23.sqlite`: 7/7 (dialog closes on success and failure,
+  5 sessions restore, failed import leaves data intact), plus Chromium 19/19 and 8/8.
+- **Follow-up (2026-09-24): web restore failed with `Unknown write() failure.`** for the user
+  (actually Zen Browser, a Firefox fork). That string is sqlite-wasm's xWrite short-write guard;
+  it came from the raw-image `SAH.pool.importDb()` write path. Web import was reworked to
+  `sqlite3_deserialize` (main becomes the backup in memory) + `VACUUM INTO '/onspot.db'` +
+  reopen — only ordinary VFS writes, no large raw write. Verified in Playwright Firefox:
+  real backup parity (5|11|14|14|16|14, `integrity_check` ok, no orphans) and a hand-built v5
+  database imports and migrates to v6 (`prompts.language` backfilled to `fr`). The user's live
+  Zen OPFS database was inspected while diagnosing: 14.8MB, healthy, 5 sessions / 71 audio assets;
+  their Sep 23 backup is 2.2MB. Keep Playwright Firefox installed at `/tmp/opencode/pw`.
+
 ## 2026-09-20: critical refresh data rehydration
 - **Recovery executed:** `/home/khizar/Downloads/onspot-export-2026-09-18.json` was merged into
   the real Google Chrome `Default` profile for `http://localhost:5173`. Verified 5 History cards,

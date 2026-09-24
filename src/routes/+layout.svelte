@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { quickTooltip } from '$lib/neo';
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { initSettings, appSettings, settingsReady } from '$lib/stores/settings';
@@ -9,15 +10,33 @@
 	import { toast } from '$lib/stores/toast';
 	import Toasts from '$lib/components/Toasts.svelte';
 	import LanguagePicker from '$lib/components/LanguagePicker.svelte';
+	import PermissionsPrompt from '$lib/components/PermissionsPrompt.svelte';
 	import LanguageDownloadBar from '$lib/components/LanguageDownloadBar.svelte';
 	import PaperTexture from '$lib/components/PaperTexture.svelte';
+	import NeoThemeSync from '$lib/components/NeoThemeSync.svelte';
 	import type { PaperTextureParams } from '@paper-design/shaders';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
+	import PopMenu from '$lib/components/PopMenu.svelte';
+	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
+	import { NeoThemeProvider } from '@dvcol/neo-svelte/providers';
 	import { BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
 
 	let { children } = $props();
-	let theme = $state<'light' | 'dark'>('light');
+	/* Resolved before the first render: NeoThemeProvider must start on the right theme (see NeoThemeSync). */
+	function storedTheme(): 'light' | 'dark' {
+		let stored: string | null = null;
+		try {
+			stored = localStorage.getItem('onspot.theme');
+		} catch {
+			// Storage may be disabled.
+		}
+		if (stored === 'dark' || stored === 'light') return stored;
+		return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+	}
+	const initialTheme = storedTheme();
+	let theme = $state<'light' | 'dark'>(initialTheme);
+	document.documentElement.setAttribute('data-theme', initialTheme);
 	let mobileMenuOpen = $state(false);
 
 	/*
@@ -66,6 +85,29 @@
 			rail: { ...RAIL_PAPER, colorBack: '#0f0e0d', colorPaper: '#11100e', colorShadow: '#302b25' }
 		}
 	};
+	/*
+	 * Card stock for neo components (--paper-key): fine fibre and tooth, no
+	 * crumples, so keys and wells read as a different paper from the page.
+	 * It is blended over the component colour (multiply in light, screen in
+	 * dark), so light mode is near-white and dark mode near-black.
+	 */
+	const KEY_PAPER: PaperTextureParams = {
+		...COVER,
+		roughness: 0.22,
+		roughnessSize: 0.35,
+		fiber: 0.35,
+		fiberSize: 0.22,
+		folds: 0,
+		wrinkles: 0.12,
+		wrinkleSize: 0.3,
+		crumples: 0,
+		drops: 0,
+		seed: 41
+	};
+	const KEY: Record<'light' | 'dark', PaperTextureParams> = {
+		light: { ...KEY_PAPER, colorBack: '#ffffff', colorPaper: '#ffffff', colorShadow: '#e2d9c8' },
+		dark: { ...KEY_PAPER, colorBack: '#000000', colorPaper: '#000000', colorShadow: '#28241f' }
+	};
 	const PAGE_PAPERS = [PAPER.light.page, PAPER.dark.page];
 	const RAIL_PAPERS = [PAPER.light.rail, PAPER.dark.rail];
 	const paper = $derived(PAPER[theme]);
@@ -102,20 +144,27 @@
 		void goto('/');
 	}
 
+	const menuIcons: Record<string, typeof Mic> = { new: Plus, ...Object.fromEntries(nav.map((n) => [n.href, n.icon])) };
+	const mobileItems = $derived<NeoMenuItem[]>([
+		{ value: 'new', label: 'New session', before: menuIcon, divider: { bottom: true } },
+		...nav.map((item, i) => ({
+			value: item.href,
+			label: item.label,
+			before: menuIcon,
+			color: page.url.pathname === item.href ? 'primary' : undefined,
+			divider: i === nav.length - 1 ? { bottom: true } : undefined
+		})),
+		{ value: 'theme', label: theme === 'dark' ? 'Light appearance' : 'Dark appearance', before: menuIcon }
+	]);
+
+	function onMobileSelect(item: NeoMenuItem): void {
+		if (item.value === 'new') startNewSession();
+		else if (item.value === 'theme') toggleTheme();
+		else void goto(String(item.value));
+	}
+
 	onMount(() => {
-		let stored: string | null = null;
-		try {
-			stored = localStorage.getItem('onspot.theme');
-		} catch {
-			// Storage may be disabled.
-		}
-		const initial =
-			stored === 'dark' || stored === 'light'
-				? stored
-				: matchMedia('(prefers-color-scheme: dark)').matches
-					? 'dark'
-					: 'light';
-		applyTheme(initial);
+		applyTheme(initialTheme);
 		void initSettings()
 			.then(() => {
 				// Practice needs the persisted language, so it waits for settings.
@@ -130,59 +179,66 @@
 </script>
 
 <PaperTexture class="paper-page" params={paper.page} preloadParams={PAGE_PAPERS} publishAs="--paper-page" />
+<PaperTexture class="paper-key" params={KEY[theme]} preloadParams={[KEY.light, KEY.dark]} publishAs="--paper-key" />
 
-<Tooltip.Provider delayDuration={350}>
+{#snippet menuIcon({ item }: { item: { value: unknown } })}
+	{@const Icon = item.value === 'theme' ? (theme === 'dark' ? Sun : Moon) : menuIcons[String(item.value)]}
+	<Icon size={17} strokeWidth={1.8} />
+{/snippet}
+
+<!-- The provider's props must never change after mount; NeoThemeSync applies theme switches. -->
+<NeoThemeProvider theme={initialTheme} remember={false} reset={false}>
+	<NeoThemeSync {theme} />
 	<div class="app-shell relative z-[1] grid h-screen grid-cols-[56px_1fr] text-foreground">
 		<aside class="app-rail relative z-[1] flex flex-col items-center gap-1 py-3 pr-1.5">
 			<PaperTexture class="paper-rail" params={paper.rail} preloadParams={RAIL_PAPERS} />
 			<div class="brand-mark mb-3 grid size-9 place-items-center rounded-[13px] text-sm font-semibold text-white shadow-lg" aria-label="onspot">o</div>
 
-			<Tooltip.Root>
-				<Tooltip.Trigger aria-label="New session" class="rail-action paper-grain mb-3 grid size-10 place-items-center rounded-[14px]" onclick={startNewSession}>
-					<Plus size={19} strokeWidth={1.8} />
-				</Tooltip.Trigger>
-				<Tooltip.Content side="right">New session</Tooltip.Content>
-			</Tooltip.Root>
+			<NeoTooltip tooltip="New session" placement="right" {...quickTooltip}>
+				<NeoButton aria-label="New session" class="rail-action mb-3" rounded elevation={2} onclick={startNewSession}>
+					{#snippet icon()}<Plus size={19} strokeWidth={1.8} />{/snippet}
+				</NeoButton>
+			</NeoTooltip>
 
 			<nav class="rail-nav flex flex-col items-center gap-2.5" aria-label="Primary navigation">
 				{#each nav as item (item.href)}
 					{@const Icon = item.icon}
 					{@const active = page.url.pathname === item.href}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<a
-									{...props}
-									href={item.href}
-									aria-label={item.label}
-									class="rail-action paper-grain relative grid size-10 place-items-center rounded-[14px] {active ? 'active' : ''}"
-								>
-									<Icon size={19} strokeWidth={active ? 2 : 1.75} />
-								</a>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="right">{item.label}</Tooltip.Content>
-					</Tooltip.Root>
+					<NeoTooltip tooltip={item.label} placement="right" {...quickTooltip}>
+						<NeoButton
+							href={item.href}
+							aria-label={item.label}
+							aria-current={active ? 'page' : undefined}
+							class="rail-action {active ? 'active' : ''}"
+							rounded
+							elevation={active ? -2 : 2}
+							hover={active ? 0 : -1}
+							color={active ? 'primary' : undefined}
+						>
+							{#snippet icon()}<Icon size={19} strokeWidth={active ? 2 : 1.75} />{/snippet}
+						</NeoButton>
+					</NeoTooltip>
 				{/each}
 			</nav>
 
 			<div class="flex-1"></div>
 
-			<Tooltip.Root>
-				<Tooltip.Trigger aria-label="Toggle theme" class="rail-action paper-grain grid size-10 place-items-center rounded-[14px]" onclick={toggleTheme}>
-					{#key theme}
-						<span in:fade={{ duration: 180 }} out:fade={{ duration: 100 }}>
-							{#if theme === 'dark'}<Sun size={19} strokeWidth={1.75} />{:else}<Moon size={19} strokeWidth={1.75} />{/if}
-						</span>
-					{/key}
-				</Tooltip.Trigger>
-				<Tooltip.Content side="right">{theme === 'dark' ? 'Light appearance' : 'Dark appearance'}</Tooltip.Content>
-			</Tooltip.Root>
+			<NeoTooltip tooltip={theme === 'dark' ? 'Light appearance' : 'Dark appearance'} placement="right" {...quickTooltip}>
+				<NeoButton aria-label="Toggle theme" class="rail-action" rounded elevation={2} onclick={toggleTheme}>
+					{#snippet icon()}
+						{#key theme}
+							<span class="grid place-items-center" in:fade={{ duration: 90 }}>
+								{#if theme === 'dark'}<Sun size={19} strokeWidth={1.75} />{:else}<Moon size={19} strokeWidth={1.75} />{/if}
+							</span>
+						{/key}
+					{/snippet}
+				</NeoButton>
+			</NeoTooltip>
 		</aside>
 
 		<main class="page-sheet paper-surface min-w-0 overflow-hidden">
 			{#key page.url.pathname}
-				<div class="h-full" in:fly={{ y: 5, duration: 280, opacity: 0 }} out:fade={{ duration: 120 }}>
+				<div class="h-full" in:fade={{ duration: 90 }}>
 					{@render children()}
 				</div>
 			{/key}
@@ -190,46 +246,29 @@
 
 		<!-- Phone navigation is intentionally disclosed: it does not steal 60px from content. -->
 		<div class="mobile-menu">
-			<DropdownMenu.Root bind:open={mobileMenuOpen}>
-				<DropdownMenu.Trigger
-					class="mobile-menu-trigger paper-grain grid size-11 place-items-center rounded-[14px]"
-					aria-label="Open navigation menu"
-					aria-expanded={mobileMenuOpen}
-				>
-					<Menu size={20} strokeWidth={1.8} />
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" sideOffset={8} class="mobile-menu-content w-56 p-1.5">
-					<DropdownMenu.Label>onspot</DropdownMenu.Label>
-					<DropdownMenu.Item class="min-h-11" onSelect={startNewSession}>
-						<Plus /> New session
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-					{#each nav as item (item.href)}
-						{@const Icon = item.icon}
-						<DropdownMenu.Item
-							class="min-h-11"
-							data-current={page.url.pathname === item.href ? '' : undefined}
-							onSelect={() => void goto(item.href)}
-						>
-							<Icon strokeWidth={page.url.pathname === item.href ? 2 : 1.75} /> {item.label}
-						</DropdownMenu.Item>
-					{/each}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item class="min-h-11" onSelect={toggleTheme}>
-						{#if theme === 'dark'}<Sun /> Light appearance{:else}<Moon /> Dark appearance{/if}
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
+			<PopMenu
+				items={mobileItems}
+				bind:open={mobileMenuOpen}
+				placement="bottom-end"
+				onSelect={onMobileSelect}
+				rounded
+			>
+				<NeoButton class="mobile-menu-trigger" aria-label="Open navigation menu" aria-expanded={mobileMenuOpen} rounded elevation={2}>
+					{#snippet icon()}<Menu size={20} strokeWidth={1.8} />{/snippet}
+				</NeoButton>
+			</PopMenu>
 		</div>
 	</div>
-</Tooltip.Provider>
 
-<Toasts />
-<LanguageDownloadBar />
+	<Toasts />
+	<LanguageDownloadBar />
 
-{#if $settingsReady && !$appSettings.targetLanguage}
-	<LanguagePicker />
-{/if}
+	{#if $settingsReady && !$appSettings.targetLanguage}
+		<LanguagePicker />
+	{:else if $settingsReady}
+		<PermissionsPrompt />
+	{/if}
+</NeoThemeProvider>
 
 <style>
 	/* The page and rail textures are WebGL canvases; the plain colours show until they render. */
@@ -237,6 +276,14 @@
 		position: fixed;
 		inset: 0;
 		z-index: 0;
+		pointer-events: none;
+	}
+	/* Only published as --paper-key; never painted itself. */
+	:global(.paper-key) {
+		position: fixed;
+		inset: 0;
+		z-index: -1;
+		visibility: hidden;
 		pointer-events: none;
 	}
 	:global(.paper-rail) {
@@ -268,38 +315,29 @@
 	.brand-mark { background: linear-gradient(145deg, var(--brand), var(--brand-2) 62%, var(--brand-3)); }
 
 	/*
-	 * Rail keys sit in wells pressed into the rail (sea-glass stock, debossed).
-	 * The current page is the one key that stands up: a raised teal key like the
-	 * Exam / Casual knob. Pressing any key sinks it.
+	 * Rail keys are neo buttons: raised neumorphic keys on the rail, the current
+	 * page pressed in and tinted primary. Only their footprint is set here; the
+	 * relief and states come from neo-svelte.
 	 */
-	:global(.rail-action) {
-		background-color: var(--control);
-		color: var(--on-control);
-		box-shadow: var(--paper-deboss);
-		transition:
-			color 180ms ease,
-			background-color 180ms ease,
-			box-shadow 200ms ease,
-			transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+	.app-rail :global(.neo-button.rail-action) {
+		width: 40px;
+		height: 40px;
+		padding: 0;
+		justify-content: center;
+		/* Neutral ink, so the accent marks only the current section. */
+		color: var(--muted-foreground);
 	}
-	:global(.rail-action:hover) {
-		background-color: var(--control-hover);
+	.app-rail :global(.neo-button.rail-action:hover) { color: var(--foreground); }
+	/* neo recolours a key's content on hover/press; the current section stays accent throughout. */
+	.app-rail :global(.neo-button.rail-action.active),
+	.app-rail :global(.neo-button.rail-action.active:hover) {
+		color: var(--primary);
+		--neo-btn-text-color: var(--primary);
+		--neo-text-color-hover: var(--primary);
+		--neo-text-color-active: var(--primary);
+		--neo-text-color-hover-active: var(--primary);
 	}
-	:global(.rail-action.active) {
-		background-color: var(--primary);
-		color: var(--primary-foreground);
-		box-shadow: var(--paper-emboss-hover), 0 4px 10px -4px color-mix(in srgb, var(--primary) 55%, transparent);
-		transform: translateY(-1px);
-	}
-	:global(.rail-action:active),
-	:global(.rail-action.active:active) {
-		box-shadow: var(--paper-deboss);
-		transform: translateY(0) scale(0.97);
-	}
-	:global(.rail-action:focus-visible) {
-		outline: 2px solid color-mix(in srgb, var(--ring) 60%, transparent);
-		outline-offset: 2px;
-	}
+	.app-rail :global(.neo-button.rail-action.active *) { color: var(--primary); }
 	.mobile-menu { display: none; }
 	@media (max-width: 640px) {
 		.app-shell {
@@ -320,17 +358,13 @@
 			right: 10px;
 			z-index: 80;
 		}
-		:global(.mobile-menu-trigger) {
-			border: 1px solid var(--control-line);
-			background-color: var(--control);
-			color: var(--on-control);
-			box-shadow: var(--paper-emboss);
-		}
-		:global(.mobile-menu-trigger[aria-expanded='true']) { box-shadow: var(--paper-deboss); }
-		:global(.mobile-menu-content [data-current]) {
-			background: var(--brand-soft);
-			color: var(--brand);
-			font-weight: 600;
+		.mobile-menu :global(.neo-button.mobile-menu-trigger) {
+			width: 44px;
+			height: 44px;
+			padding: 0;
+			justify-content: center;
+			background-color: var(--background);
+			color: var(--muted-foreground);
 		}
 		/* Practice is the only page with a top-row control: keep it compact and
 		   reserve horizontal, never vertical, room for the floating menu. */
@@ -339,8 +373,5 @@
 			padding: 8px 62px 8px 14px;
 			gap: 8px;
 		}
-		:global(.session-header .paper-segmented) { height: 36px; }
-		:global(.session-header .paper-segmented-option) { padding-inline: 9px; }
 	}
-	@media (prefers-reduced-motion: reduce) { :global(.rail-action) { transition-duration: 1ms; } }
 </style>

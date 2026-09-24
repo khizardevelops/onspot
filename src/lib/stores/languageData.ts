@@ -1,7 +1,6 @@
 import { get, writable } from 'svelte/store';
 import {
 	getVoice,
-	languageDownloadBytes,
 	requireLanguage,
 	type LanguageDefinition,
 	type LanguageVoice
@@ -9,6 +8,7 @@ import {
 import { cancelLocalSTTDownload, preloadLocalSTT } from '$lib/adapters/stt/service';
 import { cancelLocalVoiceDownload, preloadLocalVoice } from '$lib/adapters/tts/service';
 import { isCached } from '$lib/adapters/tts/cachedFetch';
+import { voiceAssets } from '$lib/adapters/tts/assets';
 import { appSettings } from './settings';
 
 export type LanguageDataStatus = 'checking' | 'missing' | 'downloading' | 'ready' | 'error';
@@ -20,16 +20,33 @@ export interface LanguageDataState {
 	progress: number;
 	statusText: string;
 	error: string | null;
+	/**
+	 * Bytes still to download, per part, from the last cache check (`null`
+	 * until checked). Languages share assets — every language uses the same
+	 * Whisper weights — so this is usually far less than the full size.
+	 */
+	pending: PendingBytes | null;
 }
 
-const VOICES_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/';
+export interface PendingBytes {
+	/** Whisper weights; 0 when another language already downloaded them. */
+	stt: number;
+	/** The voice and, for Japanese, its dictionary (only the missing parts). */
+	voice: number;
+	/** Extra storage the missing parts will take on this device. */
+	storage: number;
+	/** What downloading the missing parts costs over the network. */
+	transfer: number;
+}
+
 
 const initial: LanguageDataState = {
 	languageId: '',
 	status: 'checking',
 	progress: 0,
 	statusText: '',
-	error: null
+	error: null,
+	pending: null
 };
 
 const store = writable<LanguageDataState>({ ...initial });
@@ -58,9 +75,23 @@ async function hasSttWeights(language: LanguageDefinition): Promise<boolean> {
 	}
 }
 
-async function hasVoiceWeights(voice: LanguageVoice | undefined): Promise<boolean> {
-	if (!voice) return false;
-	return isCached(`${VOICES_BASE}${voice.voicePath}`);
+/** The voice's downloads that are not cached yet (a Japanese voice also needs its dictionary). */
+async function missingVoice(voice: LanguageVoice | undefined): Promise<{ bytes: number; transfer: number }> {
+	if (!voice) return { bytes: Number.POSITIVE_INFINITY, transfer: Number.POSITIVE_INFINITY };
+	const assets = voiceAssets(voice);
+	const cached = await Promise.all(assets.map((asset) => isCached(asset.url)));
+	return assets.reduce(
+		(sum, asset, index) =>
+			cached[index] ? sum : { bytes: sum.bytes + asset.bytes, transfer: sum.transfer + asset.transferBytes },
+		{ bytes: 0, transfer: 0 }
+	);
+}
+
+/** What is still missing for a language, per part. */
+async function pendingBytes(language: LanguageDefinition): Promise<PendingBytes> {
+	const [sttReady, voice] = await Promise.all([hasSttWeights(language), missingVoice(preferredVoice(language))]);
+	const stt = sttReady ? 0 : language.stt.downloadBytes;
+	return { stt, voice: voice.bytes, storage: stt + voice.bytes, transfer: stt + voice.transfer };
 }
 
 /** Re-reads the cache state for a language and updates the store. */
@@ -83,19 +114,17 @@ export async function refreshLanguageData(
 		error: null
 	}));
 
-	const [sttReady, voiceReady] = await Promise.all([
-		hasSttWeights(language),
-		hasVoiceWeights(preferredVoice(language))
-	]);
+	const pending = await pendingBytes(language);
 	if (token !== checkToken) return;
 
-	const ready = sttReady && voiceReady;
+	const ready = pending.stt === 0 && pending.voice === 0;
 	store.update((state) => ({
 		...state,
 		status: ready ? 'ready' : 'missing',
 		progress: ready ? 100 : 0,
 		statusText: ready ? 'Language data installed.' : '',
-		error: null
+		error: null,
+		pending
 	}));
 }
 
@@ -114,21 +143,26 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 	const voice = preferredVoice(language);
 	if (!voice) throw new Error(`No approved voice for ${language.name}.`);
 
-	const total = languageDownloadBytes(language);
-	const sttShare = (language.stt.downloadBytes / total) * 100;
-	const voiceShare = 100 - sttShare;
 	const token = ++jobToken;
-
+	const known = get(store);
 	store.set({
 		languageId: language.id,
 		status: 'downloading',
 		progress: 0,
 		statusText: `Preparing ${language.name} data…`,
-		error: null
+		error: null,
+		pending: known.languageId === language.id ? known.pending : null
 	});
 
 	running = (async () => {
 		try {
+			// Weight the bar by what is actually missing: when the Whisper weights
+			// are already cached (another language uses the same ones), loading
+			// them takes seconds and the voice is nearly the whole download.
+			const pending = await pendingBytes(language);
+			const missing = pending.stt + pending.voice;
+			const sttShare = missing > 0 ? (pending.stt / missing) * 100 : 50;
+			const voiceShare = 100 - sttShare;
 			await preloadLocalSTT(language.id, (progress) => {
 				if (token !== jobToken) return;
 				store.update((state) => ({

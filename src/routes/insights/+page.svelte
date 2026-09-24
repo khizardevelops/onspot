@@ -5,6 +5,10 @@
 	import { computeInsights, type InsightsData, type Occurrence } from '$lib/insights';
 	import { openSession } from '$lib/stores/practice';
 	import { toast } from '$lib/stores/toast';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import { NeoCard } from '@dvcol/neo-svelte/cards';
+	import { NeoDivider } from '@dvcol/neo-svelte/divider';
+	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import { ArrowLeft, ChevronRight } from '@lucide/svelte';
 
 	let data = $state<InsightsData | null>(null);
@@ -60,6 +64,13 @@
 		style: 'Style'
 	};
 
+	const STATS = [
+		{ key: 'sessions', label: 'Sessions' },
+		{ key: 'speaking', label: 'Speaking' },
+		{ key: 'words', label: 'Words' },
+		{ key: 'errors', label: 'Mistakes' }
+	] as const;
+
 	function categoryClass(category: string): string {
 		if (category === 'grammar') return 'text-[var(--error)]';
 		if (category === 'style') return 'text-[var(--good)]';
@@ -89,17 +100,14 @@
 <svelte:head><title>Insights · onspot</title></svelte:head>
 
 <div class="h-full overflow-y-auto">
-	<div class="mx-auto max-w-4xl px-8 py-10">
+	<div class="insights mx-auto max-w-4xl px-4 py-10 sm:px-8">
 		{#if loading}
 			<p class="text-sm text-muted-foreground">Loading…</p>
 		{:else if selected}
-			<button
-				type="button"
-				class="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-				onclick={() => (selectedKey = null)}
-			>
-				<ArrowLeft class="size-4" /> All patterns
-			</button>
+			<NeoButton class="back-button mb-4" text rounded onclick={() => (selectedKey = null)}>
+				{#snippet icon()}<ArrowLeft class="size-4" />{/snippet}
+				All patterns
+			</NeoButton>
 			<h1 class="font-serif text-2xl font-medium">{selected.label}</h1>
 			<p class="mb-6 text-sm text-muted-foreground">
 				{selected.count} occurrence{selected.count === 1 ? '' : 's'} across
@@ -110,21 +118,22 @@
 				{#each groups as group (group.session?.id ?? 'unknown')}
 					<div>
 						<div class="mb-2.5 flex items-center gap-3 px-1">
-							<button
-								type="button"
-								class="font-serif text-base font-medium hover:text-[var(--brand)]"
+							<NeoButton
+								class="session-link font-serif text-base font-medium"
+								text
+								rounded
 								onclick={() => group.session && open(group.session.id)}
 							>
 								{group.session?.title ?? 'Unknown session'}
-							</button>
-							<span class="h-px flex-1 bg-border" aria-hidden="true"></span>
+							</NeoButton>
+							<NeoDivider flex="1" aria-hidden="true" />
 							<span class="text-xs text-faint">
 								{group.session ? fmtDate(group.session.createdAt) : ''}
 							</span>
 						</div>
 						<div class="flex flex-col gap-2">
 							{#each group.occurrences as occurrence (occurrence.correction.id)}
-								<div class="sheet rounded-2xl p-3.5">
+								<NeoCard class="occurrence-card" glass rounded="1rem" elevation={2} spacing="0.875rem">
 									<p class="mb-1 text-xs text-muted-foreground">
 										Attempt {attemptIndex[occurrence.attempt.id] ?? '?'} ·
 										{fmtDate(occurrence.attempt.createdAt)}
@@ -141,7 +150,7 @@
 									<p class="mt-1 text-xs leading-relaxed text-muted-foreground">
 										{occurrence.correction.explanation}
 									</p>
-								</div>
+								</NeoCard>
 							{/each}
 						</div>
 					</div>
@@ -154,22 +163,17 @@
 			</p>
 
 			<div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-				<div class="sheet rounded-2xl p-4">
-					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Sessions</p>
-					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight">{data.totals.sessions}</p>
-				</div>
-				<div class="sheet rounded-2xl p-4">
-					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Speaking</p>
-					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight">{fmtDuration(data.totals.speakingSeconds)}</p>
-				</div>
-				<div class="sheet rounded-2xl p-4">
-					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Words</p>
-					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight">{data.totals.words}</p>
-				</div>
-				<div class="sheet rounded-2xl p-4">
-					<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Mistakes</p>
-					<p class="mt-1.5 font-serif text-[1.75rem] leading-tight text-[var(--error)]">{data.totals.errors}</p>
-				</div>
+				{#each STATS as stat (stat.key)}
+					<NeoCard class="stat-card" glass rounded="1rem" elevation={2} spacing="1rem">
+						<p class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">{stat.label}</p>
+						<p class="mt-1.5 font-serif text-[1.75rem] leading-tight {stat.key === 'errors' ? 'text-[var(--error)]' : ''}">
+							{#if stat.key === 'sessions'}{data.totals.sessions}
+							{:else if stat.key === 'speaking'}{fmtDuration(data.totals.speakingSeconds)}
+							{:else if stat.key === 'words'}{data.totals.words}
+							{:else}{data.totals.errors}{/if}
+						</p>
+					</NeoCard>
+				{/each}
 			</div>
 
 			{#if data.patterns.length === 0}
@@ -184,16 +188,12 @@
 					<div>
 						<h2 class="mb-3 flex items-center gap-3 px-1">
 							<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Exam patterns</span>
-							<span class="h-px flex-1 bg-border" aria-hidden="true"></span>
+							<NeoDivider flex="1" aria-hidden="true" />
 							<span class="text-xs text-faint">Speaking mistakes to drill</span>
 						</h2>
 						<div class="flex flex-col gap-2">
 							{#each examPatterns as pattern (pattern.key)}
-								<button
-									type="button"
-									class="flex items-center justify-between gap-3 sheet rounded-2xl px-4 py-3 text-left transition-shadow hover:shadow-[var(--shadow-sheet-hover)]"
-									onclick={() => (selectedKey = pattern.key)}
-								>
+								<NeoButton class="pattern-row" glass rounded="1rem" elevation={2} hover={1} onclick={() => (selectedKey = pattern.key)}>
 									<div class="min-w-0">
 										<p class="truncate font-serif text-sm font-medium">{pattern.label}</p>
 										<p class="text-[10px] font-medium tracking-wider uppercase {categoryClass(
@@ -201,10 +201,10 @@
 										)}">{CATEGORY_LABEL[pattern.category] ?? pattern.category}</p>
 									</div>
 									<span class="flex shrink-0 items-center gap-2">
-										<span class="count-chip">{pattern.count}</span>
+										<NeoPill class="count-chip" size="small" elevation={-1}>{pattern.count}</NeoPill>
 										<ChevronRight class="size-4 text-faint" />
 									</span>
-								</button>
+								</NeoButton>
 							{/each}
 						</div>
 					</div>
@@ -212,22 +212,18 @@
 					<div>
 						<h2 class="mb-3 flex items-center gap-3 px-1">
 							<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Core grammar</span>
-							<span class="h-px flex-1 bg-border" aria-hidden="true"></span>
+							<NeoDivider flex="1" aria-hidden="true" />
 							<span class="text-xs text-faint">Errors first</span>
 						</h2>
 						<div class="flex flex-col gap-2">
 							{#each grammarPatterns as pattern (pattern.key)}
-								<button
-									type="button"
-									class="flex items-center justify-between gap-3 sheet rounded-2xl px-4 py-3 text-left transition-shadow hover:shadow-[var(--shadow-sheet-hover)]"
-									onclick={() => (selectedKey = pattern.key)}
-								>
+								<NeoButton class="pattern-row" glass rounded="1rem" elevation={2} hover={1} onclick={() => (selectedKey = pattern.key)}>
 									<p class="truncate font-serif text-sm font-medium">{pattern.label}</p>
 									<span class="flex shrink-0 items-center gap-2">
-										<span class="count-chip">{pattern.count}</span>
+										<NeoPill class="count-chip" size="small" elevation={-1}>{pattern.count}</NeoPill>
 										<ChevronRight class="size-4 text-faint" />
 									</span>
-								</button>
+								</NeoButton>
 							{/each}
 						</div>
 					</div>
@@ -238,16 +234,32 @@
 </div>
 
 <style>
+	/* Cards and pattern rows fill their grid cell / column. */
+	.insights :global(.neo-card.stat-card),
+	.insights :global(.neo-card.occurrence-card) {
+		width: 100%;
+		align-items: stretch;
+	}
+	/* Pattern rows are full-width neo keys: label left, count and chevron right. */
+	.insights :global(.neo-button.pattern-row) {
+		width: 100%;
+		padding: 0.75rem 1rem;
+		text-align: left;
+	}
+	.insights :global(.neo-button.pattern-row > .neo-content) {
+		width: 100%;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.insights :global(.neo-button.pattern-row .neo-content > *:first-child) { min-width: 0; }
 	/* A pattern's count, in the control colour: the row is clickable. */
-	.count-chip {
+	.insights :global(.neo-pill.count-chip) {
 		min-width: 1.75rem;
-		padding: 2px 8px;
-		border-radius: 999px;
-		background: var(--control);
+		justify-content: center;
 		color: var(--on-control);
-		font-size: 0.8125rem;
 		font-weight: 600;
-		text-align: center;
 		font-variant-numeric: tabular-nums;
 	}
+	.insights :global(.neo-button.back-button) { color: var(--muted-foreground); padding-inline: 0.5rem; }
+	.insights :global(.neo-button.session-link) { padding-inline: 0.5rem; font-family: var(--font-serif); }
 </style>

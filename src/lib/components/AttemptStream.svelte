@@ -29,6 +29,21 @@
 	let reducedMotionQuery: MediaQueryList | null = null;
 
 	/**
+	 * A slot is padded so the card's shadow fits inside it (the slot's
+	 * `content-visibility` clips anything painted outside it). Sizes are
+	 * therefore read from the card surface and positions from `cardTop`, so
+	 * both match where the unpadded slot used to be.
+	 */
+	function surfaceOf(slot: HTMLElement): HTMLElement {
+		return slot.querySelector<HTMLElement>(':scope > [data-card-surface]') ?? slot;
+	}
+
+	/** Where the card's top edge sits in the list (the slot's containment makes it the card's offset parent). */
+	function cardTop(slot: HTMLElement): number {
+		return slot.offsetTop + (parseFloat(getComputedStyle(slot).paddingTop) || 0);
+	}
+
+	/**
 	 * Sizes the floor spacer so the newest card settles at the top of the viewport
 	 * when scrolled to the end. Scrolling is deliberately visual only; selecting an
 	 * attempt requires a click or a newly-created attempt.
@@ -40,7 +55,7 @@
 			spacerHeight = 0;
 			return;
 		}
-		spacerHeight = Math.max(0, container.clientHeight - cards[cards.length - 1].offsetHeight - 24);
+		spacerHeight = Math.max(0, container.clientHeight - surfaceOf(cards[cards.length - 1]).offsetHeight - 24);
 	}
 
 	/**
@@ -53,7 +68,7 @@
 	function applyTall(slot: HTMLElement) {
 		if (!container) return;
 		const threshold = Math.max(480, container.clientHeight * 0.75);
-		slot.classList.toggle('tall', slot.offsetHeight > threshold);
+		slot.classList.toggle('tall', surfaceOf(slot).offsetHeight > threshold);
 	}
 
 	function markTallCards() {
@@ -142,7 +157,7 @@
 		if (!surface) return;
 		const distance = Math.max(
 			56,
-			Math.min(120, Math.round((container.clientHeight - card.offsetHeight) * 0.3))
+			Math.min(120, Math.round((container.clientHeight - surface.offsetHeight) * 0.3))
 		);
 		surface.animate(
 			[
@@ -173,7 +188,7 @@
 				card.style.removeProperty('opacity');
 				continue;
 			}
-			const relativeTop = card.offsetTop - container.scrollTop;
+			const relativeTop = cardTop(card) - container.scrollTop;
 			const progress = Math.max(0, Math.min(1, -relativeTop / 170));
 			if (progress === 0) {
 				card.style.removeProperty('transform');
@@ -205,10 +220,10 @@
 
 		if (animate) {
 			animateArrival(el);
-			animateTo(el.offsetTop, attemptId, ARRIVAL_DURATION_MS);
+			animateTo(cardTop(el), attemptId, ARRIVAL_DURATION_MS);
 		} else {
 			cancelAnimatedScroll();
-			container.scrollTop = el.offsetTop;
+			container.scrollTop = cardTop(el);
 			setActiveAttempt(attemptId);
 			measure();
 		}
@@ -220,7 +235,7 @@
 		if (target.closest('button, select, a, input, textarea')) return;
 		if (id !== $practice.activeAttemptId) setActiveAttempt(id);
 		const el = container?.querySelector<HTMLElement>(`[data-attempt-id="${id}"]`);
-		if (el) animateTo(el.offsetTop, id, CARD_SELECT_DURATION_MS);
+		if (el) animateTo(cardTop(el), id, CARD_SELECT_DURATION_MS);
 	}
 
 	onMount(() => {
@@ -284,7 +299,7 @@
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<div
 					data-attempt-id={attempt.id}
-					class="attempt-slot mb-4 min-w-0 cursor-pointer rounded-[22px] outline-none focus-visible:ring-3 focus-visible:ring-[var(--brand)]/45"
+					class="attempt-slot min-w-0 cursor-pointer outline-none"
 					role="button"
 					tabindex="0"
 					aria-label="Attempt {index + 1}, select and bring to the top"
@@ -335,10 +350,29 @@
 		scrollbar-gutter: stable;
 	}
 
+	/*
+	 * `content-visibility: auto` keeps long histories cheap, but it clips
+	 * painting to the slot box, which cut the card's shadow into a hard,
+	 * differently-rounded "ghost" corner. The slot is padded by the shadow's
+	 * reach (negative margins keep the 16px rhythm), so the whole shadow is
+	 * painted inside it.
+	 */
 	.attempt-slot {
+		--slot-pad: 16px;
+		padding: var(--slot-pad);
+		margin: calc(-1 * var(--slot-pad));
+		margin-bottom: calc(1rem - var(--slot-pad));
 		content-visibility: auto;
-		contain-intrinsic-size: auto 320px;
+		contain-intrinsic-size: auto 352px;
 		transform-origin: top center;
+	}
+	@media (min-width: 640px) {
+		.attempt-slot { --slot-pad: 24px; }
+	}
+	/* Keyboard focus rings the card itself, on the card's own radius. */
+	.attempt-slot:focus-visible :global(.neo-card.attempt-card) {
+		outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent);
+		outline-offset: 3px;
 	}
 
 	/* Tall cards scroll flat; the exit curve would otherwise flip them away
