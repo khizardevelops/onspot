@@ -18,9 +18,16 @@ build/
 .vercel
 .netlify
 
-# Tauri
+# Tauri. gen/android is the Android project Tauri generates and is meant to be
+# committed (its own .gitignore drops build output); only generated schemas are ignored.
 src-tauri/target/
-src-tauri/gen/
+src-tauri/gen/schemas/
+
+# Android pipeline: machine-specific toolchain paths and release signing secrets
+scripts/android.local.env
+*.jks
+*.keystore
+src-tauri/gen/android/keystore.properties
 
 # Editor directories and files
 .vscode/*
@@ -46,3 +53,31 @@ static/piper-wasm/
 repomix/*-bundle.*
 archive/lab-ui-2026-09-13/
 eval/
+
+# Environment files: never commit tokens (VITE_* values are baked into builds)
+.env
+.env.*
+!.env.example
+
+# Android build artefacts copied out of src-tauri/gen/android (the generated
+# project's own .gitignore already drops build/, .gradle/ and local.properties)
+*.apk
+*.aab
+*.idsig
+.kotlin/
+.cxx/
+src-tauri/gen/android/.idea/
+
+# Claude Code local state (keep a shared settings.json if one is added)
+.claude/*
+!.claude/settings.json
+
+# Test and tooling output
+test-results/
+playwright-report/
+coverage/
+*.tsbuildinfo
+.eslintcache
+
+# OS
+Thumbs.db

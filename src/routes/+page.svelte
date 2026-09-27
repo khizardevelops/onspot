@@ -20,6 +20,7 @@
 	import { toast } from '$lib/stores/toast';
 	import AttemptStream from '$lib/components/AttemptStream.svelte';
 	import FeedbackPanel from '$lib/components/FeedbackPanel.svelte';
+	import { closeOnBack } from '$lib/platform/backButton.svelte';
 	import PaperSegmentedControl from '$lib/components/PaperSegmentedControl.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
@@ -63,6 +64,12 @@
 	let lastAttemptId: string | null = null;
 	let deleteOpen = $state(false);
 	let coachOpen = $state(true);
+	// Android Back: close the delete dialog, or the Feedback sheet on phones (where it covers the page).
+	closeOnBack(() => deleteOpen, () => (deleteOpen = false));
+	closeOnBack(
+		() => coachOpen && matchMedia('(max-width: 640px)').matches,
+		() => (coachOpen = false)
+	);
 	let renaming = $state(false);
 	let renameValue = $state('');
 
@@ -269,7 +276,7 @@
 										<p class="eyebrow">Your prompt</p>
 										<p class="mt-1.5 max-w-[58ch] font-serif text-lg leading-snug font-medium sm:text-xl">{$practice.prompt.text}</p>
 									</div>
-									<div class="flex shrink-0 flex-wrap gap-2">
+									<div class="composer-actions flex shrink-0 flex-wrap gap-2">
 										<NeoButton rounded class="composer-action" onclick={() => nextPrompt()}>
 											{#snippet icon()}<SkipForward size={16} />{/snippet}
 											New prompt
@@ -288,15 +295,19 @@
 									</div>
 								</div>
 								{#if !sessionReady}
-									<div class="mt-3 flex items-start gap-2.5 rounded-xl border border-[var(--warn)]/30 bg-[var(--warn-soft)] p-3 text-sm" role="status" in:fly={{ y: 6, duration: 240 }}>
+									<div class="data-notice mt-3 flex items-start gap-2.5 rounded-xl border border-[var(--warn)]/30 bg-[var(--warn-soft)] p-3 text-sm" role="status" in:fly={{ y: 6, duration: 240 }}>
 										<AlertTriangle class="mt-0.5 size-4 shrink-0 text-[var(--warn)]" />
 										<p class="min-w-0 leading-relaxed">
 											{#if checkingData}
 												Checking {language?.name ?? 'language'} data…
 											{:else}
-												Before your first session, open
-												<a class="font-medium text-[var(--brand)] underline underline-offset-4" href="/settings/">Settings → Language data</a>
-												and click <strong>Download</strong>. That installs the approved speech and voice models for {language?.name ?? 'your language'}.
+												<!-- Phones get the short version: the button beside it already goes to Settings. -->
+												<span class="sm:hidden">Download the {language?.name ?? 'language'} speech data in Settings to start.</span>
+												<span class="hidden sm:inline">
+													Before your first session, open
+													<a class="font-medium text-[var(--brand)] underline underline-offset-4" href="/settings/">Settings → Language data</a>
+													and click <strong>Download</strong>. That installs the approved speech and voice models for {language?.name ?? 'your language'}.
+												</span>
 											{/if}
 										</p>
 									</div>
@@ -321,6 +332,10 @@
 		</footer>
 	</section>
 
+	<!-- Phones: Feedback opens as a sheet over the page; tapping outside closes it. -->
+	{#if coachOpen}
+		<button type="button" class="coach-scrim" aria-label="Close feedback" onclick={() => (coachOpen = false)}></button>
+	{/if}
 	<FeedbackPanel attempt={active} {activeCorrectionId} {stats} bind:open={coachOpen} onSelectCorrection={selectCorrection} />
 </div>
 
@@ -397,5 +412,47 @@
 		.practice-grid { grid-template-rows: minmax(0, 1fr) 42%; }
 		/* Closed feedback is a handle, not a second mobile toolbar. */
 		.practice-grid.coach-closed { grid-template-rows: minmax(0, 1fr) 36px; }
+	}
+	.coach-scrim { display: none; }
+
+	/*
+	 * Phones. There is no room to split the screen between takes, composer and
+	 * feedback, so Feedback is a bottom sheet over the page (the layout keeps
+	 * only its 36px handle) and the composer is compact.
+	 */
+	@media (max-width: 640px) {
+		.practice-grid,
+		.practice-grid.coach-closed { grid-template-rows: minmax(0, 1fr) 36px; }
+		.practice-grid:not(.coach-closed) :global(aside.feedback-shell) {
+			position: fixed;
+			inset: auto 0 0 0;
+			z-index: 70;
+			height: min(82dvh, calc(100% - 56px));
+			border-top: 1px solid var(--sheet-line);
+			border-radius: 20px 20px 0 0;
+			background-color: var(--card);
+			box-shadow: var(--shadow-float);
+			animation: sheet-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+		}
+		.coach-scrim {
+			display: block;
+			position: fixed;
+			inset: 0;
+			z-index: 65;
+			border: 0;
+			background: color-mix(in srgb, #000 32%, transparent);
+			animation: scrim-in 200ms ease-out;
+		}
+		.composer-wrap { padding-inline: 8px; }
+		.composer-wrap :global(.neo-card.composer-card.composer-card) { padding: 0.875rem 0.875rem 0.625rem; }
+		/* Two equal actions, primary on the right, rather than two stray pills. */
+		.composer-actions { display: grid; grid-template-columns: 1fr 1fr; }
+		.composer-wrap :global(.composer-actions .neo-button.composer-action) { justify-content: center; height: 44px; }
+		.data-notice { margin-top: 0.625rem; padding: 0.5rem 0.625rem; font-size: 0.8125rem; }
+	}
+	@keyframes sheet-in { from { transform: translateY(100%); } }
+	@keyframes scrim-in { from { opacity: 0; } }
+	@media (prefers-reduced-motion: reduce) {
+		.practice-grid :global(aside.feedback-shell), .coach-scrim { animation: none !important; }
 	}
 </style>

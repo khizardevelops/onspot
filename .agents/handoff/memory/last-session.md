@@ -1,5 +1,33 @@
 # Last Session
 
+## 2026-09-25: Android pipeline + mobile UI/UX fixes
+- Toolchain (no system changes): self-contained rustup (1.98.1, android targets) + Temurin JDK 21
+  in `/mnt/data/not_synced/dev-cache/`; NDK 28.2 from the SDK. `scripts/android.sh` +
+  gitignored `scripts/android.local.env`; npm scripts `android:*`. `src-tauri/gen/android` is now
+  tracked (root .gitignore only ignores gen/schemas; keystore/jks/local env ignored).
+- Config: RECORD_AUDIO/MODIFY_AUDIO_SETTINGS in the manifest; `app.security.headers` COOP/COEP
+  (delivered, but **Android WebView never becomes crossOriginIsolated** — no SharedArrayBuffer,
+  WASM single-threaded; engine already falls back); Cargo `[profile.release]` s/lto/1 cgu/abort/
+  strip; release signingConfig from keystore.properties + isShrinkResources.
+- MainActivity: native system-bar/cutout/IME insets padding (WebView 133 reports no CSS
+  safe-area insets for Android 15+ edge-to-edge); theme windowBackground = paper colour per
+  day/night. XML comments must not contain `--`.
+- Verified on the API 36 x86_64 emulator: app runs (Chrome 133 WebView, Tauri SQL DB),
+  mic → Android runtime dialog → live track; status bar fixed; Back behaviour below.
+- Mobile fixes (shared code, also web on phones): PopMenu `onScreen` floating options
+  (offset/flip/shift/size, 12px margin; nav menu had been cut off the right edge, translate menu
+  off the left) incl. submenus; `@skeletonlabs/floating-ui-svelte` 0.3.9 added explicitly
+  (deduped with neo). Feedback is a bottom sheet + scrim at ≤640px (grid keeps the 36px handle).
+  Compact composer (equal action grid, short data notice). `pointer: coarse` touch targets (44px
+  icon buttons, tabs stretch to track, text buttons ≥40px). Permissions prompt title counts rows.
+  Reopened sessions restore their prompt text (`sessionPrompt()` in practice.ts; was blank).
+- Android Back: `src/lib/platform/backButton.svelte.ts` — `closeOnBack(isOpen, close)` stack
+  using Tauri `onBackButtonPress` only while something is open (menus, phone Feedback sheet,
+  delete/restore/regenerate dialogs); otherwise default Back. Verified on device.
+- Release: `npm run android:build` → signed arm64 APK (see commands.md).
+- CI: `.github/workflows/android.yml` (GitHub Actions) builds the signed arm64 APK on push to
+  main; needs the three ANDROID_* repo secrets (see commands.md). Nothing committed/pushed yet.
+
 ## 2026-09-25 (later): language data size is what's actually missing
 - The "~399 MB" Japanese figure was only the label (`languageDownloadBytes` sums everything).
   The download already reused French's Whisper (Transformers.js cache is keyed by URL). Proven in

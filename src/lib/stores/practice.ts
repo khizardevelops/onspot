@@ -5,6 +5,7 @@ import {
 	type Correction,
 	type Prompt,
 	type RunMode,
+	type Session,
 	type TranslationSet,
 	type IDatabaseAdapter
 } from '$lib/adapters/db';
@@ -758,7 +759,25 @@ export async function openSession(sessionId: string): Promise<void> {
 		phase: 'idle',
 		error: null,
 		prompt: session
-			? { id: '', title: session.title, text: '' }
+			? await sessionPrompt(db, session, attempts.find((attempt) => attempt.promptId)?.promptId ?? null)
 			: get(store).prompt
 	});
+}
+
+/**
+ * The prompt a reopened session was answering. Previously only the title was
+ * restored, so "Your prompt" came back empty. Uses the stored prompt when an
+ * attempt links one, else the language's prompt with the same title (older
+ * sessions and renamed-back titles), else the title itself.
+ */
+async function sessionPrompt(
+	db: IDatabaseAdapter,
+	session: Session,
+	promptId: string | null
+): Promise<{ id: string; title: string; text: string }> {
+	const stored = promptId ? await db.getPrompt(promptId).catch(() => null) : null;
+	if (stored) return { id: stored.id, title: session.title, text: stored.text };
+	const language = requireLanguage(get(appSettings).targetLanguage);
+	const match = language.prompts.find((prompt) => prompt.title === session.title);
+	return { id: '', title: session.title, text: match?.text ?? session.title };
 }

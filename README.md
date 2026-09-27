@@ -206,6 +206,24 @@ npm run tauri build  # desktop installer
 npm run check        # type-check
 ```
 
+**Android** (Tauri v2). Needs the Android SDK and NDK, a JDK 17 or 21, and Rust from rustup with
+the Android targets. Copy `scripts/android.local.env.example` to `scripts/android.local.env` and
+point it at your toolchain, then:
+
+```sh
+npm run android:emulator-apk   # debug APK for an x86_64 emulator
+npm run android:build          # optimised, signed release APK for arm64 phones
+npm run android:dev            # live reload on a connected device
+```
+
+Release signing reads `src-tauri/gen/android/keystore.properties` (gitignored).
+
+Every push to `main` also builds the arm64 APK on GitHub Actions
+(`.github/workflows/android.yml`); download it from the run's artifacts. Pushing a `v*` tag
+attaches the APK to a GitHub Release. To sign CI builds, add the repository secrets
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`; without them the APK is
+unsigned.
+
 The web build is a static site, but it must be served with cross-origin isolation headers, which
 local speech needs:
 

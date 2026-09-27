@@ -29,6 +29,30 @@
 - `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
 - `npm run tauri build` — package the desktop app.
 
+## Android (Tauri v2)
+- `scripts/android.sh` wraps `tauri android …` with the right toolchain. Paths come from the
+  gitignored `scripts/android.local.env` (template: `android.local.env.example`): JDK 17/21 (Gradle
+  rejects newer), rustup Rust with `aarch64-linux-android` + `x86_64-linux-android` (Arch's system
+  Rust cannot add targets), NDK, SDK, and `CARGO_TARGET_DIR` outside the synced folder.
+  This machine: everything in `/mnt/data/not_synced/dev-cache/` (jdk-21, rustup, cargo,
+  onspot-target, onspot-release.jks). Logs: `build-emulator.log`, `build-release.log` there.
+- `npm run android:emulator-apk` — debug APK for x86_64 emulators (AVDs are x86_64, API 36);
+  `adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`.
+- `npm run android:build` — signed release APK for arm64 phones (`--apk --target aarch64`).
+  Signing: `src-tauri/gen/android/keystore.properties` (gitignored: keyAlias, password,
+  storeFile) → `onspot-release.jks`. **Back up the keystore**; updates must be signed with it.
+- `npm run android:dev` — hot-reload on a device/emulator. `scripts/android.sh env` prints the
+  resolved toolchain.
+- CI: `.github/workflows/android.yml` builds the arm64 release APK on push to main (not for
+  md/docs/.agents-only changes), `workflow_dispatch`, and `v*` tags (tag → GitHub Release).
+  versionCode = 10000 + run number (via `--config`). Artifact `onspot-android-apk`. Signing
+  secrets: `base64 -w0 /mnt/data/not_synced/dev-cache/onspot-release.jks | gh secret set
+  ANDROID_KEYSTORE_BASE64`, `gh secret set ANDROID_KEY_ALIAS -b onspot`,
+  `gh secret set ANDROID_KEY_PASSWORD` (value from keystore.properties). No secrets → unsigned.
+- Debugging the WebView: `adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`, then
+  raw CDP (Playwright's connectOverCDP is unsupported for WebView). Script:
+  `/tmp/opencode/pw/cdp-eval.mjs "<async js>"`.
+
 ## Cross-origin isolation (COOP/COEP)
 Needed for `SharedArrayBuffer` (ORT-Web WASM threads) and OPFS. Set in dev and preview by the
 `onspot-cross-origin-isolation` plugin in `vite.config.ts` — **not** via `server.headers`, which

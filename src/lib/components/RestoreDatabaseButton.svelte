@@ -4,6 +4,7 @@
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
 	import { toast } from '$lib/stores/toast';
 	import { importSqliteBackup, type SqliteRestoreResult } from '$lib/utils/export';
+	import { closeOnBack } from '$lib/platform/backButton.svelte';
 
 	interface Props {
 		/** Button text. */
@@ -18,6 +19,7 @@
 	let pending = $state<File | null>(null);
 	let confirmOpen = $state(false);
 	let restoring = $state(false);
+	closeOnBack(() => confirmOpen, () => (confirmOpen = false));
 
 	function stage(event: Event): void {
 		const element = event.currentTarget as HTMLInputElement;

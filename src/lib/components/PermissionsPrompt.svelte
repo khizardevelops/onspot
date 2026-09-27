@@ -33,6 +33,9 @@
 	let storage = $state<State>('unsupported');
 	let microphone = $state<State>('unsupported');
 
+	/** Rows the dialog shows: storage is skipped where the browser cannot prompt for it. */
+	const shown = $derived([storage, microphone].filter((state) => state !== 'unsupported').length);
+
 	const missing = $derived(
 		[storage, microphone].some((state) => state === 'prompt' || state === 'denied')
 	);
@@ -172,9 +175,11 @@
 >
 	<div class="flex flex-col gap-4 p-1">
 		<div>
-			<h2 id="permissions-title" class="text-base font-semibold">Two permissions before you start</h2>
+			<h2 id="permissions-title" class="text-base font-semibold">
+				{shown === 1 ? 'One permission' : 'Two permissions'} before you start
+			</h2>
 			<p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-				Your browser will ask for each. Nothing leaves this device.
+				{shown === 1 ? 'You will be asked to confirm.' : 'You will be asked for each.'} Nothing leaves this device.
 			</p>
 		</div>
 		<ul class="flex flex-col gap-3">

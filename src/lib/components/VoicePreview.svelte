@@ -13,6 +13,7 @@
 	} from '$lib/stores/ttsPreview';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { closeOnBack } from '$lib/platform/backButton.svelte';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import { AlertTriangle, Loader2, Pause, Play, Repeat, RotateCcw } from '@lucide/svelte';
@@ -23,6 +24,7 @@
 	const local = $derived($appSettings.ttsMode === 'local');
 	const available = $derived(local || Boolean($openaiApiKey));
 	let regenerateOpen = $state(false);
+	closeOnBack(() => regenerateOpen, () => (regenerateOpen = false));
 
 	// The preview owns its own audio graph; never leave it running off-page.
 	onDestroy(stopVoicePreview);

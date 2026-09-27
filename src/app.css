@@ -369,6 +369,27 @@ html[neo-theme-root] .neo-tabs:not(.custom-selection, .custom-selection *) .neo-
 	--neo-tab-border-color: var(--primary);
 }
 
+/*
+ * Touch screens: every control is at least 44px, the size a fingertip can hit
+ * reliably (Apple 44pt, Android 48dp). Desktop keeps its compact sizes; the
+ * min-* values win over the components' smaller width/height.
+ */
+@media (pointer: coarse) {
+	html[neo-theme-root] :is(.card-icon-button, .icon-button, .coach-action, .filter-key, .session-action, .translate-trigger, .play-button, .segment-button, .search-option, .history-tool).neo-button {
+		min-width: 44px;
+		min-height: 44px;
+	}
+	/* Selected tab rows (Settings General/Advanced, Exam/Casual) and form fields. */
+	html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group { min-height: 44px; }
+	/* Tabs fill their track, so the whole key (not just its label) is the target. */
+	html[neo-theme-root] .neo-tabs .neo-tabs-group > .neo-tab { align-self: stretch; }
+	html[neo-theme-root] .neo-tabs .neo-tabs-group > .neo-tab > .neo-button.neo-tab-button { height: 100%; }
+	html[neo-theme-root] .neo-input-group.neo-input-group { min-height: 44px; }
+	html[neo-theme-root] .neo-input-group .neo-button { min-width: 40px; min-height: 40px; }
+	/* Text buttons (Download, Test connection, …); list rows and tab keys size themselves. */
+	html[neo-theme-root] .neo-button:not(.neo-list-item-button, .neo-list-item-content, .neo-tab-button) { min-height: 40px; }
+}
+
 /* Cards are sheets: frosted, lighter than the paper they sit on, with a hairline. */
 html[neo-theme-root] .neo-card.neo-card.neo-glass:not(.neo-tinted) {
 	background-color: var(--sheet-frost);

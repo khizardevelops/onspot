@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paper background, dark theme (app.css background token) -->
+    <color name="onspot_paper">#151412</color>
+</resources>

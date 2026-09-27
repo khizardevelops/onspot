@@ -1,3 +1,4 @@
+import { flip, offset, shift, size, type UseFloatingOptions } from '@skeletonlabs/floating-ui-svelte';
 import { fade, scale } from 'svelte/transition';
 
 /*
@@ -17,6 +18,34 @@ export const quickPop = {
 /** Tooltips: open almost immediately on hover, never on focus alone. */
 export const quickTooltip = { hoverDelay: 60, openDelay: 0, openOnFocus: false, ...quickPop } as const;
 
+/** Space kept between a floating menu and the viewport edge. */
+const VIEWPORT_MARGIN = 12;
+
+/**
+ * Floating-ui positioning that keeps a menu fully on screen. neo's own
+ * middleware only flips, so on a phone a menu wider than the room beside its
+ * trigger ran off the edge (the navigation menu was cut in half). `shift`
+ * slides it back inside, `size` caps it to the space available, and the menu
+ * scrolls if it is still taller.
+ */
+export const onScreen: UseFloatingOptions = {
+	middleware: [
+		offset(8),
+		flip({ padding: VIEWPORT_MARGIN }),
+		shift({ padding: VIEWPORT_MARGIN }),
+		size({
+			padding: VIEWPORT_MARGIN,
+			apply({ availableWidth, availableHeight, elements }) {
+				Object.assign(elements.floating.style, {
+					maxWidth: `${Math.max(160, availableWidth)}px`,
+					maxHeight: `${Math.max(160, availableHeight)}px`,
+					overflowY: 'auto'
+				});
+			}
+		})
+	]
+};
+
 /** Menus open on click only (see PopMenu). Their overlay uses neo's CSS fade, capped in app.css. */
 export const quickMenu = { openOnHover: false, openOnFocus: false, openOnClick: true } as const;
 
@@ -34,8 +63,9 @@ export const quickSubmenu = {
 	openOnFocus: false,
 	openOnClick: true,
 	hoverDelay: 0,
-	openDelay: 0
-} as const;
+	openDelay: 0,
+	options: onScreen
+};
 
 /** Select dropdowns. */
 export const quickSelect = { hoverDelay: 0, openDelay: 0, listProps: { ...quickPop } };

@@ -98,4 +98,8 @@
 		.segmented { --segment-height: 36px; }
 		.segmented :global(.neo-tab .neo-button.segmented-option) { padding-inline: 9px; }
 	}
+	@media (pointer: coarse) {
+		/* A fingertip-sized key inside the track. */
+		.segmented { --segment-height: 44px; }
+	}
 </style>

@@ -12,7 +12,11 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "bundle": "node repomix/bundle.mjs",
     "bundle:ui": "npx repomix --include \"src/routes/ui-sandbox/**/*.svelte\" --output \"repomix/ui-sandbox-bundle.xml\"",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "android": "scripts/android.sh",
+    "android:dev": "scripts/android.sh dev",
+    "android:build": "scripts/android.sh build",
+    "android:emulator-apk": "scripts/android.sh emulator-apk"
   },
   "dependencies": {
     "@diffusionstudio/piper-wasm": "^1.0.0",
@@ -20,6 +24,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@lucide/svelte": "^1.46.0",
     "@paper-design/shaders": "^0.0.81",
+    "@skeletonlabs/floating-ui-svelte": "0.3.9",
     "@sqlite.org/sqlite-wasm": "^3.53.4-build1",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.3",

@@ -1,0 +1,119 @@
+# Builds the Android APK (arm64, release) on every push to main.
+#
+# Signing: set these repository secrets (Settings -> Secrets and variables ->
+# Actions) and the APK is signed with the same key as local release builds:
+#   ANDROID_KEYSTORE_BASE64   base64 of the .jks file
+#   ANDROID_KEY_ALIAS         key alias (onspot)
+#   ANDROID_KEY_PASSWORD      keystore and key password
+# Without them the build still runs and uploads an unsigned APK.
+#
+# Pushing a tag like v0.2.0 also publishes the APK on a GitHub Release.
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Copy the eSpeak phonemizer into static/
+        run: |
+          mkdir -p static/piper-wasm
+          cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: android-aarch64
+
+      - name: Use the runner's Android NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+
+      - name: Set up release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo "::warning::Signing secrets are not set; the APK will be unsigned."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/onspot-release.jks"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            echo "keyAlias=$KEY_ALIAS"
+            echo "password=$KEY_PASSWORD"
+            echo "storeFile=$keystore"
+          } > src-tauri/gen/android/keystore.properties
+
+      - name: Build APK
+        # versionCode rises with every run so each APK installs over the last.
+        run: |
+          npm run android:build -- --apk --target aarch64 \
+            --config "{\"bundle\":{\"android\":{\"versionCode\":$((10000 + GITHUB_RUN_NUMBER))}}}"
+
+      - name: Collect APK
+        id: apk
+        run: |
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          name="onspot-${version}-${GITHUB_SHA::7}-arm64.apk"
+          apk="$(find src-tauri/gen/android/app/build/outputs/apk -name '*release*.apk' | head -1)"
+          [[ -n "$apk" ]] || { echo "::error::No APK was produced"; exit 1; }
+          mkdir -p dist && cp "$apk" "dist/$name"
+          echo "path=dist/$name" >> "$GITHUB_OUTPUT"
+          echo "Built $name ($(du -h "dist/$name" | cut -f1)) from $apk" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onspot-android-apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish to a GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f src-tauri/gen/android/keystore.properties "$RUNNER_TEMP/onspot-release.jks"
