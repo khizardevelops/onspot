@@ -3,6 +3,11 @@
 Human-facing project documents. Agent session state (current status, decisions, rules, tracked
 defects) lives in `.agents/handoff/`, not here.
 
+Everything outside `archive/` is an **active** document: current, lean, and edited as work
+moves. When any file, or part of one, stops being useful day to day, it moves to
+[`archive/`](./archive/README.md) at the **same path**: `archive/` mirrors this folder tree
+one-for-one. Active docs are not logs. See the archive README for when and how to archive.
+
 | folder | what goes in it |
 |---|---|
 | [`planning/`](./planning/) | Your working lists: [`ideas.md`](./planning/ideas.md) (ideas, planned work, done) and [`bugs.md`](./planning/bugs.md) (bugs to fix). |
@@ -12,3 +17,4 @@ defects) lives in `.agents/handoff/`, not here.
 | [`reference/`](./reference/) | Raw external data, e.g. [`groq_free/`](./reference/groq_free/) (Groq free-tier rate-limit CSVs). |
 | [`prompts/`](./prompts/) | Prompts given to AI tools: the product inception brief and the UI-capture request. |
 | [`scratch/`](./scratch/) | Throwaway text, e.g. sample French dialogue. Nothing here is authoritative. |
+| [`archive/`](./archive/README.md) | **Archived** content from any folder above, at its mirrored path (`docs/X/Y.md` → `docs/archive/X/Y.md`). Frozen; read only for history. |
