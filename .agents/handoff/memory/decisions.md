@@ -1,5 +1,13 @@
 # Decisions
 
+### STT runtime: stay on Transformers.js, not whisper.cpp / wllama (2026-09-30)
+wllama is llama.cpp for GGUF LLMs; it cannot run Whisper or Piper and there is no local LLM.
+whisper.cpp (`@transcribe/shout`) was measured on `/stt-bench/`: ~0.6 GB browser PSS vs
+~2.4 GB, 190/264 MB vs 299 MB, q8_0 same WER on eval2 — but rtf 14.6 (q5_1) / 22.7 (q8_0)
+against 1.81 on the same machine, and it needs SharedArrayBuffer (absent in the Android
+WebView). Evidence: `docs/benchmarks/stt.md`. Revisit only if a WASM whisper.cpp build is
+shown to run near real time.
+
 ### Japanese TTS: piper-plus engine, not Piper + jpreprocess (2026-09-25)
 No jpreprocess WASM exists for the browser; the official Piper Japanese voice needs Piper 1.7's
 own OpenJTalk scheme and is non-commercial. piper-plus (MIT) ships exactly the requested
@@ -422,7 +430,7 @@ the redundant `attempt.translation` field (#21), list virtualization (#23), cont
 ### Language registry is the single source of truth (2026-09-15)
 - `src/lib/languages/index.ts` holds every `LanguageDefinition` (STT, voices, prompts, approval).
   Adding a language is one entry after a human quality pass; nothing else in the app names a
-  language directly. `docs/languages.md` is the human-facing tracker.
+  language directly. `docs/architecture/languages.md` is the human-facing tracker.
 - A language is offered only when it and each of its STT/voice entries are `approved`; the
   approval record names the test, the date and the evidence file. This preserves the lab rule
   that no download is exposed before a human has judged its output.

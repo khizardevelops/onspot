@@ -103,3 +103,11 @@ versions in one page.
 - **Model loading and inference used to run on the main thread** and freeze the tab, badly enough
   that a Playwright driver could not click during a load. This is fixed for local STT by
   `src/lib/workers/stt.worker.ts`; keep any new heavy work off the UI thread.
+
+## Memory: Transformers.js holds ~2 GB for whisper-small q4 (2026-09-30)
+
+Measured with `/stt-bench/` (summed PSS of the headless Chromium process tree): the browser sits
+at ~0.4–0.7 GB before the model loads and ~2.3–2.5 GB while whisper-small q4 is loaded and
+transcribing, i.e. roughly 1.7–1.9 GB attributable to a 299 MB download. whisper.cpp held the
+same model family in ~0.2 GB but was rejected for speed (`stt.md`). The existing mitigation is
+the STT worker's 90 s idle release, which frees the session between answers.

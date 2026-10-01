@@ -392,7 +392,7 @@ export const APPROVED_LANGUAGES: readonly LanguageDefinition[] = LANGUAGES.filte
  * Languages the app offers. Production builds offer approved languages only.
  * Development builds also offer candidates, marked as such, so the human
  * listening test / transcript review that approval needs can be run in the
- * real app (docs/languages.md, step 5).
+ * real app (docs/architecture/languages.md, step 5).
  */
 export const OFFERED_LANGUAGES: readonly LanguageDefinition[] = import.meta.env.DEV
 	? LANGUAGES

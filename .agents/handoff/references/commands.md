@@ -26,6 +26,8 @@
   (`npm run bundle -- insights -- --compress --copy`). Output: `repomix/<targets>-bundle.<ext>`.
   Full unlimited-depth page bundles are ~60–130 files (settings ≈ 80k tokens); `--depth 1` is
   the page plus what it uses directly.
+- `/stt-bench/` (dev route) — STT benchmark of the product engine over every scored `eval/`
+  clip; `?auto=1` starts it, `&limit=n` runs the first n clips; results in `window.__bench`.
 - `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
 - `npm run tauri build` — package the desktop app.
 

@@ -3,7 +3,7 @@
 ## Current State
 **Japanese (2026-09-25):** candidate language (dev builds only): whisper-small q4 `japanese`,
 piper-plus voices with OpenJTalk/jpreprocess WASM G2P in the TTS worker; see
-`docs/supported-languages.md` and last-session.
+`docs/architecture/supported-languages.md` and last-session.
 
 **UI library (2026-09-24):** every component is @dvcol/neo-svelte (NeoThemeProvider in the root
 layout, token bridge in `app.css`); shadcn-svelte, bits-ui and `src/lib/components/ui/` are gone.
@@ -171,7 +171,7 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 - **`AlertDialog.Action` does not close the dialog in bits-ui 2.19.** Handlers must close the
   bound `open` state themselves (see `mem:decisions.md`); `Cancel` still closes on its own.
 - STT/TTS/prompts/LLM prompts are all parameterized by the selected language. Nothing is bundled;
-  every model is fetched from its public host by the user's device. `docs/languages.md` tracks the
+  every model is fetched from its public host by the user's device. `docs/architecture/languages.md` tracks the
   approval system and the add-a-language recipe.
 
 ## Product shape (from `docs/prompts/inception.md`)

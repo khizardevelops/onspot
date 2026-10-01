@@ -1,7 +1,7 @@
 # Adding a model: what to check before you spend time on it
 
 Written after a session where several promising models turned out to be dead ends. Check
-[`benchmarks/`](./benchmarks/README.md) first — if your candidate is on the Rejected list, stop.
+[`benchmarks/`](../benchmarks/README.md) first — if your candidate is on the Rejected list, stop.
 
 ---
 
@@ -38,7 +38,7 @@ Then answer these four questions:
 
 ## Approved / Rejected verdicts
 
-Moved to [`benchmarks/`](./benchmarks/README.md) — the full list of what works, what doesn't, and
+Moved to [`benchmarks/`](../benchmarks/README.md) — the full list of what works, what doesn't, and
 the measured evidence for each, kept there so it doesn't drift out of sync with a second copy
 here. Check it before spending time on a candidate.
 
@@ -53,13 +53,13 @@ refuses the same file. **Only a browser run counts.** Test headful, with a cold 
 ### 2. Quantization is a download lever, not a speed one
 Browser WASM has no INT8 SIMD path (no VNNI, no ARM dot-product), so ORT-Web dequantizes back
 to float on every matmul. Measured examples:
-[`benchmarks/runtime.md`](./benchmarks/runtime.md#quantization-is-a-bandwidth-lever-never-a-speed-one).
+[`benchmarks/runtime.md`](../benchmarks/runtime.md#quantization-is-a-bandwidth-lever-never-a-speed-one).
 
 **fp32 on WASM. fp16 only on WebGPU. 8-bit only to save bandwidth.**
 
 ### 3. Downloads are bigger than the spec sheet, because embeddings stay fp32
 `q4` quantizes MatMul weights and leaves `embed_tokens` alone. Full table:
-[`benchmarks/runtime.md`](./benchmarks/runtime.md#downloads-are-bigger-than-the-spec-sheet-q4-keeps-embeddings-in-fp32).
+[`benchmarks/runtime.md`](../benchmarks/runtime.md#downloads-are-bigger-than-the-spec-sheet-q4-keeps-embeddings-in-fp32).
 
 For whisper-small, **53% of the download is one fp32 embedding table**. The encoder, which has
 no embeddings, *is* properly 4-bit: 352.8 MB → 66.2 MB.
@@ -79,7 +79,7 @@ client-side. Call it with the input as a JSON **array** — a bare object aborts
 emscripten pointer and no stderr.
 
 ### 5. One eval clip will rank models wrong
-It already did: [`benchmarks/stt.md`](./benchmarks/stt.md#one-clip-trap).
+It already did: [`benchmarks/stt.md`](../benchmarks/stt.md#one-clip-trap).
 
 The "best" model on one clip was the worst overall. **345 words is still small** — one word is
 ~0.29% WER. Aggregate WER is total-errors / total-words, never a mean of per-clip rates.
@@ -95,7 +95,7 @@ The "best" model on one clip was the worst overall. **345 words is still small**
    progress bar shows real MB.
 5. Benchmark against **every** clip in `eval/`, not just one.
 6. Compare to the incumbent: `whisper-small q4` — see
-   [`benchmarks/stt.md`](./benchmarks/stt.md#decision-table-aggregate-345-words).
+   [`benchmarks/stt.md`](../benchmarks/stt.md#decision-table-aggregate-345-words).
 7. If it loses, record why in `known-issues.md` so nobody retries it.
 
 ## Adding a TTS model — checklist
@@ -127,7 +127,7 @@ The "best" model on one clip was the worst overall. **345 words is still small**
   `cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/`
 - **WebGPU is not a free win.** It is available here and builds sessions, but its quantized
   numerics are wrong. See
-  [`benchmarks/runtime.md`](./benchmarks/runtime.md#device-wasm-not-webgpu). Re-test per machine;
+  [`benchmarks/runtime.md`](../benchmarks/runtime.md#device-wasm-not-webgpu). Re-test per machine;
   do not assume.
 
 ---

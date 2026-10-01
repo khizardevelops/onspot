@@ -24,7 +24,7 @@ import type { ModelProgress, TtsModelConfig, TtsSynthesis } from '../../types';
  *
  * Everything else that was in the lab lost this listening test and was
  * removed: `Piper Siwis (F, low)`, MMS-TTS French (fp32/q8/fp16), Audio8 TTS
- * 0.6B (remote), Web Speech API. See docs/approved-tech.md for why each of
+ * 0.6B (remote), Web Speech API. See docs/benchmarks/tts.md for why each of
  * those was in the running and what disqualified it. Earlier, before this
  * listening test: Kokoro-82M (frozen English-only voice registry in
  * kokoro-js) and Matcha-TTS (no French model exists) were rejected outright.

@@ -7,7 +7,7 @@ Anything in `.agents/handoff/` or the other docs that used to repeat a table now
 instead, so there is **one place to update**. Decisions and hard rules stay in
 `.agents/handoff/`; raw numbers live here.
 
-For *how* to vet a new candidate, see [`../plan.md`](../plan.md). For the approved/rejected
+For *how* to vet a new candidate, see [`../research/model-vetting.md`](../research/model-vetting.md). For the approved/rejected
 verdict list, see [`stt.md`](./stt.md) and [`tts.md`](./tts.md).
 
 ## Index

@@ -3,7 +3,7 @@
 The app ships no models. Every language's speech recognition and voice are downloaded by the
 user, on demand, from public model hosts. This file explains how languages are tracked and
 approved; the machine-readable source of truth is
-[`src/lib/languages/index.ts`](../src/lib/languages/index.ts).
+[`src/lib/languages/index.ts`](../../src/lib/languages/index.ts).
 
 ## Where the data lives
 

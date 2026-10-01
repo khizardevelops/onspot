@@ -1,5 +1,32 @@
 # Last Session
 
+## 2026-10-01: docs/ reorganised into subfolders
+- `docs/README.md` is the index. `planning/` (ideas.md, bugs.md — bugs split out of ideas),
+  `architecture/` (languages.md, supported-languages.md), `benchmarks/` (unchanged),
+  `research/` (model_problem.md, model-vetting.md = old plan.md), `reference/groq_free/` (was
+  supported_providers/), `prompts/` (unchanged), `scratch/` (sandbox.md). Redirect stubs
+  approved-tech.md / groq-models.md deleted. All references in docs, handoff (not archive) and
+  code comments were updated; a link check found 0 broken paths.
+
+## 2026-10-01: model_problem.md
+- User is unhappy with Transformers.js STT RAM (~1.9 GB). Wrote `docs/research/model_problem.md`: the
+  problem, every local + cloud model with purpose/specs/benchmarks, known vs suspected causes,
+  replacement gates, rejected candidates, research leads. Todo added at the top of
+  `docs/planning/ideas.md` ("optimisation") for the user's manual research; mirrored in tasks.md.
+
+## 2026-09-30: whisper.cpp vs Transformers.js STT check (rejected)
+- Question from `docs/planning/ideas.md`: does Transformers.js double RAM/disk vs GGUF, and should we use
+  wllama? wllama runs GGUF LLMs only — not applicable. Benchmarked whisper.cpp instead.
+- New dev-only route `src/routes/stt-bench/` (no stores, not in nav): runs the product STT worker
+  over all scored eval clips, mirrors results to `window.__bench`; `&auto=1`, `&limit=n`.
+  whisper.cpp engine code was removed after the run and `@transcribe/*` uninstalled.
+- Results (details in docs/benchmarks/stt.md + runtime.md): Transformers.js reproduced 5.5% WER,
+  rtf 1.81 on eval2, ~2.4 GB browser PSS loaded. whisper.cpp q5_1 9.1% / rtf 14.6, q8_0 6.8% /
+  rtf 22.7, ~0.6 GB. Decision: keep Transformers.js (decisions.md).
+- Driver (scratchpad, not committed): playwright-core `launchServer` + Chromium 1243, PSS summed
+  over the browser pid tree from /proc. Gotcha: `pkill -f "<pattern>"` also kills the calling
+  shell when the pattern is in its own command line (exit 144).
+
 ## 2026-09-25: Android pipeline + mobile UI/UX fixes
 - Toolchain (no system changes): self-contained rustup (1.98.1, android targets) + Temurin JDK 21
   in `/mnt/data/not_synced/dev-cache/`; NDK 28.2 from the SDK. `scripts/android.sh` +
@@ -37,7 +64,7 @@
   `JAPANESE_G2P_TRANSFER_BYTES`). The progress bar is weighted by the missing parts only.
 - Settings → Language data shows "Adds about X to this device · about Y to download", notes when
   the speech model is shared, and "Everything is on this device" when installed. Verified 3 states.
-- `docs/supported-languages.md`: per-model on-device/download size table and install-cost table.
+- `docs/architecture/supported-languages.md`: per-model on-device/download size table and install-cost table.
 
 ## 2026-09-25: Japanese language support (candidate)
 - Spec asked for jpreprocess-WASM G2P feeding the existing Piper engine. Findings: no browser
@@ -68,7 +95,7 @@
   after reload, Settings preview plays; Practice in JA; prompts render without placeholders;
   build has no 60 MB wasm; check 0/0. Harmless build warning from piper-plus's unused Chinese
   dictionary `new URL("../../assets/")`.
-- Docs: `docs/supported-languages.md` (per-language stack, user request), `docs/languages.md`.
+- Docs: `docs/architecture/supported-languages.md` (per-language stack, user request), `docs/architecture/languages.md`.
 
 ## 2026-09-25: attempt-card "ghost" corners
 - Cause: the card (NeoCard `rounded` → 32px) sat in `.attempt-slot` (`rounded-[22px]`) whose
@@ -517,7 +544,7 @@ and ran the requested visual cleanup across Practice, feedback, and navigation.
 - Prompts, STT language/model, TTS voice set, and LLM evaluation/translation prompts are all
   parameterized by the selected language. DB migration v6 adds `prompts.language` and backfills
   legacy rows as French.
-- `docs/languages.md` documents the approval rule and the add-a-language recipe.
+- `docs/architecture/languages.md` documents the approval rule and the add-a-language recipe.
 
 ## Bug fixes and visual cleanup
 - **Tabs looked unselected because bits-ui emits `data-state`, not `data-active`.** Feedback

@@ -1,7 +1,7 @@
 # Supported languages
 
 What onspot can teach today, and exactly which speech technology each language uses. The
-machine-readable source of truth is [`src/lib/languages/index.ts`](../src/lib/languages/index.ts);
+machine-readable source of truth is [`src/lib/languages/index.ts`](../../src/lib/languages/index.ts);
 how a language gets approved is in [`languages.md`](languages.md).
 
 Nothing below is bundled with the app. The learner's device downloads each model on demand
@@ -74,7 +74,7 @@ them marked "candidate, not yet approved" so the listening test can be run in th
 |---|---|
 | Model | [`onnx-community/whisper-small`](https://huggingface.co/onnx-community/whisper-small), `q4` — **~299 MB** |
 | Decoder language | `french` |
-| Quality | 5.5 % aggregate WER over three human-transcribed clips — [`benchmarks/stt.md`](benchmarks/stt.md) |
+| Quality | 5.5 % aggregate WER over three human-transcribed clips — [`benchmarks/stt.md`](../benchmarks/stt.md) |
 | Cloud fallback | Groq `whisper-large-v3-turbo`, language `fr` |
 
 ### Text-to-speech
@@ -84,7 +84,7 @@ them marked "candidate, not yet approved" so the listening test can be run in th
 | Engine | [Piper](https://github.com/rhasspy/piper) VITS, run directly on onnxruntime-web (`PiperAdapter`) |
 | Grapheme-to-phoneme | eSpeak-ng French, via [`@diffusionstudio/piper-wasm`](https://www.npmjs.com/package/@diffusionstudio/piper-wasm) (18 MB, served from `static/piper-wasm/`) |
 | Voices ([`rhasspy/piper-voices`](https://huggingface.co/rhasspy/piper-voices)) | Piper Tom (M, medium, 44 kHz, ~64 MB) — **default**, with an EQ/loudness correction profile · Piper UPMC (medium, 2 speakers, ~77 MB) · Piper Siwis (F, medium, ~63 MB) · Piper MLS (medium, 125 speakers, ~77 MB) |
-| Approval | Human listening test, 2026-09-13 — [`benchmarks/tts.md`](benchmarks/tts.md) |
+| Approval | Human listening test, 2026-09-13 — [`benchmarks/tts.md`](../benchmarks/tts.md) |
 
 ### Language model prompts
 

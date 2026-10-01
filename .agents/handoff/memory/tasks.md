@@ -22,9 +22,17 @@
 - [ ] Sweep remaining hand-rolled buttons (AttemptStream, AudioBar, Transcript word buttons) for
   neo equivalents where they don't fight the conveyor/transcript layout.
 
+## Resource usage
+- [x] whisper.cpp / wllama vs Transformers.js checked 2026-09-30 — rejected (8–12x slower).
+- [ ] **User-owned (manual research):** find an STT alternative using `docs/research/model_problem.md`
+  (the problem, every model in use, specs, benchmarks, gates, research leads). The user is not
+  happy with ~1.9 GB for whisper-small q4; do not treat the current RAM as accepted.
+- [ ] Optional: reduce STT resident RAM without losing accuracy (ORT arena/session options,
+  quantized-embedding export, shorter idle release); measure with `/stt-bench/`.
+
 ## Language system follow-ups
 - [ ] Evaluate and approve the next language (STT + voice) with a human quality pass, then add one
-  `LanguageDefinition`; see `docs/languages.md`.
+  `LanguageDefinition`; see `docs/architecture/languages.md`.
 - [ ] Re-test the downloaded language data on a truly cold cache end to end (Whisper 299 MB +
   Piper 64 MB) including Cancel mid-download and resume.
 - [x] Settings voice preview: cached first generation, instant replay, confirm-gated regeneration.
@@ -64,8 +72,8 @@
   as markdown).
 - [x] Consolidated all benchmark/metric data into `docs/benchmarks/` (`stt.md`, `tts.md`,
   `runtime.md`, `llm-providers.md`, `README.md`) and de-duplicated it out of `rules/constraints.md`,
-  `known-issues.md`, `decisions.md` and `plan.md`. `docs/approved-tech.md` and
-  `docs/groq-models.md` are now redirect stubs.
+  `known-issues.md`, `decisions.md` and `docs/research/model-vetting.md` (was `docs/plan.md`).
+  The `approved-tech.md` / `groq-models.md` redirect stubs were deleted in the 2026-10-01 docs reorg.
 
 ## Completed product foundation
 - [x] SvelteKit static SPA, Tauri v2 shell, COOP/COEP, and Tauri/OPFS database adapters.

@@ -2,7 +2,7 @@
 
 Whisper-family and Moonshine results, measured in a real browser on WASM unless stated
 otherwise. See [`runtime.md`](./runtime.md) for the device/precision matrix behind these
-numbers, and [`../plan.md`](../plan.md) for the method.
+numbers, and [`../research/model-vetting.md`](../research/model-vetting.md) for the method.
 
 ## Eval sets
 
@@ -80,3 +80,27 @@ whisper-small q4 at 5.6% on `set1`, while the older single-clip quantization mat
 9.6% and 8.0%. They are different dates/decoders, not a transcription error. The **three-clip
 aggregate is the decision basis**; the single-clip matrix is retained only for the q4/int8
 diagnostic. Re-run both in a browser with a cold cache before treating either as current.
+
+## whisper.cpp vs Transformers.js (2026-09-30) — rejected
+
+Asked because Transformers.js/ONNX was suspected of doubling RAM/disk versus GGUF-style formats.
+(`@wllama/wllama` was ruled out first: it is llama.cpp and runs GGUF *LLMs* only — not Whisper,
+not Piper — and onspot has no local LLM.) whisper.cpp ran in the browser through
+`@transcribe/shout` 1.0.7 (MIT, SIMD + pthreads, Dec 2025 build), fed 16 kHz PCM directly,
+`lang: 'fr'`, 2 threads (the same budget ORT gets). Harness: `/stt-bench/` driven by headless
+Chromium 1243, one engine per fresh browser, summed PSS of the browser process tree sampled every
+200 ms. Machine was under load (an Android emulator was running, swap in use), so rtf is worse
+than the table above for every engine — compare the columns, not against older runs.
+
+| engine | download | WER eval2 (88 w) | aggregate WER (345 w) | rtf eval2 | browser PSS while loaded |
+|---|---|---|---|---|---|
+| **Transformers.js whisper-small q4** (current) | 299 MB | 6.8% | **5.5%** (reproduced) | **1.81** | ~2.3–2.5 GB |
+| whisper.cpp `ggml-small-q5_1` | 190 MB | 9.1% | not finished | 14.6 | ~0.6 GB |
+| whisper.cpp `ggml-small-q8_0` | 264 MB | 6.8% | not run (probe) | 22.7 | ~0.6 GB after load |
+
+**Verdict: keep Transformers.js.** whisper.cpp does use far less RAM and a smaller download, and
+q8_0 matches accuracy, but in WASM it is 8–12x slower: a 60 s answer would take 15–20 minutes.
+Both threads were confirmed at ~100% CPU, so it was not a threading misconfiguration. It also
+needs `SharedArrayBuffer`, which the Android WebView never gets (not cross-origin isolated).
+The PSS figures are approximate (swap was in use, and PSS excludes swapped pages); the load-time
+whisper.cpp peak (~1.5 GB) is inflated by the harness holding the fetched blob.
