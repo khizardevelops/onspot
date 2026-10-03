@@ -89,7 +89,7 @@
 			class="ml-auto text-muted-foreground"
 			aria-label="Regenerate voice preview"
 			title="Regenerate preview"
-			disabled={loading}
+			disabled={loading || !available}
 			onclick={() => (regenerateOpen = true)}
 		>
 			{#snippet icon()}<RotateCcw class="size-4" />{/snippet}

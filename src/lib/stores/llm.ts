@@ -1,4 +1,4 @@
-import { get } from 'svelte/store';
+import { derived, get } from 'svelte/store';
 import type { LlmEndpoint, LlmProviderId } from '$lib/adapters/llm';
 import { getProvider } from '$lib/adapters/llm';
 import { appSettings, type AppSettings } from './settings';
@@ -36,3 +36,23 @@ export function resolveLlmEndpoint(settings: AppSettings): LlmEndpoint {
 export function currentLlmEndpoint(): LlmEndpoint {
 	return resolveLlmEndpoint(get(appSettings));
 }
+
+/**
+ * Whether evaluation can run at all. A take recorded without a usable provider
+ * would only fail after the learner has spoken, so Practice gates on this.
+ * Groq and DeepSeek need a key; a custom endpoint (often a local server) needs
+ * a URL and model, and its key is optional.
+ */
+export const llmConfigured = derived(
+	[appSettings, groqApiKey, deepseekApiKey],
+	([$settings, $groq, $deepseek]) => {
+		switch ($settings.llmProvider) {
+			case 'groq':
+				return $groq.trim() !== '';
+			case 'deepseek':
+				return $deepseek.trim() !== '';
+			default:
+				return $settings.customBaseUrl.trim() !== '' && $settings.customModel.trim() !== '';
+		}
+	}
+);

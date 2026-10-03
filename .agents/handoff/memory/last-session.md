@@ -1,5 +1,40 @@
 # Last Session
 
+## 2026-10-03: multi-agent UI/UX + bug audit and fixes (uncommitted)
+- Five parallel sub-agents, each owning a file set: shell/global, Practice, History+Insights+DB,
+  Settings, STT/TTS/LLM adapters+workers. All fixes uncommitted; `npm run check` 0/0; final
+  Chromium pass over / /history /insights /settings at 1280 and 390: no console errors, no overflow.
+- Highlights: restore rejects non-onspot `.sqlite` files (used to wipe data); migrations and
+  correction replacement are atomic on web (Tauri still per-statement); LLM/Groq/OpenAI calls
+  time out (120s) with readable errors; brace-safe JSON extraction; silent takes rejected before
+  STT/LLM; Practice Cancel aborts evaluation; recording start/stop/session-switch races fixed;
+  STT worker load dedupe + idle-release race; Language-data Cancel only kills the downloading
+  worker; settings saves are queued diffs; card keyboard handler no longer swallows inner
+  buttons; PermissionsPrompt only on Practice; neo toast `unregister` page error worked around
+  (`NeoNotificationProvider stack={false}`); PaperTexture renders sequentially (startup freeze);
+  `deleteAttemptAudio` so session delete frees cached read-backs; Insights double-listed patterns,
+  case-split labels and counts from deleted takes fixed; "0:60" durations fixed.
+- Untested at runtime: STT worker changes (need the 299 MB model), migration rollback, legacy JSON
+  restore changes, silence threshold (-46 dBFS) on a real mic.
+- Not fixed (deliberate): light `--muted-foreground` is 4.25-4.49:1 on rail/inset/control
+  surfaces; phone hamburger overlays the top-right of scrolled content; plain transcript words not
+  keyboard-reachable; cached TTS reports durationSec 0.
+- First-run LanguagePicker not appearing is intentional (French default, see earlier sessions).
+- Follow-up (user requests, browser-verified):
+  - Recording is gated on a configured LLM (`llmConfigured` in `stores/llm.ts`: Groq/DeepSeek need
+    a key; custom needs URL + model). Practice swaps Start speaking for "Add API key" →
+    `/settings/#ai-provider` (SettingsSection now sets `id`), shows a notice, and
+    `startRecording()` refuses with an error as a second guard.
+  - Wrong-language takes: the evaluation schema asks for `spokenLanguage`; `normalizeEvaluation`
+    replaces the corrections with one grammar error "Answered in X instead of French" covering the
+    whole transcript (so it is never a "Clean take" and Insights counts it). Foreign words inside
+    French are now errors per the prompt. Limit: local Whisper is forced to French and may
+    translate English speech into French text, which no LLM check can see.
+  - User's Firefox log `NoModificationAllowedError`: a second tab cannot open the OPFS DB. Now
+    retried ~3.5s and explained in a toast + Practice error (see known-issues.md).
+  - Attempt cards: list inset 8px/12px (was 16/28), 8px between cards, composer inset matched,
+    elevation 2/1 (was 3/2), cards rest one inset below the top (`restTop`), thin scrollbar.
+
 ## 2026-10-01: docs/ reorganised into subfolders
 - `docs/README.md` is the index. `planning/` (ideas.md, bugs.md — bugs split out of ideas),
   `architecture/` (languages.md, supported-languages.md), `benchmarks/` (unchanged),

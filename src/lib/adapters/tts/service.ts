@@ -95,7 +95,12 @@ export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Spee
 	// slider must not replay audio rendered with the old EQ.
 	const tuning = voiceTuning(get(appSettings), voice);
 	const signature = options.raw ? 'raw' : tuningSignature(tuning);
-	const cacheKey = `tts:${options.mode}:${language.id}:${voice}:${signature}:${hashText(options.text)}`;
+	// Cloud audio is neither a Piper voice nor EQ-processed, so keying it by
+	// those would re-buy identical OpenAI audio after every voice/EQ change.
+	const cacheKey =
+		options.mode === 'cloud'
+			? `tts:cloud:${language.id}:openai:${hashText(options.text)}`
+			: `tts:${options.mode}:${language.id}:${voice}:${signature}:${hashText(options.text)}`;
 	const db = await getDatabaseAdapter();
 
 	if (!options.force) {

@@ -47,8 +47,20 @@ async function protectBrowserStorage(): Promise<void> {
 	}
 }
 
+/**
+ * OPFS access handles are exclusive: while another tab (or a page that is still
+ * unloading) holds the database, opening it fails with `NoModificationAllowedError`.
+ */
+function isLockedElsewhere(error: unknown): boolean {
+	const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+	return /NoModificationAllowed|No modification allowed|another open Access Handle/i.test(message);
+}
+
+/** Waits between attempts: short for ordinary hiccups, longer while a previous page lets go of the file. */
+const RETRY_DELAYS_MS = [150, 300, 600, 1000, 1500];
+
 async function openDatabaseAdapter(): Promise<IDatabaseAdapter> {
-	const attempts = isTauriRuntime() ? 1 : 3;
+	const attempts = isTauriRuntime() ? 1 : RETRY_DELAYS_MS.length + 1;
 	let lastError: unknown;
 	for (let attempt = 0; attempt < attempts; attempt++) {
 		const adapter = isTauriRuntime()
@@ -65,8 +77,17 @@ async function openDatabaseAdapter(): Promise<IDatabaseAdapter> {
 		} catch (error) {
 			lastError = error;
 			await adapter.close().catch(() => undefined);
-			if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
+			// Only a lock is worth the long wait; other failures get two quick retries.
+			const retryable = isLockedElsewhere(error) || attempt < 2;
+			if (attempt + 1 < attempts && retryable) {
+				await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+			} else break;
 		}
+	}
+	if (isLockedElsewhere(lastError)) {
+		throw new Error(
+			'onspot is already open in another tab or window. Close it, then reload this page.'
+		);
 	}
 	throw lastError instanceof Error ? lastError : new Error('Unable to open the local database.');
 }

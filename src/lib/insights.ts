@@ -42,8 +42,15 @@ export interface InsightsData {
  *
  * Style suggestions are excluded from the pattern list (as in the prototype):
  * they are optional polish, not mistakes to drill. Everything else is grouped
- * by `category|label`, so "Elision" across ten sessions is one row.
+ * by `category|label` (case- and spacing-insensitive, since the LLM writes the
+ * label), so "Elision" and "elision" across ten sessions are one row.
+ *
+ * Corrections whose attempt no longer exists are ignored everywhere, so the
+ * totals, a pattern's count and its listed occurrences always agree.
  */
+/** Lower is more severe. */
+export const SEVERITY_RANK: Record<CorrectionSeverity, number> = { error: 0, warning: 1, suggestion: 2 };
+
 export function computeInsights(
 	sessions: Session[],
 	attempts: Attempt[],
@@ -65,13 +72,15 @@ export function computeInsights(
 	const patterns = new Map<string, Pattern>();
 
 	for (const correction of corrections) {
+		const attempt = attemptById.get(correction.attemptId);
+		if (!attempt) continue;
 		if (correction.severity === 'error') totals.errors++;
 		else if (correction.severity === 'warning') totals.warnings++;
 		else totals.suggestions++;
 
 		if (correction.category === 'style') continue;
 
-		const key = `${correction.category}|${correction.label}`;
+		const key = `${correction.category}|${correction.label.trim().replace(/\s+/g, ' ').toLocaleLowerCase()}`;
 		let pattern = patterns.get(key);
 		if (!pattern) {
 			pattern = {
@@ -87,10 +96,18 @@ export function computeInsights(
 		}
 
 		pattern.count++;
-		const attempt = attemptById.get(correction.attemptId);
-		const session = attempt ? sessionById.get(attempt.sessionId) : undefined;
+		// A group is as severe as its worst occurrence.
+		if (SEVERITY_RANK[correction.severity] < SEVERITY_RANK[pattern.severity]) {
+			pattern.severity = correction.severity;
+		}
+		const session = sessionById.get(attempt.sessionId);
 		if (session && !pattern.sessionIds.includes(session.id)) pattern.sessionIds.push(session.id);
-		if (attempt) pattern.occurrences.push({ session, attempt, correction });
+		pattern.occurrences.push({ session, attempt, correction });
+	}
+
+	// Newest first inside a pattern, so its detail view starts with recent work.
+	for (const pattern of patterns.values()) {
+		pattern.occurrences.sort((a, b) => Date.parse(b.attempt.createdAt) - Date.parse(a.attempt.createdAt));
 	}
 
 	return {

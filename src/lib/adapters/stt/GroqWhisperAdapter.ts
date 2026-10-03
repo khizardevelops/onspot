@@ -1,5 +1,6 @@
 import { BaseSTTAdapter } from './BaseAdapter';
 import { encodeWav } from '../../utils/wav';
+import { fetchWithTimeout } from '../llm/client';
 import type { ModelConfig, ModelProgress, TranscribeOptions } from '../../types';
 
 const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
@@ -64,11 +65,15 @@ export class GroqWhisperAdapter extends BaseSTTAdapter {
 		form.append('response_format', 'json');
 		if (options?.task === 'translate') form.append('task', 'translate');
 
-		const response = await fetch(GROQ_TRANSCRIPTION_URL, {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${this.apiKey}` },
-			body: form
-		});
+		const response = await fetchWithTimeout(
+			GROQ_TRANSCRIPTION_URL,
+			{
+				method: 'POST',
+				headers: { Authorization: `Bearer ${this.apiKey.trim()}` },
+				body: form
+			},
+			{ timeoutMs: 120_000 }
+		);
 
 		if (!response.ok) {
 			const detail = await response.text().catch(() => '');

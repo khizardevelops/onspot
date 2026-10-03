@@ -159,10 +159,30 @@
 		}
 	}
 
+	/*
+	 * A first launch needs up to six renders (page, rail and key, in both
+	 * appearances). Started together they each held a WebGL context and a
+	 * synchronous read-back at once, which froze the main thread on slow or
+	 * software GPUs. Renders now run one at a time, and prewarms of the other
+	 * appearance wait for idle time behind the visible ones.
+	 */
+	let renderChain: Promise<unknown> = Promise.resolve();
+	function queueRender<T>(job: () => Promise<T>): Promise<T> {
+		const run = renderChain.then(job, job);
+		renderChain = run.catch(() => undefined);
+		return run;
+	}
+
+	const whenIdle = () =>
+		new Promise<void>((resolve) => {
+			if (typeof requestIdleCallback === 'function') requestIdleCallback(() => resolve(), { timeout: 3000 });
+			else setTimeout(resolve, 300);
+		});
+
 	const inMemory = new Map<string, Promise<string>>();
 
 	/** Object URL of the texture: from memory, the Cache API, or one fresh render. */
-	function textureUrl(params: PaperTextureParams, width: number, height: number): Promise<string> {
+	function textureUrl(params: PaperTextureParams, width: number, height: number, prewarm = false): Promise<string> {
 		const w = Math.max(SIZE_STEP, Math.ceil(width / SIZE_STEP) * SIZE_STEP);
 		const h = Math.max(SIZE_STEP, Math.ceil(height / SIZE_STEP) * SIZE_STEP);
 		const key = `/__paper__/${w}x${h}@${window.devicePixelRatio || 1}/${encodeURIComponent(JSON.stringify(params))}`;
@@ -172,7 +192,8 @@
 				const cache = typeof caches === 'undefined' ? null : await caches.open(CACHE_NAME).catch(() => null);
 				const hit = await cache?.match(key);
 				if (hit) return URL.createObjectURL(await hit.blob());
-				const blob = await renderTexture(params, w, h);
+				if (prewarm) await whenIdle();
+				const blob = await queueRender(() => renderTexture(params, w, h));
 				void cache?.put(key, new Response(blob, { headers: { 'Content-Type': blob.type } }));
 				return URL.createObjectURL(blob);
 			})();
@@ -247,7 +268,7 @@
 		// forget: a prewarm must never delay the visible sheet.
 		for (const alternate of preloadParams) {
 			if (alternate !== current) {
-				void textureUrl(alternate, width, height).catch((error) =>
+				void textureUrl(alternate, width, height, true).catch((error) =>
 					console.warn('[paper] texture prewarm unavailable', error)
 				);
 			}

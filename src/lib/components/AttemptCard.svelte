@@ -10,6 +10,7 @@
 		setAttemptVoice
 	} from '$lib/stores/practice';
 	import { appSettings } from '$lib/stores/settings';
+	import { getLanguage } from '$lib/languages';
 	import { listLocalVoices } from '$lib/adapters/tts/service';
 	import { splitSentences } from '$lib/utils/segments';
 	import { fitFontSize } from '$lib/utils/fitText';
@@ -82,13 +83,14 @@
 				: 'off'
 	);
 
-	const TRANSLATION_OPTIONS: { id: TranslationView; label: string; detail: string }[] = [
+	const languageName = $derived(getLanguage($appSettings.targetLanguage)?.name ?? 'target language');
+	const TRANSLATION_OPTIONS = $derived<{ id: TranslationView; label: string; detail: string }[]>([
 		{ id: 'idiomatic', label: 'Idiomatic', detail: 'Natural English with the same meaning' },
-		{ id: 'literal', label: 'Literal', detail: 'English that follows the French structure' },
+		{ id: 'literal', label: 'Literal', detail: `English that follows the ${languageName} structure` },
 		{ id: 'wordForWord', label: 'Word-for-word', detail: 'Each word in the original order' },
 		{ id: 'all', label: 'Compare all three', detail: 'See the differences side by side' },
-		{ id: 'off', label: 'Hide translation', detail: 'Keep the focus on your French' }
-	];
+		{ id: 'off', label: 'Hide translation', detail: `Keep the focus on your ${languageName}` }
+	]);
 
 	const translations = $derived({
 		idiomatic: attempt.translations?.idiomatic || attempt.translation,
@@ -275,7 +277,7 @@
 			aria-expanded={showIdiomaticVariants}
 			onclick={() => (showIdiomaticVariants = !showIdiomaticVariants)}
 		>
-			{showIdiomaticVariants ? 'Hide' : '+'}{translations.idiomaticVariants.length} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
+			{showIdiomaticVariants ? 'Hide' : `+${translations.idiomaticVariants.length}`} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
 			<ChevronDown class="size-3 transition-transform duration-300 {showIdiomaticVariants ? 'rotate-180' : ''}" />
 		</NeoButton>
 	{:else if kind === 'wordForWord'}
@@ -298,7 +300,7 @@
 	class="attempt-card relative w-full min-w-0 {active ? 'active-card' : ''}"
 	spacing="0"
 	width="100%"
-	elevation={active ? 3 : 2}
+	elevation={active ? 2 : 1}
 	hover={active ? 0 : 1}
 	rounded
 	glass

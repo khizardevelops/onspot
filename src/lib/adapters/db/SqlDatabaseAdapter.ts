@@ -15,6 +15,7 @@ import type {
 	Session,
 	Setting,
 	SqlDriver,
+	SqlStatement,
 	SqlValue,
 	SyncMetadata,
 	Attempt,
@@ -72,6 +73,12 @@ function sqlLiteral(value: unknown): string {
 
 type Row = Record<string, unknown>;
 
+/** Atomically where the driver supports it, otherwise in order. */
+async function runAll(db: SqlDriver, statements: SqlStatement[]): Promise<void> {
+	if (db.batch) return db.batch(statements);
+	for (const { sql, params } of statements) await db.execute(sql, params);
+}
+
 export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	abstract readonly kind: 'tauri-sql' | 'opfs-sqlite';
 
@@ -101,12 +108,15 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 			if (applied.has(version)) continue;
 			const migration = MIGRATIONS[version];
 			if (!migration) continue;
-			for (const statement of splitStatements(migration)) {
-				await db.execute(statement);
-			}
-			await db.execute('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', [
-				version,
-				nowIso()
+			// A migration and its version row commit together: a failure halfway
+			// (an `ALTER` after another `ALTER`) must not leave a column behind that
+			// makes every later retry fail with "duplicate column name".
+			await runAll(db, [
+				...splitStatements(migration).map((sql) => ({ sql })),
+				{
+					sql: 'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+					params: [version, nowIso()]
+				}
 			]);
 		}
 	}
@@ -312,15 +322,17 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	 */
 	async replaceCorrections(attemptId: string, corrections: Correction[]): Promise<void> {
 		const db = await this.sql();
-		await db.execute('DELETE FROM corrections WHERE attempt_id = ?', [attemptId]);
-		for (const c of corrections) {
-			await db.execute(
-				`INSERT INTO corrections
+		// One transaction: a failed insert must not leave the attempt with its old
+		// corrections deleted and only part of the new set written.
+		await runAll(db, [
+			{ sql: 'DELETE FROM corrections WHERE attempt_id = ?', params: [attemptId] },
+			...corrections.map((c) => ({
+				sql: `INSERT INTO corrections
 					(id, attempt_id, category, severity, label, original, replacement,
 					 replacement_translation, start_index, end_index, explanation, speak_text,
 					 exam_status, formal_alternatives, sort_order, created_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				[
+				params: [
 					c.id,
 					attemptId,
 					c.category satisfies CorrectionCategory,
@@ -338,8 +350,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 					c.sortOrder,
 					c.createdAt
 				]
-			);
-		}
+			}))
+		]);
 	}
 
 	// ------------------------------------------------------------------ Audio
@@ -370,6 +382,11 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	async deleteAudio(key: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM audio_assets WHERE key = ?', [key]);
+	}
+
+	async deleteAttemptAudio(attemptId: string): Promise<void> {
+		const db = await this.sql();
+		await db.execute('DELETE FROM audio_assets WHERE attempt_id = ?', [attemptId]);
 	}
 
 	// --------------------------------------------------------------- Settings

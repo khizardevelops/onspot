@@ -34,6 +34,8 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 	private nextId = 1;
 	private readonly pending = new Map<number, Pending>();
 	private readonly language: string;
+	private loadPromise: Promise<void> | null = null;
+	private disposed = false;
 
 	constructor(config: {
 		id: string;
@@ -141,6 +143,9 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 		transfer: Transferable[] = [],
 		onProgress?: (progress: ModelProgress) => void
 	): Promise<unknown> {
+		// A terminated worker drops messages silently, so a request made after
+		// dispose (e.g. a take racing a cancelled download) would never settle.
+		if (this.disposed) return Promise.reject(new Error('STT worker disposed.'));
 		const id = this.nextId++;
 		return new Promise((resolve, reject) => {
 			this.pending.set(id, { resolve, reject, onProgress });
@@ -149,21 +154,31 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 	}
 
 	public async load(onProgress?: (progress: ModelProgress) => void): Promise<void> {
-		if (this.status === 'ready') {
-			this.setStatus('ready');
-			return;
+		if (this.status === 'ready') return;
+		// A second caller (e.g. a take while the language download is still
+		// running) joins the in-flight load instead of building the model twice;
+		// `updateProgress` keeps it informed through `onProgressCallback`.
+		if (this.loadPromise) {
+			if (onProgress) this.onProgressCallback = onProgress;
+			return this.loadPromise;
 		}
 		this.setStatus('loading');
-		try {
-			await this.request(
-				{ type: 'load', model: this.config.modelRepoId, dtype: this.config.dtype },
-				[],
-				onProgress
-			);
-		} catch (error) {
-			this.setStatus('error', error instanceof Error ? error.message : String(error));
-			throw error;
-		}
+		this.loadPromise = (async () => {
+			try {
+				await this.request(
+					{ type: 'load', model: this.config.modelRepoId, dtype: this.config.dtype },
+					[],
+					onProgress
+				);
+			} catch (error) {
+				this.setStatus('error', error instanceof Error ? error.message : String(error));
+				throw error;
+			} finally {
+				this.loadPromise = null;
+				this.onProgressCallback = undefined;
+			}
+		})();
+		return this.loadPromise;
 	}
 
 	public async doTranscribe(
@@ -179,7 +194,9 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 				type: 'transcribe',
 				pcm: copy,
 				sampleRate: 16000,
-				language: options?.language ?? this.language
+				language: options?.language ?? this.language,
+				model: this.config.modelRepoId,
+				dtype: this.config.dtype
 			},
 			[copy.buffer]
 		);
@@ -187,6 +204,7 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 	}
 
 	public async dispose(): Promise<void> {
+		this.disposed = true;
 		this.worker.terminate();
 		// Reject in-flight requests first; a bare terminate would leave their
 		// promises pending forever and wedge the download state.

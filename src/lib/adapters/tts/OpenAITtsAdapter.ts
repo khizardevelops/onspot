@@ -1,4 +1,5 @@
 import { BaseTTSAdapter } from './BaseTTSAdapter';
+import { fetchWithTimeout } from '../llm/client';
 import type { ModelProgress, TtsModelConfig } from '../../types';
 
 const OPENAI_SPEECH_URL = 'https://api.openai.com/v1/audio/speech';
@@ -65,19 +66,23 @@ export class OpenAITtsAdapter extends BaseTTSAdapter {
 	protected async doSynthesize(text: string): Promise<{ audio: Float32Array; samplingRate: number }> {
 		if (!this.apiKey) throw new Error('An OpenAI API key is required for cloud speech.');
 
-		const response = await fetch(OPENAI_SPEECH_URL, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${this.apiKey}`
+		const response = await fetchWithTimeout(
+			OPENAI_SPEECH_URL,
+			{
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${this.apiKey.trim()}`
+				},
+				body: JSON.stringify({
+					model: this.model,
+					voice: this.voice,
+					input: text,
+					response_format: 'wav'
+				})
 			},
-			body: JSON.stringify({
-				model: this.model,
-				voice: this.voice,
-				input: text,
-				response_format: 'wav'
-			})
-		});
+			{ timeoutMs: 60_000 }
+		);
 
 		if (!response.ok) {
 			const detail = await response.text().catch(() => '');

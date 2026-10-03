@@ -4,6 +4,12 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### Restoring A Non-onspot `.sqlite` File Wiped The Database (2026-10-03)
+- **Cause**: the worker imported any SQLite image, then migrations produced an empty schema.
+- **Fix**: `sqlite.worker.ts` `checkBackup` requires the onspot tables + `integrity_check` before
+  replacing anything; the user gets "not an onspot backup, nothing was changed".
+- **Proof**: Chromium: foreign file rejected with 6 sessions intact; export→import round trip kept all.
+
 ### Web SQLite Restore Failed With `Unknown write() failure.`
 - **Symptom** (Zen/Firefox report): after choosing a `.sqlite` backup and confirming, the restore
   toast showed `Unknown write() failure.` and the data was not replaced.

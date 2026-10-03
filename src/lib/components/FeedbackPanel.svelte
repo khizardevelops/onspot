@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { quickCollapse } from '$lib/neo';
+	import { untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 	import type { Correction, CorrectionSeverity } from '$lib/adapters/db';
@@ -129,9 +130,17 @@
 	});
 
 	$effect(() => {
-		if (activeCorrectionId && attempt?.corrections.some((item) => item.id === activeCorrectionId)) {
-			expandedId = activeCorrectionId;
-		}
+		const id = activeCorrectionId;
+		if (!id || !attempt?.corrections.some((item) => item.id === id)) return;
+		expandedId = id;
+		// A filter that hides the correction clicked in the transcript would make the click look broken.
+		if (!untrack(() => corrections).some((item) => item.id === id)) filter = 'all';
+		// Bring it into view once the panel has rendered (it may have just opened).
+		requestAnimationFrame(() =>
+			document
+				.querySelector(`[data-correction-id="${CSS.escape(id)}"]`)
+				?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+		);
 	});
 
 	const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
@@ -291,6 +300,7 @@
 					{#each corrections as correction (correction.id)}
 						{@const expanded = expandedId === correction.id}
 						<div
+							data-correction-id={correction.id}
 							animate:flip={{ duration: 220 }}
 							in:fly={{ y: 8, duration: 220 }}
 							out:fade={{ duration: 120 }}

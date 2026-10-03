@@ -63,7 +63,11 @@ export class PiperAdapter extends BaseTTSAdapter {
     try {
       this.setStatus('loading');
       this.updateProgress('Fetching voice config...', 2);
-      const cfg: PiperVoiceConfig = await (await fetch(`${this.modelUrl}.json`)).json();
+      const cfgResponse = await fetch(`${this.modelUrl}.json`);
+      if (!cfgResponse.ok) {
+        throw new Error(`Could not fetch the voice config (HTTP ${cfgResponse.status}).`);
+      }
+      const cfg: PiperVoiceConfig = await cfgResponse.json();
       this.voiceConfig = cfg;
 
       const map = cfg.speaker_id_map ?? {};

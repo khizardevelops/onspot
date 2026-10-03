@@ -55,6 +55,8 @@ export const languageData = { subscribe: store.subscribe };
 let checkToken = 0;
 let jobToken = 0;
 let running: Promise<void> | null = null;
+/** Which part of the running download is in flight; Cancel tears down only that worker. */
+let phase: 'stt' | 'voice' | null = null;
 
 /**
  * Chosen voice for a language: the user's saved voice when it belongs to that
@@ -98,6 +100,9 @@ async function pendingBytes(language: LanguageDefinition): Promise<PendingBytes>
 export async function refreshLanguageData(
 	languageId: string = get(appSettings).targetLanguage
 ): Promise<void> {
+	// A running download owns the store and re-checks the current selection when it ends;
+	// a check now would flip a live download back to "missing".
+	if (running) return;
 	const language = languageId ? requireLanguage(languageId) : undefined;
 	if (!language) {
 		store.set({ ...initial, status: 'missing' });
@@ -141,7 +146,16 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 	if (running) return running;
 	const language = requireLanguage(languageId ?? get(appSettings).targetLanguage);
 	const voice = preferredVoice(language);
-	if (!voice) throw new Error(`No approved voice for ${language.name}.`);
+	if (!voice) {
+		// Callers fire and forget (`void download…`); report in the store, never throw.
+		store.update((state) => ({
+			...state,
+			languageId: language.id,
+			status: 'error',
+			error: `No approved voice for ${language.name}.`
+		}));
+		return Promise.resolve();
+	}
 
 	const token = ++jobToken;
 	const known = get(store);
@@ -160,9 +174,11 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 			// are already cached (another language uses the same ones), loading
 			// them takes seconds and the voice is nearly the whole download.
 			const pending = await pendingBytes(language);
+			if (token !== jobToken) return;
 			const missing = pending.stt + pending.voice;
 			const sttShare = missing > 0 ? (pending.stt / missing) * 100 : 50;
 			const voiceShare = 100 - sttShare;
+			phase = 'stt';
 			await preloadLocalSTT(language.id, (progress) => {
 				if (token !== jobToken) return;
 				store.update((state) => ({
@@ -171,6 +187,8 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 					statusText: progress.status || `Downloading ${language.name} speech model…`
 				}));
 			});
+			if (token !== jobToken) return;
+			phase = 'voice';
 			await preloadLocalVoice(voice.id, (progress) => {
 				if (token !== jobToken) return;
 				store.update((state) => ({
@@ -180,7 +198,9 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 				}));
 			});
 			if (token !== jobToken) return;
-			await refreshLanguageData(language.id);
+			running = null;
+			phase = null;
+			await refreshLanguageData();
 		} catch (error) {
 			if (token !== jobToken) return;
 			store.update((state) => ({
@@ -190,7 +210,10 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 				error: error instanceof Error ? error.message : 'Language data download failed.'
 			}));
 		} finally {
-			if (token === jobToken) running = null;
+			if (token === jobToken) {
+				running = null;
+				phase = null;
+			}
 		}
 	})();
 
@@ -199,10 +222,16 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 
 /** Aborts an in-flight download by terminating the workers fetching the bytes. */
 export function cancelLanguageDownload(): void {
+	if (!running) return;
+	const cancelling = phase;
 	jobToken++;
 	running = null;
-	cancelLocalSTTDownload();
-	cancelLocalVoiceDownload();
+	phase = null;
+	// Only the worker still fetching is torn down. Once the speech model has
+	// loaded it may already be transcribing a take; killing it would fail that
+	// take with a raw "STT worker disposed." error.
+	if (cancelling === 'stt') cancelLocalSTTDownload();
+	else if (cancelling === 'voice') cancelLocalVoiceDownload();
 	store.update((state) => ({
 		...state,
 		status: 'missing',
@@ -210,6 +239,8 @@ export function cancelLanguageDownload(): void {
 		statusText: '',
 		error: null
 	}));
+	// Part of the data (e.g. the speech model) may have finished; size what is left.
+	void refreshLanguageData();
 }
 
 /**

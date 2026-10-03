@@ -3,6 +3,7 @@
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
+		LEVELS,
 		appSettings,
 		resetVoiceTuning,
 		setSetting,
@@ -65,7 +66,6 @@
 		X
 	} from '@lucide/svelte';
 
-	const levels = ['A2', 'B1', 'B2', 'C1'];
 	const INPUT_CLASS = 'w-full @md/field-group:w-72';
 
 	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
@@ -181,6 +181,8 @@
 		const provider = value as LlmProviderId;
 		setSetting('llmProvider', provider);
 		remoteModels = [];
+		refreshToken++;
+		refreshing = false;
 		refreshMessage = '';
 		testOk = null;
 		testMessage = '';
@@ -189,31 +191,60 @@
 		}
 	}
 
+	let refreshToken = 0;
+
 	async function refreshModels() {
+		const provider = $appSettings.llmProvider;
+		const apiKey = keyFor(provider);
+		if (!apiKey) {
+			refreshMessage = `Add your ${providerConfig.name} API key first.`;
+			return;
+		}
+		// A provider switch while the request is out must not fill the new
+		// provider's list with the old provider's models.
+		const token = ++refreshToken;
 		refreshing = true;
 		refreshMessage = '';
 		try {
-			const baseUrl =
-				$appSettings.llmProvider === 'custom'
-					? $appSettings.customBaseUrl
-					: providerConfig.baseUrl;
-			remoteModels = await listModels({
-				baseUrl,
-				apiKey: keyFor($appSettings.llmProvider),
-				model: ''
-			});
-			refreshMessage = `Found ${remoteModels.length} model${remoteModels.length === 1 ? '' : 's'}.`;
+			const baseUrl = provider === 'custom' ? $appSettings.customBaseUrl : providerConfig.baseUrl;
+			const models = await listModels({ baseUrl, apiKey, model: '' });
+			if (token !== refreshToken) return;
+			remoteModels = models;
+			refreshMessage = `Found ${models.length} model${models.length === 1 ? '' : 's'}.`;
 		} catch (error) {
+			if (token !== refreshToken) return;
 			refreshMessage = error instanceof Error ? error.message : String(error);
 		} finally {
-			refreshing = false;
+			if (token === refreshToken) refreshing = false;
 		}
 	}
+
+	// A connection result describes the endpoint it tested; editing the key,
+	// model or URL makes it stale.
+	// (Built in functions, not a $derived: a store's first read inside a
+	// derived subscribes to it, which Svelte rejects as an unsafe mutation.)
+	function endpointSignature(): string {
+		return [
+			$appSettings.llmProvider,
+			keyFor($appSettings.llmProvider),
+			$appSettings.llmModel,
+			$appSettings.customBaseUrl,
+			$appSettings.customModel
+		].join('\u0000');
+	}
+	let testedSignature = '';
+	$effect(() => {
+		if (endpointSignature() !== testedSignature && !testing) {
+			testOk = null;
+			testMessage = '';
+		}
+	});
 
 	async function runConnectionTest() {
 		testing = true;
 		testOk = null;
 		testMessage = '';
+		testedSignature = endpointSignature();
 		try {
 			const endpoint = currentLlmEndpoint();
 			if (!endpoint.baseUrl) throw new Error('Add a base URL first.');
@@ -269,7 +300,7 @@
 					}))} value={$appSettings.targetLanguage} onchange={(value) => void setTargetLanguage(value)} />
 			</SettingRow>
 			<SettingRow label="Your level" for="level">
-				<SettingSelect id="level" label="Your level" options={levels.map((level) => ({ value: level, label: level }))} value={$appSettings.level} onchange={(value) => setSetting('level', value)} />
+				<SettingSelect id="level" label="Your level" options={LEVELS.map((level) => ({ value: level, label: level }))} value={$appSettings.level} onchange={(value) => setSetting('level', value)} />
 			</SettingRow>
 			<SettingRow label="Default mode" for="defaultMode">
 				<SettingSelect id="defaultMode" label="Default mode" options={[{ value: 'exam', label: 'Exam' }, { value: 'casual', label: 'Casual' }]} value={$appSettings.mode} onchange={(value) => setSetting('mode', value as 'exam' | 'casual')} />
@@ -416,7 +447,7 @@
 				</SettingRow>
 			{:else}
 				<SettingRow label="Model" for="model">
-					<SettingSelect id="model" label="Model" options={modelOptions.map((option) => ({ value: option.id, label: `${option.label}${option.note ? ` — ${option.note}` : ''}` }))} value={$appSettings.llmModel} onchange={(value) => setSetting('llmModel', value)} class="@md/field-group:w-80" />
+					<SettingSelect id="model" label="Model" options={modelOptions.map((option) => ({ value: option.id, label: option.label, description: option.note }))} value={$appSettings.llmModel} onchange={(value) => setSetting('llmModel', value)} class="@md/field-group:w-80" />
 					{#snippet below()}
 						<div class="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 @md/field-group:justify-end">
 							{#if refreshMessage}
@@ -695,7 +726,7 @@
 		color: var(--brand);
 		font-weight: 600;
 		text-underline-offset: 3px;
-		transition: color 160ms ease;
+		transition: color 100ms ease;
 	}
 	:global(.settings-link:hover) {
 		color: var(--brand-hover);

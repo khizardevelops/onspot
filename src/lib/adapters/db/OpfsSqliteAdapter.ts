@@ -1,5 +1,5 @@
 import { SqlDatabaseAdapter } from './SqlDatabaseAdapter';
-import { DatabaseImportError, type SqlDriver, type SqlValue } from './types';
+import { DatabaseImportError, type SqlDriver, type SqlStatement, type SqlValue } from './types';
 import SqliteWorker from './sqlite.worker?worker';
 
 interface WorkerResponse {
@@ -10,6 +10,7 @@ interface WorkerResponse {
 	error?: string;
 	storage?: boolean;
 	rolledBack?: boolean;
+	invalid?: boolean;
 }
 
 
@@ -37,7 +38,8 @@ class WorkerSqlDriver implements SqlDriver {
 						response.error ?? 'The backup could not be restored.',
 						Boolean(response.storage),
 						response.rolledBack,
-						response.bytes
+						response.bytes,
+						Boolean(response.invalid)
 					)
 				);
 			else entry.reject(new Error(response.error ?? 'SQLite worker error'));
@@ -50,16 +52,22 @@ class WorkerSqlDriver implements SqlDriver {
 	}
 
 	private request(
-		op: 'execute' | 'select' | 'export' | 'import',
+		op: 'execute' | 'select' | 'export' | 'import' | 'batch',
 		sql = '',
 		params: SqlValue[] = [],
-		bytes?: Uint8Array
+		bytes?: Uint8Array,
+		statements?: SqlStatement[]
 	): Promise<WorkerResponse> {
 		const id = this.nextId++;
 		return new Promise((resolve, reject) => {
 			this.pending.set(id, { resolve, reject });
-			this.worker.postMessage({ id, op, sql, params, bytes }, bytes ? [bytes.buffer] : []);
+			this.worker.postMessage({ id, op, sql, params, bytes, statements }, bytes ? [bytes.buffer] : []);
 		});
+	}
+
+	/** The worker runs the whole list inside one transaction. */
+	async batch(statements: SqlStatement[]): Promise<void> {
+		await this.request('batch', '', [], undefined, statements);
 	}
 
 	async execute(sql: string, params: SqlValue[] = []): Promise<void> {

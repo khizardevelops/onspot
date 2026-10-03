@@ -24,6 +24,54 @@ interface ChatCompletionOptions {
 	/** Ask providers that support it for a JSON object response. */
 	json?: boolean;
 	signal?: AbortSignal;
+	/** Give up after this long, so a stalled provider cannot leave the UI waiting forever. */
+	timeoutMs?: number;
+}
+
+/** Long enough for a reasoning model's full evaluation, short enough to surface a stall. */
+export const DEFAULT_LLM_TIMEOUT_MS = 120_000;
+
+function hostOf(url: string): string {
+	try {
+		return new URL(url).host;
+	} catch {
+		return url;
+	}
+}
+
+/**
+ * `fetch` with a deadline and readable failures. A bare `TypeError: Failed to
+ * fetch` (offline, DNS, CORS, a typo in a custom base URL) and an `AbortError`
+ * otherwise reach the learner verbatim.
+ */
+export async function fetchWithTimeout(
+	url: string,
+	init: RequestInit,
+	{ timeoutMs = DEFAULT_LLM_TIMEOUT_MS, signal }: { timeoutMs?: number; signal?: AbortSignal } = {}
+): Promise<Response> {
+	const controller = new AbortController();
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		controller.abort();
+	}, timeoutMs);
+	const forward = () => controller.abort();
+	if (signal?.aborted) controller.abort();
+	else signal?.addEventListener('abort', forward, { once: true });
+	try {
+		return await fetch(url, { ...init, signal: controller.signal });
+	} catch (error) {
+		if (timedOut) {
+			throw new Error(`${hostOf(url)} did not respond within ${Math.round(timeoutMs / 1000)}s.`);
+		}
+		if (error instanceof DOMException && error.name === 'AbortError') throw error;
+		throw new Error(
+			`Could not reach ${hostOf(url)}. Check your connection${init.method === 'POST' ? ' and the provider URL' : ''}.`
+		);
+	} finally {
+		clearTimeout(timer);
+		signal?.removeEventListener('abort', forward);
+	}
 }
 
 /**
@@ -36,27 +84,37 @@ interface ChatCompletionOptions {
 export async function chatCompletion(
 	endpoint: LlmEndpoint,
 	messages: ChatMessage[],
-	{ temperature = 0.2, maxTokens = 2048, json = false, signal }: ChatCompletionOptions = {}
+	{
+		temperature = 0.2,
+		maxTokens = 2048,
+		json = false,
+		signal,
+		timeoutMs = DEFAULT_LLM_TIMEOUT_MS
+	}: ChatCompletionOptions = {}
 ): Promise<string> {
-	const base = endpoint.baseUrl.replace(/\/+$/, '');
+	const base = endpoint.baseUrl.trim().replace(/\/+$/, '');
 	if (!base) throw new Error('No LLM base URL configured.');
 	if (!endpoint.apiKey) throw new Error('No API key configured for this provider.');
+	if (!endpoint.model.trim()) throw new Error('No LLM model selected. Choose one in Settings.');
 
-	const response = await fetch(`${base}/chat/completions`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${endpoint.apiKey}`
+	const response = await fetchWithTimeout(
+		`${base}/chat/completions`,
+		{
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${endpoint.apiKey.trim()}`
+			},
+			body: JSON.stringify({
+				model: endpoint.model,
+				messages,
+				temperature,
+				max_tokens: maxTokens,
+				...(json ? { response_format: { type: 'json_object' } } : {})
+			})
 		},
-		body: JSON.stringify({
-			model: endpoint.model,
-			messages,
-			temperature,
-			max_tokens: maxTokens,
-			...(json ? { response_format: { type: 'json_object' } } : {})
-		}),
-		signal
-	});
+		{ timeoutMs, signal }
+	);
 
 	if (!response.ok) {
 		const detail = await response.text().catch(() => '');
@@ -65,8 +123,20 @@ export async function chatCompletion(
 		);
 	}
 
-	const data = await response.json();
-	return data?.choices?.[0]?.message?.content ?? '';
+	// A misconfigured custom base URL can answer 200 with an HTML page.
+	const data = await response.json().catch(() => {
+		throw new Error(`${hostOf(base)} did not return a chat-completions response. Check the provider URL.`);
+	});
+	const content = data?.choices?.[0]?.message?.content;
+	// Some OpenAI-compatible gateways return content as an array of parts.
+	if (Array.isArray(content)) {
+		return content
+			.map((part: unknown) =>
+				typeof part === 'string' ? part : ((part as { text?: unknown })?.text ?? '')
+			)
+			.join('');
+	}
+	return typeof content === 'string' ? content : '';
 }
 
 /**
@@ -77,30 +147,19 @@ export async function chatCompletion(
  * path evaluation uses, including model availability on the key.
  */
 export async function testConnection(endpoint: LlmEndpoint, timeoutMs = 20000): Promise<string> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), timeoutMs);
-	try {
-		const reply = await chatCompletion(
-			endpoint,
-			[
-				{
-					role: 'system',
-					content: 'You are a connection check. Reply with the single word OK and nothing else.'
-				},
-				{ role: 'user', content: 'Connection test' }
-			],
-			{ maxTokens: 16, temperature: 0, signal: controller.signal }
-		);
-		const cleaned = stripThinking(reply);
-		return cleaned || reply.trim();
-	} catch (error) {
-		if (error instanceof DOMException && error.name === 'AbortError') {
-			throw new Error(`No response within ${Math.round(timeoutMs / 1000)}s.`);
-		}
-		throw error;
-	} finally {
-		clearTimeout(timer);
-	}
+	const reply = await chatCompletion(
+		endpoint,
+		[
+			{
+				role: 'system',
+				content: 'You are a connection check. Reply with the single word OK and nothing else.'
+			},
+			{ role: 'user', content: 'Connection test' }
+		],
+		{ maxTokens: 16, temperature: 0, timeoutMs }
+	);
+	const cleaned = stripThinking(reply);
+	return cleaned || reply.trim();
 }
 
 /**
@@ -116,13 +175,15 @@ const NON_CHAT_MODEL = /whisper|orpheus|prompt-guard|safeguard|\btts\b|embed|mod
  * dropdown can show models the provider has added since this build.
  */
 export async function listModels(endpoint: LlmEndpoint): Promise<string[]> {
-	const base = endpoint.baseUrl.replace(/\/+$/, '');
+	const base = endpoint.baseUrl.trim().replace(/\/+$/, '');
 	if (!base) throw new Error('No LLM base URL configured.');
 	if (!endpoint.apiKey) throw new Error('Add an API key first, then refresh the model list.');
 
-	const response = await fetch(`${base}/models`, {
-		headers: { Authorization: `Bearer ${endpoint.apiKey}` }
-	});
+	const response = await fetchWithTimeout(
+		`${base}/models`,
+		{ headers: { Authorization: `Bearer ${endpoint.apiKey.trim()}` } },
+		{ timeoutMs: 20_000 }
+	);
 	if (!response.ok) {
 		const detail = await response.text().catch(() => '');
 		throw new Error(
@@ -130,7 +191,7 @@ export async function listModels(endpoint: LlmEndpoint): Promise<string[]> {
 		);
 	}
 
-	const data = await response.json();
+	const data = await response.json().catch(() => null);
 	const entries: unknown = data?.data ?? data;
 	if (!Array.isArray(entries)) return [];
 	return entries

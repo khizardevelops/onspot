@@ -11,8 +11,8 @@ import {
 } from '$lib/adapters/db';
 import { appSettings, setSetting } from './settings';
 import { groqApiKey, openaiApiKey } from './secrets';
-import { resolveLlmEndpoint } from './llm';
-import { playTrack, setAudioLoading } from './audio';
+import { llmConfigured, resolveLlmEndpoint } from './llm';
+import { playTrack, setAudioLoading, stopAudio } from './audio';
 import { refreshLanguageData } from './languageData';
 import { VoiceRecorder, type Recording } from '$lib/utils/recorder';
 import { transcribeSpeech } from '$lib/adapters/stt/service';
@@ -84,6 +84,17 @@ let recorder: VoiceRecorder | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 const translationJobs = new Map<string, Promise<TranslationSet>>();
 let initialization: Promise<void> | null = null;
+/** True while the microphone permission prompt / device start is pending. */
+let starting = false;
+/**
+ * Identifies the current take's pipeline. Switching session, language or
+ * cancelling bumps it, so a transcription or evaluation that finishes later
+ * cannot write into the wrong session or reset a phase it no longer owns.
+ */
+let run = 0;
+let analysis: AbortController | null = null;
+/** Latest read-back request; an older synthesis that finishes later must not play over it. */
+let speechRequest = 0;
 
 function newId(prefix: string): string {
 	return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -143,6 +154,20 @@ export async function hydrateLatestSession(): Promise<boolean> {
 }
 
 /**
+ * Abandons whatever the current take is doing (recording, transcribing or
+ * evaluating) so the view can switch session safely.
+ */
+function abandonTake(): void {
+	run++;
+	analysis?.abort();
+	analysis = null;
+	if (timer) clearInterval(timer);
+	timer = null;
+	recorder?.cancel();
+	recorder = null;
+}
+
+/**
  * Switches the language being studied: persists the choice, reseeds that
  * language's prompts and starts a fresh session. The download itself stays
  * manual so a mis-click never commits the user to a large transfer.
@@ -157,6 +182,7 @@ export async function setTargetLanguage(languageId: string): Promise<void> {
 	}
 	if (!db) db = await getDatabaseAdapter();
 	prompts = await ensurePromptsSeeded(db, language.id);
+	abandonTake();
 	update({
 		sessionId: null,
 		attempts: [],
@@ -183,6 +209,7 @@ export function setSessionMode(mode: RunMode): void {
 
 /** Starts a fresh session (draft): clears attempts and unlocks the mode. */
 export function newSession(): void {
+	abandonTake();
 	update({
 		sessionId: null,
 		attempts: [],
@@ -204,14 +231,28 @@ export function nextPrompt(): void {
 
 export async function startRecording(): Promise<void> {
 	const state = get(store);
-	if (state.phase !== 'idle' && state.phase !== 'error') return;
+	// `starting` covers the permission prompt, during which the phase is still idle
+	// and a second click would open a second microphone stream.
+	if (starting || (state.phase !== 'idle' && state.phase !== 'error')) return;
+	// Every take is evaluated by the learner's LLM. Without one the take could
+	// only fail after they have spoken, so refuse before the microphone opens.
+	if (!get(llmConfigured)) {
+		update({
+			phase: 'error',
+			error: 'Set up your AI provider (API key, or URL and model for a custom one) in Settings → AI provider before you start speaking.'
+		});
+		return;
+	}
+	starting = true;
+	const token = run;
 
-	recorder = new VoiceRecorder();
-	recorder.onLevel = (level) => update({ level });
+	const next = new VoiceRecorder();
+	next.onLevel = (level) => update({ level });
 
 	try {
-		await recorder.start();
+		await next.start();
 	} catch (error) {
+		starting = false;
 		update({
 			phase: 'error',
 			error:
@@ -219,9 +260,17 @@ export async function startRecording(): Promise<void> {
 					? `Microphone unavailable: ${error.message}`
 					: 'Microphone unavailable.'
 		});
-		recorder = null;
 		return;
 	}
+	starting = false;
+	// The session changed while the permission prompt was open.
+	if (token !== run) {
+		next.cancel();
+		return;
+	}
+	recorder = next;
+	// The read-back would otherwise play into the microphone.
+	stopAudio();
 
 	update({ phase: 'recording', elapsed: 0, level: 0, error: null, statusText: 'Recording…' });
 	const startedAt = performance.now();
@@ -232,33 +281,69 @@ export async function startRecording(): Promise<void> {
 	}, 250);
 }
 
+/** Discards the take in progress: stops the microphone, or abandons its analysis. */
 export function cancelRecording(): void {
-	if (timer) clearInterval(timer);
-	timer = null;
-	recorder?.cancel();
-	recorder = null;
-	update({ phase: 'idle', elapsed: 0, level: 0, statusText: '' });
+	abandonTake();
+	update({ phase: 'idle', elapsed: 0, level: 0, statusText: '', progress: null });
+}
+
+/**
+ * Whisper invents text for silence, so a take with no audible signal is
+ * rejected before transcription. Loudest 100ms window below about -46 dBFS
+ * RMS is treated as silence.
+ */
+function isSilent(pcm: Float32Array, sampleRate = 16000): boolean {
+	const window = Math.round(sampleRate / 10);
+	for (let start = 0; start < pcm.length; start += window) {
+		const end = Math.min(pcm.length, start + window);
+		let sum = 0;
+		for (let i = start; i < end; i++) sum += pcm[i] * pcm[i];
+		if (Math.sqrt(sum / Math.max(1, end - start)) > 0.005) return false;
+	}
+	return true;
 }
 
 export async function stopAndAnalyze(): Promise<void> {
 	const state = get(store);
-	if (state.phase !== 'recording' || !recorder) return;
+	const active = recorder;
+	if (state.phase !== 'recording' || !active) return;
+	// Claimed synchronously: a double-click (or the 60s timer firing during a
+	// click) must not stop the same recorder twice.
+	recorder = null;
 	if (timer) clearInterval(timer);
 	timer = null;
+	const token = run;
 
 	let recording: Recording;
 	try {
-		recording = await recorder.stop();
+		recording = await active.stop();
 	} catch (error) {
-		update({ phase: 'error', error: 'Could not finish the recording.' });
-		recorder = null;
+		if (token === run) update({ phase: 'error', level: 0, error: 'Could not finish the recording.' });
 		return;
 	}
-	recorder = null;
+	if (token !== run) {
+		URL.revokeObjectURL(recording.url);
+		return;
+	}
+	if (isSilent(recording.pcm)) {
+		URL.revokeObjectURL(recording.url);
+		update({
+			phase: 'error',
+			level: 0,
+			elapsed: 0,
+			statusText: '',
+			error: 'No speech was heard in that take. Check that the right microphone is selected and unmuted, then try again.'
+		});
+		return;
+	}
 	update({ level: 0, phase: 'transcribing', statusText: 'Transcribing…', progress: null });
 
 	const settings = get(appSettings);
 	const language = requireLanguage(settings.targetLanguage);
+	// What this take answered, captured now: the view may move on before it finishes.
+	const { prompt, mode, sessionId } = get(store);
+	const controller = new AbortController();
+	analysis = controller;
 
 	try {
 		const stt = await transcribeSpeech({
@@ -266,8 +351,14 @@ export async function stopAndAnalyze(): Promise<void> {
 			mode: settings.sttMode,
 			languageId: language.id,
 			groqApiKey: get(groqApiKey) || undefined,
-			onProgress: (progress) => update({ progress, statusText: progress.status })
+			onProgress: (progress) => {
+				if (token !== run) return;
+				// "Model ready / 100%" arrives before the transcription itself; keep saying what is happening.
+				if (progress.progress >= 100) update({ progress: null, statusText: 'Transcribing…' });
+				else update({ progress, statusText: progress.status });
+			}
 		});
+		if (token !== run) return;
 
 		update({ phase: 'evaluating', statusText: `Analyzing your ${language.name}…`, progress: null });
 
@@ -277,15 +368,17 @@ export async function stopAndAnalyze(): Promise<void> {
 
 		const evaluation = await evaluateAttempt({
 			transcript,
-			prompt: get(store).prompt.text,
-			mode: get(store).mode,
+			prompt: prompt.text,
+			mode,
 			level: settings.level,
 			language: language.name,
 			translationTarget: language.translationTarget,
-			endpoint: resolveLlmEndpoint(settings)
+			endpoint: resolveLlmEndpoint(settings),
+			signal: controller.signal
 		});
+		if (token !== run) return;
 
-		const view = await persistAttempt(recording, transcript, evaluation, get(store).mode);
+		const view = await persistAttempt(recording, transcript, evaluation, mode, prompt, sessionId);
 		update({
 			phase: 'idle',
 			statusText: '',
@@ -297,12 +390,15 @@ export async function stopAndAnalyze(): Promise<void> {
 
 		void playAttempt(view.id);
 	} catch (error) {
+		if (token !== run) return;
 		update({
 			phase: 'error',
 			statusText: '',
+			progress: null,
 			error: error instanceof Error ? error.message : 'Something went wrong.'
 		});
 	} finally {
+		if (analysis === controller) analysis = null;
 		URL.revokeObjectURL(recording.url);
 	}
 }
@@ -311,19 +407,20 @@ async function persistAttempt(
 	recording: Recording,
 	transcript: string,
 	evaluation: EvaluationResult,
-	mode: RunMode
+	mode: RunMode,
+	prompt: PracticeState['prompt'],
+	existingSessionId: string | null
 ): Promise<AttemptView> {
 	if (!db) db = await getDatabaseAdapter();
 	const database = db;
 	const now = new Date().toISOString();
-	const state = get(store);
 
-	let sessionId = state.sessionId;
+	let sessionId = existingSessionId;
 	if (!sessionId) {
 		sessionId = newId('session');
 		await database.putSession({
 			id: sessionId,
-			title: state.prompt.title,
+			title: prompt.title,
 			mode,
 			startedAt: now,
 			endedAt: null,
@@ -338,8 +435,8 @@ async function persistAttempt(
 	const attempt: Attempt = {
 		id: attemptId,
 		sessionId,
-		promptId: state.prompt.id || null,
-		promptText: state.prompt.text,
+		promptId: prompt.id || null,
+		promptText: prompt.text,
 		transcript,
 		correctedText: evaluation.correctedText,
 		naturalSpeech: evaluation.naturalSpeech,
@@ -502,7 +599,9 @@ export function setActiveAttempt(id: string | null): void {
 }
 
 export function clearError(): void {
-	update({ error: null, phase: 'idle' });
+	// A read-back error can arrive while a new take is recording; dismissing it
+	// must not reset that phase.
+	store.update((state) => ({ ...state, error: null, phase: state.phase === 'error' ? 'idle' : state.phase }));
 }
 
 /**
@@ -579,6 +678,7 @@ async function playAttemptText(
 ): Promise<void> {
 	if (!attempt || !text.trim()) return;
 	const settings = get(appSettings);
+	const request = ++speechRequest;
 	setAudioLoading(true, {
 		attemptId: attempt.id,
 		kind,
@@ -595,6 +695,10 @@ async function playAttemptText(
 			openaiApiKey: get(openaiApiKey) || undefined,
 			attemptId: attempt.id
 		});
+		if (request !== speechRequest) {
+			URL.revokeObjectURL(speech.url);
+			return;
+		}
 		playTrack({
 			attemptId: attempt.id,
 			kind,
@@ -603,6 +707,7 @@ async function playAttemptText(
 			url: speech.url
 		});
 	} catch (error) {
+		if (request !== speechRequest) return;
 		setAudioLoading(false);
 		console.error('[practice] speech failed', error);
 		update({ error: error instanceof Error ? error.message : 'Speech playback failed.' });
@@ -618,6 +723,7 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 	const attempt = get(store).attempts.find((a) => a.id === attemptId);
 	if (!attempt) return;
 	const text = attempt.naturalSpeech || attempt.correctedText;
+	const request = ++speechRequest;
 	try {
 		const speech = await synthesizeSpeech({
 			text,
@@ -637,7 +743,8 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 				a.id === attemptId ? { ...a, ttsVoice: voice } : a
 			)
 		});
-		playTrack({ attemptId, kind: 'attempt', label: 'Corrected audio', url: speech.url });
+		if (request === speechRequest) playTrack({ attemptId, kind: 'attempt', label: 'Corrected audio', url: speech.url });
+		else URL.revokeObjectURL(speech.url);
 	} catch (error) {
 		toast(error instanceof Error ? error.message : 'Could not re-render audio.');
 	}
@@ -647,6 +754,7 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 export async function speakText(text: string): Promise<void> {
 	if (!text.trim()) return;
 	const settings = get(appSettings);
+	const request = ++speechRequest;
 	setAudioLoading(true, { attemptId: '', kind: 'correction', label: text, url: '' });
 	try {
 		const speech = await synthesizeSpeech({
@@ -656,8 +764,13 @@ export async function speakText(text: string): Promise<void> {
 			voice: settings.ttsVoice,
 			openaiApiKey: get(openaiApiKey) || undefined
 		});
+		if (request !== speechRequest) {
+			URL.revokeObjectURL(speech.url);
+			return;
+		}
 		playTrack({ attemptId: '', kind: 'correction', label: text, url: speech.url });
 	} catch (error) {
+		if (request !== speechRequest) return;
 		setAudioLoading(false);
 		console.error('[practice] speech failed', error);
 		update({
@@ -674,7 +787,9 @@ export async function playRecording(id: string): Promise<void> {
 /** Plays stored audio by attempt id, without needing it loaded in the store. */
 export async function playStoredAudio(attemptId: string): Promise<void> {
 	if (!db) db = await getDatabaseAdapter();
+	const request = ++speechRequest;
 	const stored = await db.getAudio(`attempt:${attemptId}`);
+	if (request !== speechRequest) return;
 	if (!stored) {
 		toast('No audio stored for this attempt.');
 		return;
@@ -712,12 +827,14 @@ export async function deleteSession(id: string): Promise<void> {
 	const attempts = await database.listAttempts(id);
 	for (const attempt of attempts) {
 		await database.deleteAudio(`attempt:${attempt.id}`);
+		await database.deleteAttemptAudio(attempt.id);
 		await database.replaceCorrections(attempt.id, []);
 		await database.deleteAttempt(attempt.id);
 	}
 	await database.deleteSession(id);
 	if (get(store).sessionId === id) {
-		update({ sessionId: null, attempts: [], activeAttemptId: null });
+		abandonTake();
+		update({ sessionId: null, attempts: [], activeAttemptId: null, phase: 'idle', elapsed: 0, level: 0 });
 	}
 }
 
@@ -751,6 +868,11 @@ export async function openSession(sessionId: string): Promise<void> {
 	});
 
 	const latest = views.at(-1)?.id ?? null;
+	const prompt = session
+		? await sessionPrompt(db, session, attempts.find((attempt) => attempt.promptId)?.promptId ?? null)
+		: get(store).prompt;
+	// A take still recording or being analysed belongs to the previous view.
+	abandonTake();
 	update({
 		sessionId,
 		attempts: views,
@@ -758,9 +880,11 @@ export async function openSession(sessionId: string): Promise<void> {
 		mode: session?.mode ?? get(store).mode,
 		phase: 'idle',
 		error: null,
-		prompt: session
-			? await sessionPrompt(db, session, attempts.find((attempt) => attempt.promptId)?.promptId ?? null)
-			: get(store).prompt
+		elapsed: 0,
+		level: 0,
+		statusText: '',
+		progress: null,
+		prompt
 	});
 }
 

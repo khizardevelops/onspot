@@ -73,9 +73,10 @@
 			if (!range) continue;
 			claimed.push(range);
 			for (const token of list) {
-				if (token.word && token.start < range[1] && token.end > range[0]) {
+				// First correction wins, so the colour matches the correction a click opens.
+				if (token.word && !token.correctionId && token.start < range[1] && token.end > range[0]) {
 					token.severity = correction.severity;
-					token.correctionId ??= correction.id;
+					token.correctionId = correction.id;
 					token.deletion = Boolean(correction.original.trim()) && !correction.replacement.trim();
 				}
 			}

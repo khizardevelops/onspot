@@ -122,31 +122,27 @@
 
 	onMount(load);
 
-	const result = $derived.by((): { sessions: Session[]; error: string } => {
+	/** The query as one non-global RegExp (literal text is escaped), or an error. */
+	const matcher = $derived.by((): { re: RegExp | null; error: string } => {
 		const raw = query.trim();
-		if (!raw) return { sessions, error: '' };
-
-		let test: (value: string) => boolean;
-		if (regex) {
-			try {
-				const re = new RegExp(raw, caseSensitive ? '' : 'i');
-				test = (value) => re.test(value);
-			} catch (error) {
-				return {
-					sessions: [],
-					error: error instanceof Error ? error.message : 'Invalid regular expression'
-				};
-			}
-		} else {
-			const needle = caseSensitive ? raw : raw.toLowerCase();
-			test = (value) => (caseSensitive ? value : value.toLowerCase()).includes(needle);
+		if (!raw) return { re: null, error: '' };
+		const source = regex ? raw : raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		try {
+			return { re: new RegExp(source, caseSensitive ? '' : 'i'), error: '' };
+		} catch (error) {
+			return { re: null, error: error instanceof Error ? error.message : 'Invalid regular expression' };
 		}
+	});
 
+	const result = $derived.by((): { sessions: Session[]; error: string } => {
+		const { re, error } = matcher;
+		if (error) return { sessions: [], error };
+		if (!re) return { sessions, error: '' };
 		return {
 			sessions: sessions.filter(
 				(session) =>
-					test(session.title) ||
-					(attemptsBySession[session.id] ?? []).some((attempt) => test(attempt.transcript))
+					re.test(session.title) ||
+					(attemptsBySession[session.id] ?? []).some((attempt) => re.test(attempt.transcript))
 			),
 			error: ''
 		};
@@ -201,31 +197,57 @@
 		);
 	}
 
-	/** Latest transcript, clipped, with a literal query match wrapped in <mark>. */
+	const SNIPPET = 160;
+
+	/**
+	 * A transcript excerpt with the query match wrapped in <mark>. While searching
+	 * it comes from the take that matched, starting just before the match, so a hit in
+	 * an earlier take or deep in a long one is still visible; otherwise it is the
+	 * start of the latest take.
+	 */
 	function snippetHtml(session: Session): string {
-		const text = attemptsFor(session).at(-1)?.transcript ?? '';
-		if (!text) return '';
-		const clipped = text.length > 160 ? `${text.slice(0, 160)}…` : text;
-		const raw = query.trim();
-		if (!raw || regex || result.error) return escapeHtml(clipped);
+		const attempts = attemptsFor(session);
+		const re = matcher.re;
+		const match = re
+			? attempts
+					.slice()
+					.reverse()
+					.map((attempt) => ({ text: attempt.transcript, found: re.exec(attempt.transcript) }))
+					.find(({ found }) => found && found[0].length > 0)
+			: undefined;
+		if (!match?.found) {
+			const text = attempts.at(-1)?.transcript ?? '';
+			return escapeHtml(text.length > SNIPPET ? `${text.slice(0, SNIPPET)}…` : text);
+		}
 
-		const needle = caseSensitive ? raw : raw.toLowerCase();
-		const haystack = caseSensitive ? clipped : clipped.toLowerCase();
-		const at = haystack.indexOf(needle);
-		if (at === -1) return escapeHtml(clipped);
-
+		const { text, found } = match;
+		const at = found.index;
+		const end = at + found[0].length;
+		// The line is truncated to one row, so start a few words before the match
+		// (at a word boundary) to keep it in view even on a phone.
+		const lead = text.slice(0, at).search(/\S+\s+\S*$/);
+		const from = at <= 24 ? 0 : Math.max(lead === -1 ? at : lead, at - 24);
+		const to = Math.max(end, Math.min(text.length, from + SNIPPET));
 		return (
-			escapeHtml(clipped.slice(0, at)) +
-			`<mark class="rounded bg-[var(--brand-soft)] px-0.5 text-[var(--brand)]">${escapeHtml(
-				clipped.slice(at, at + raw.length)
-			)}</mark>` +
-			escapeHtml(clipped.slice(at + raw.length))
+			(from > 0 ? '…' : '') +
+			escapeHtml(text.slice(from, at)) +
+			`<mark class="rounded bg-[var(--brand-soft)] px-0.5 text-[var(--brand)]">${escapeHtml(text.slice(at, end))}</mark>` +
+			escapeHtml(text.slice(end, to)) +
+			(to < text.length ? '…' : '')
 		);
 	}
 
+	function failed(action: string, error: unknown): void {
+		toast(`${action} failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+
 	async function open(session: Session) {
-		await openSession(session.id);
-		await goto('/');
+		try {
+			await openSession(session.id);
+			await goto('/');
+		} catch (error) {
+			failed('Opening the session', error);
+		}
 	}
 
 	async function replay(session: Session) {
@@ -234,31 +256,44 @@
 			toast('No recording in this session.');
 			return;
 		}
-		await playStoredAudio(last.id);
+		try {
+			await playStoredAudio(last.id);
+		} catch (error) {
+			failed('Playback', error);
+		}
 	}
 
 	async function rename(session: Session) {
-		const title = window.prompt('Session name', session.title);
-		if (!title || title.trim() === session.title) return;
-		await renameSession(session.id, title.trim());
-		await load();
-		toast('Session renamed');
+		const title = window.prompt('Session name', session.title)?.trim();
+		// Cancel, an empty name or an unchanged one leaves the session as it is.
+		if (!title || title === session.title) return;
+		try {
+			await renameSession(session.id, title);
+			await load();
+			toast('Session renamed');
+		} catch (error) {
+			failed('Rename', error);
+		}
 	}
 
 	async function remove(session: Session) {
 		const ok = window.confirm(
-			`Delete "${session.title}" and all its attempts? This cannot be undone.`
+			`Delete "${session.title}" and all its takes? This cannot be undone.`
 		);
 		if (!ok) return;
-		await deleteSession(session.id);
+		try {
+			await deleteSession(session.id);
+			toast('Session deleted');
+		} catch (error) {
+			failed('Delete', error);
+		}
 		await load();
-		toast('Session deleted');
 	}
 
+	/** m:ss from whole seconds, so 59.6 s reads 1:00 rather than 0:60. */
 	function fmtDuration(seconds: number): string {
-		const mins = Math.floor(seconds / 60);
-		const secs = Math.round(seconds % 60);
-		return `${mins}:${String(secs).padStart(2, '0')}`;
+		const total = Math.round(seconds);
+		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 	}
 </script>
 
@@ -422,13 +457,13 @@
 											class="session-action"
 											text
 											rounded
-											aria-label="Replay last recording"
+											aria-label={`Replay last recording of ${session.title}`}
 											title="Replay last recording"
 											onclick={() => replay(session)}
 										>
 											{#snippet icon()}<Play class="size-3.5" />{/snippet}
 										</NeoButton>
-										<NeoButton class="session-action" text rounded aria-label="Rename" title="Rename" onclick={() => rename(session)}>
+										<NeoButton class="session-action" text rounded aria-label={`Rename ${session.title}`} title="Rename" onclick={() => rename(session)}>
 											{#snippet icon()}<Pencil class="size-3.5" />{/snippet}
 										</NeoButton>
 										<NeoButton
@@ -436,7 +471,7 @@
 											text
 											rounded
 											color="error"
-											aria-label="Delete"
+											aria-label={`Delete ${session.title}`}
 											title="Delete"
 											onclick={() => remove(session)}
 										>

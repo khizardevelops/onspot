@@ -17,13 +17,13 @@
 		out:fade={{ duration: 100 }}
 	>
 		<!-- Opaque, not a frosted sheet: page content scrolling underneath must never show through. -->
-		<div class="download-card pointer-events-auto" aria-live="polite">
+		<div class="download-card pointer-events-auto" role="group" aria-label="Language data download">
 			<div class="download-icon" aria-hidden="true">
 				<Loader2 class="size-4 animate-spin" />
 			</div>
 			<div class="download-body">
 				<div class="flex items-baseline justify-between gap-3">
-					<span class="truncate text-sm font-medium">Downloading {language?.name ?? 'language'} data</span>
+					<span class="truncate text-sm font-medium" role="status">Downloading {language?.name ?? 'language'} data</span>
 					<span class="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
 						{Math.round($languageData.progress)}%
 					</span>

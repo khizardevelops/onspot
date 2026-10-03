@@ -16,9 +16,11 @@ type SqlValue = string | number | null;
 
 interface Request {
 	id: number;
-	op: 'execute' | 'select' | 'export' | 'import';
+	op: 'execute' | 'select' | 'export' | 'import' | 'batch';
 	sql: string;
 	params?: SqlValue[];
+	/** `batch`: statements run as one transaction. */
+	statements?: { sql: string; params?: SqlValue[] }[];
 	/** A complete SQLite database image, for `import`. */
 	bytes?: Uint8Array;
 }
@@ -38,6 +40,8 @@ interface Response {
 	storage?: boolean;
 	/** `import` only: the previous database is back in place after a failure. */
 	rolledBack?: boolean;
+	/** `import` only: the file was rejected before anything was written. */
+	invalid?: boolean;
 }
 
 interface SqliteHandle {
@@ -82,7 +86,7 @@ async function removeLeakedSyncChecks(): Promise<void> {
 }
 
 self.onmessage = async (event: MessageEvent<Request>) => {
-	const { id, op, sql, params, bytes } = event.data;
+	const { id, op, sql, params, bytes, statements } = event.data;
 	try {
 		const handle = await getHandle();
 		const { sqlite3, db } = handle;
@@ -99,6 +103,13 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 
 		if (op === 'import') {
 			if (!bytes?.byteLength) throw new Error('The database file is empty.');
+			// Checked before anything is replaced: init() would happily add empty
+			// onspot tables to any other SQLite file, silently wiping the learner's data.
+			const invalid = checkBackup(sqlite3, bytes);
+			if (invalid) {
+				post({ id, ok: false, error: invalid, storage: false, rolledBack: true, invalid: true });
+				return;
+			}
 			const failure = replaceDatabase(handle, bytes);
 			if (!failure) {
 				post({ id, ok: true });
@@ -113,6 +124,16 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				bytes: failure.rescue
 			};
 			(self as unknown as Worker).postMessage(response, failure.rescue ? [failure.rescue.buffer] : []);
+			return;
+		}
+
+		if (op === 'batch') {
+			// Messages are handled one at a time, so nothing interleaves with this
+			// transaction; oo1 rolls back if any statement throws.
+			db.transaction(() => {
+				for (const statement of statements ?? []) db.exec({ sql: statement.sql, bind: statement.params ?? [] });
+			});
+			post({ id, ok: true });
 			return;
 		}
 
@@ -155,6 +176,48 @@ interface ImportFailure {
 /** sqlite-wasm reports a short OPFS write (Firefox at its storage quota) as an I/O error. */
 function isStorageFailure(message: string): boolean {
 	return /SQLITE_(IOERR|FULL)|disk I\/O|write\(\) failure|quota/i.test(message);
+}
+
+/**
+ * Opens a copy of the image in memory and returns why it is not a restorable
+ * onspot database, or null when it is.
+ */
+function checkBackup(sqlite3: any, bytes: Uint8Array): string | null {
+	const capi = sqlite3.capi;
+	const wasm = sqlite3.wasm;
+	const probe = new sqlite3.oo1.DB(':memory:');
+	try {
+		const data = wasm.allocFromTypedArray(bytes);
+		const rc = capi.sqlite3_deserialize(
+			probe.pointer,
+			'main',
+			data,
+			bytes.byteLength,
+			bytes.byteLength,
+			DESERIALIZE_FREE_ON_CLOSE | DESERIALIZE_RESIZEABLE
+		);
+		if (rc !== capi.SQLITE_OK) {
+			wasm.dealloc(data);
+			return `The backup could not be read (SQLite error ${rc}).`;
+		}
+		const tables = new Set(
+			(probe.exec({
+				sql: "SELECT name FROM sqlite_master WHERE type = 'table'",
+				rowMode: 'array',
+				returnValue: 'resultRows'
+			}) as [string][]).map(([name]) => name)
+		);
+		if (!['sessions', 'attempts', 'corrections'].every((name) => tables.has(name))) {
+			return 'This SQLite file is not an onspot backup. Choose a file exported from onspot.';
+		}
+		const check = probe.selectValue('PRAGMA quick_check');
+		if (check !== 'ok') return `The backup is damaged (${check}).`;
+		return null;
+	} catch (error) {
+		return `The backup could not be read (${error instanceof Error ? error.message : String(error)}).`;
+	} finally {
+		probe.close();
+	}
 }
 
 /**

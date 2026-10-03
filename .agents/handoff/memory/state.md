@@ -1,6 +1,10 @@
 # State
 
 ## Current State
+
+**2026-10-03 audit:** a multi-agent UI/UX/bug pass landed uncommitted fixes across shell, Practice,
+History/Insights/DB, Settings and the speech/LLM adapters; see last-session.md for the list and
+what remains runtime-untested.
 **Japanese (2026-09-25):** candidate language (dev builds only): whisper-small q4 `japanese`,
 piper-plus voices with OpenJTalk/jpreprocess WASM G2P in the TTS worker; see
 `docs/architecture/supported-languages.md` and last-session.

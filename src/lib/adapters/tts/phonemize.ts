@@ -85,6 +85,14 @@ export async function phonemize(text: string, espeakVoice: string): Promise<numb
           '--input', JSON.stringify([{ text: text.trim() }]),
           '--espeak_data', '/espeak-ng-data',
         ]);
+        // `print` runs synchronously inside callMain. If the program exited
+        // without printing (or printing only to a swallowed stream), settle now:
+        // the TTS worker serializes requests, so a promise left pending here
+        // would wedge every later read-back until reload.
+        if (!settled) {
+          settled = true;
+          reject(new Error('The phonemizer produced no output.'));
+        }
       })
       .catch(reject);
   });

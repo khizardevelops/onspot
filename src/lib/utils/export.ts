@@ -145,6 +145,7 @@ export async function importSqliteBackup(file: File): Promise<SqliteRestoreResul
 			await db.importSqliteFile(bytes);
 		} catch (error) {
 			if (!(error instanceof DatabaseImportError)) throw error;
+			if (error.invalid) throw new RestoreError(`${error.message} Nothing was changed.`);
 			let outcome = 'Nothing was changed: your current data is still here.';
 			if (!error.rolledBack) {
 				if (error.rescue) saveRescueFile(error.rescue);
@@ -244,6 +245,7 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 	const recordings = asArray(decoded.recordings);
 	const settings = asArray(decoded.settings);
 	const importedAttemptIds = new Set<string>();
+	const knownSessionIds = new Set((await db.listSessions()).map((session) => session.id));
 
 	let sessionCount = 0;
 	for (const row of sessions) {
@@ -260,6 +262,7 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 			updatedAt: string(row.updatedAt, now())
 		};
 		await db.putSession(session);
+		knownSessionIds.add(id);
 		sessionCount++;
 	}
 
@@ -283,7 +286,9 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 	for (const row of attempts) {
 		const id = string(row.id);
 		const sessionId = string(row.sessionId);
-		if (!id || !sessionId) continue;
+		// A take whose session is neither in the file nor on this device would
+		// fail its foreign key and abort the restore halfway; skip it instead.
+		if (!id || !knownSessionIds.has(sessionId)) continue;
 		const attempt: Attempt = {
 			id,
 			sessionId,
@@ -355,10 +360,17 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 		recordingCount++;
 	}
 
+	let settingCount = 0;
 	for (const row of settings) {
 		const key = string(row.key);
-		if (key.startsWith('onspot.setting.') && typeof row.value === 'string') await db.setSetting(key, row.value);
+		if (key.startsWith('onspot.setting.') && typeof row.value === 'string') {
+			await db.setSetting(key, row.value);
+			settingCount++;
+		}
 	}
+	// As with the .sqlite restore: the in-memory settings must pick up the
+	// restored values, or the next preference change writes the old ones back.
+	if (settingCount) await initSettings();
 
 	return { sessions: sessionCount, attempts: attemptCount, corrections: [...byAttempt.values()].reduce((count, rows) => count + rows.length, 0), recordings: recordingCount };
 }

@@ -411,6 +411,17 @@ html[neo-theme-root] [class*='neo-']::after {
 	transition-duration: 70ms !important;
 	transition-delay: 0s !important;
 }
+/*
+ * Keyboard focus. neo's own focus state is a 1px accent outline that reads
+ * exactly like "selected" (e.g. a focused rail key looked like the current
+ * page). A distinct offset ring shows where the keyboard is; pointer clicks
+ * (no :focus-visible) are unaffected.
+ */
+html[neo-theme-root] :is(a, button, [role='button'], [role='radio'], [role='tab'], [role='menuitem'], [role='switch'], summary):focus-visible {
+	outline: 2px solid var(--ring) !important;
+	outline-offset: 3px !important;
+}
+
 /* The tabs' sliding key is a keyframe animation. */
 html[neo-theme-root] .neo-tabs .neo-tab::before {
 	animation-duration: 120ms !important;

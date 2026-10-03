@@ -34,14 +34,14 @@
 
 {#if active && $audioPlayer.track}
 	{@const track = $audioPlayer.track}
-	<div
-		class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3"
-		aria-live="polite"
-	>
+	<!-- No aria-live here: the clock below changes several times a second. -->
+	<div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3">
 		<button
 			type="button"
-			aria-label={$audioPlayer.playing ? 'Pause' : 'Play'}
-			class="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-white hover:bg-[var(--brand-hover)]"
+			aria-label={$audioPlayer.loading ? 'Preparing audio' : $audioPlayer.playing ? 'Pause' : 'Play'}
+			aria-busy={$audioPlayer.loading}
+			disabled={$audioPlayer.loading}
+			class="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-white hover:bg-[var(--brand-hover)] disabled:cursor-progress"
 			onclick={togglePlay}
 		>
 			{#if $audioPlayer.loading}

@@ -20,28 +20,33 @@ let playToken = 0;
 
 /** Lowercases and strips surrounding punctuation so "Lyon," and "Lyon" share audio. */
 export function normalizeWord(word: string): string {
+	// Any script's letters count (œ, æ and kana fell outside the old a-zà-ÿ range,
+	// so "œuvre" was spoken as "uvre" and Japanese words were dropped).
 	return word
 		.toLowerCase()
 		.replace(/[’]/g, "'")
-		.replace(/^[^a-zà-ÿ']+|[^a-zà-ÿ']+$/g, '');
+		.replace(/^[^\p{L}\p{M}\p{N}']+|[^\p{L}\p{M}\p{N}']+$/gu, '');
 }
 
 export function isPronounceable(word: string): boolean {
-	// Single letters are usually articles/fillers and sound wrong in isolation.
-	return normalizeWord(word).replace(/[^a-zà-ÿ]/g, '').length >= 2;
+	const letters = normalizeWord(word).replace(/[^\p{L}\p{M}]/gu, '');
+	// One CJK character is a word; a single Latin letter is usually an article/filler.
+	return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(letters) ? letters.length >= 1 : letters.length >= 2;
 }
 
 async function synthesize(word: string): Promise<string> {
-	const key = normalizeWord(word);
+	const text = normalizeWord(word);
+	const settings = get(appSettings);
+	// Changing voice or engine must not replay a word rendered with the old one.
+	const key = `${settings.ttsMode}:${settings.targetLanguage}:${settings.ttsVoice}:${text}`;
 	const cached = cache.get(key);
 	if (cached) return cached;
 
 	const running = inflight.get(key);
 	if (running) return running;
 
-	const settings = get(appSettings);
 	const promise = synthesizeSpeech({
-		text: key,
+		text,
 		mode: settings.ttsMode,
 		languageId: settings.targetLanguage,
 		voice: settings.ttsVoice,

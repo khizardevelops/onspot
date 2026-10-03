@@ -19,7 +19,19 @@ export interface SqlDriver {
 	execute(sql: string, params?: SqlValue[]): Promise<void>;
 	/** Run a query and return rows as plain objects. */
 	select<T>(sql: string, params?: SqlValue[]): Promise<T[]>;
+	/**
+	 * Run statements as one transaction: all of them or none. Optional because
+	 * Tauri's plugin pools connections, so a `BEGIN` sent through it may not
+	 * share a connection with the statements after it.
+	 */
+	batch?(statements: SqlStatement[]): Promise<void>;
 	close(): Promise<void>;
+}
+
+/** One statement of a `SqlDriver.batch`. */
+export interface SqlStatement {
+	sql: string;
+	params?: SqlValue[];
 }
 
 export type RunMode = 'exam' | 'casual';
@@ -190,6 +202,8 @@ export interface IDatabaseAdapter {
 	putAudio(asset: AudioAsset): Promise<void>;
 	getAudio(key: string): Promise<AudioAsset | null>;
 	deleteAudio(key: string): Promise<void>;
+	/** Drop every cached clip last saved for this attempt (recording or read-back). */
+	deleteAttemptAudio(attemptId: string): Promise<void>;
 
 	// Settings
 	getSetting(key: string): Promise<string | null>;
@@ -229,7 +243,9 @@ export class DatabaseImportError extends Error {
 		message: string,
 		readonly storage: boolean,
 		readonly rolledBack: boolean,
-		readonly rescue?: Uint8Array
+		readonly rescue?: Uint8Array,
+		/** The file was rejected before anything was written (not an onspot backup, or damaged). */
+		readonly invalid = false
 	) {
 		super(message);
 		this.name = 'DatabaseImportError';

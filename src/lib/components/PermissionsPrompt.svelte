@@ -36,6 +36,9 @@
 	/** Rows the dialog shows: storage is skipped where the browser cannot prompt for it. */
 	const shown = $derived([storage, microphone].filter((state) => state !== 'unsupported').length);
 
+	/** Something the browser can still prompt for; a blocked permission can only be changed by the user. */
+	const promptable = $derived(storage === 'prompt' || microphone === 'prompt');
+
 	const missing = $derived(
 		[storage, microphone].some((state) => state === 'prompt' || state === 'denied')
 	);
@@ -179,7 +182,11 @@
 				{shown === 1 ? 'One permission' : 'Two permissions'} before you start
 			</h2>
 			<p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-				{shown === 1 ? 'You will be asked to confirm.' : 'You will be asked for each.'} Nothing leaves this device.
+				{#if promptable}
+					{shown === 1 ? 'You will be asked to confirm.' : 'You will be asked for each.'} Nothing leaves this device.
+				{:else}
+					Only your browser can unblock these. Nothing leaves this device.
+				{/if}
 			</p>
 		</div>
 		<ul class="flex flex-col gap-3">
@@ -192,16 +199,16 @@
 			{@render row(Mic, 'Use the microphone', 'Needed to record your spoken answers.', microphone)}
 		</ul>
 		<div class="flex flex-wrap justify-end gap-2">
-			<NeoButton rounded elevation={2} onclick={later}>Not now</NeoButton>
+			{#if promptable}<NeoButton rounded elevation={2} onclick={later}>Not now</NeoButton>{/if}
 			<NeoButton
 				rounded
 				elevation={2}
 				color="primary"
 				tinted
 				loading={asking}
-				onclick={() => void allow()}
+				onclick={() => (promptable ? void allow() : later())}
 			>
-				Allow
+				{promptable ? 'Allow' : 'OK'}
 			</NeoButton>
 		</div>
 	</div>

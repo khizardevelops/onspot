@@ -11,7 +11,7 @@
 	let { id, title, children }: Props = $props();
 </script>
 
-<section class="mb-9 scroll-mt-6" aria-labelledby={`${id}-title`}>
+<section {id} class="mb-9 scroll-mt-6" aria-labelledby={`${id}-title`}>
 	<h2 id={`${id}-title`} class="section-title mb-2.5 px-1 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
 		{title}
 	</h2>

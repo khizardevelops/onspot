@@ -173,7 +173,16 @@
 			})
 			.catch((error) => {
 				console.error('[startup] saved data could not be loaded', error);
-				toast('Saved data could not be loaded. History has details and a retry action.', 6000);
+				const message = error instanceof Error ? error.message : '';
+				// A lock held by another tab is the learner's to fix, so say exactly that.
+				toast(
+					/another tab/.test(message)
+						? message
+						: 'Saved data could not be loaded. History has details and a retry action.',
+					10000
+				);
+				// Practice keeps the reason on screen after the toast has gone.
+				void initPractice().catch(() => undefined);
 			});
 	});
 </script>
@@ -189,10 +198,10 @@
 <!-- The provider's props must never change after mount; NeoThemeSync applies theme switches. -->
 <NeoThemeProvider theme={initialTheme} remember={false} reset={false}>
 	<NeoThemeSync {theme} />
-	<div class="app-shell relative z-[1] grid h-screen grid-cols-[56px_1fr] text-foreground">
+	<div class="app-shell relative z-[1] grid h-dvh grid-cols-[56px_1fr] text-foreground">
 		<aside class="app-rail relative z-[1] flex flex-col items-center gap-1 py-3 pr-1.5">
 			<PaperTexture class="paper-rail" params={paper.rail} preloadParams={RAIL_PAPERS} />
-			<div class="brand-mark mb-3 grid size-9 place-items-center rounded-[13px] text-sm font-semibold text-white shadow-lg" aria-label="onspot">o</div>
+			<div class="brand-mark mb-3 grid size-9 place-items-center rounded-[13px] text-sm font-semibold text-white shadow-lg" role="img" aria-label="onspot">o</div>
 
 			<NeoTooltip tooltip="New session" placement="right" {...quickTooltip}>
 				<NeoButton aria-label="New session" class="rail-action mb-3" rounded elevation={2} onclick={startNewSession}>
@@ -224,7 +233,7 @@
 			<div class="flex-1"></div>
 
 			<NeoTooltip tooltip={theme === 'dark' ? 'Light appearance' : 'Dark appearance'} placement="right" {...quickTooltip}>
-				<NeoButton aria-label="Toggle theme" class="rail-action" rounded elevation={2} onclick={toggleTheme}>
+				<NeoButton aria-label={theme === 'dark' ? 'Switch to light appearance' : 'Switch to dark appearance'} class="rail-action" rounded elevation={2} onclick={toggleTheme}>
 					{#snippet icon()}
 						{#key theme}
 							<span class="grid place-items-center" in:fade={{ duration: 90 }}>
@@ -265,7 +274,8 @@
 
 	{#if $settingsReady && !$appSettings.targetLanguage}
 		<LanguagePicker />
-	{:else if $settingsReady}
+	{:else if $settingsReady && page.url.pathname === '/'}
+		<!-- Only where it is needed: Practice records. History, Insights and Settings never ask. -->
 		<PermissionsPrompt />
 	{/if}
 </NeoThemeProvider>

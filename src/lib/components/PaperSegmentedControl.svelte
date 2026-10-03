@@ -13,6 +13,8 @@
 		options: readonly PaperSegmentOption[];
 		ariaLabel: string;
 		disabled?: boolean;
+		/** Explains why the control is disabled (shown on hover). */
+		lockedHint?: string;
 		size?: 'sm' | 'md' | 'lg';
 		class?: string;
 		onValueChange?: (value: string) => void;
@@ -23,6 +25,7 @@
 		options,
 		ariaLabel,
 		disabled = false,
+		lockedHint,
 		size = 'md',
 		class: className = '',
 		onValueChange
@@ -34,7 +37,13 @@
 
 <!-- neo tabs: a pressed track with a raised key that slides to the selected option. -->
 <!-- Exam red / Casual teal is this control's own selection colour (custom-selection opts out of the accent border). -->
-<div class="segmented custom-selection {className}" data-size={size} data-tone={activeTone} data-locked={disabled ? '' : undefined}>
+<div
+	class="segmented custom-selection {className}"
+	data-size={size}
+	data-tone={activeTone}
+	data-locked={disabled ? '' : undefined}
+	title={disabled && lockedHint ? lockedHint : undefined}
+>
 	<NeoTabs
 		active={value}
 		onchange={(tabId) => {

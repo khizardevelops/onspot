@@ -4,20 +4,25 @@
 	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import {
+		cancelRecording,
 		clearError,
 		deleteSession,
 		newSession,
 		nextPrompt,
 		practice,
 		renameSession,
+		setActiveAttempt,
 		setSessionMode,
 		startRecording,
 		stopAndAnalyze
 	} from '$lib/stores/practice';
 	import { appSettings } from '$lib/stores/settings';
 	import { languageData } from '$lib/stores/languageData';
+	import { llmConfigured } from '$lib/stores/llm';
+	import { getProvider } from '$lib/adapters/llm';
 	import { getLanguage } from '$lib/languages';
 	import { toast } from '$lib/stores/toast';
+	import { MAX_RECORDING_SEC } from '$lib/config';
 	import AttemptStream from '$lib/components/AttemptStream.svelte';
 	import FeedbackPanel from '$lib/components/FeedbackPanel.svelte';
 	import { closeOnBack } from '$lib/platform/backButton.svelte';
@@ -32,6 +37,7 @@
 	import {
 		AlertTriangle,
 		Download,
+		KeyRound,
 		Loader2,
 		Mic,
 		MoreHorizontal,
@@ -53,6 +59,12 @@
 	/** Cloud-only setups need no local weights, so the download gate is skipped. */
 	const localDataNeeded = $derived($appSettings.sttMode === 'local' || $appSettings.ttsMode === 'local');
 	const sessionReady = $derived(dataReady || !localDataNeeded);
+	/** What the learner still has to configure before a take can be corrected. */
+	const providerNeed = $derived(
+		$appSettings.llmProvider === 'custom'
+			? 'the endpoint URL and model for your custom provider'
+			: `a ${getProvider($appSettings.llmProvider).name} API key`
+	);
 	const active = $derived(
 		$practice.attempts.find((attempt) => attempt.id === $practice.activeAttemptId) ?? null
 	);
@@ -83,10 +95,23 @@
 	onMount(() => {
 		// The transcript and recording controls deserve the first screenful on a
 		// phone. Desktop keeps its review pane open until the user closes it.
-		coachOpen = matchMedia('(min-width: 1024px)').matches;
+		const desktop = matchMedia('(min-width: 1024px)');
+		coachOpen = desktop.matches;
+		// Crossing the breakpoint resets the pane, or a desktop-open review pane
+		// would arrive on a phone as a sheet covering the recording controls.
+		const sync = (event: MediaQueryListEvent) => (coachOpen = event.matches);
+		desktop.addEventListener('change', sync);
+		return () => desktop.removeEventListener('change', sync);
 	});
 
-	function selectCorrection(_attemptId: string, correctionId: string): void {
+	function selectCorrection(attemptId: string, correctionId: string): void {
+		// A correction in another take selects that take too, or Feedback would
+		// keep showing the previous take's list. Recording the id first stops the
+		// effect above from clearing the correction it is about to show.
+		if (attemptId !== $practice.activeAttemptId) {
+			lastAttemptId = attemptId;
+			setActiveAttempt(attemptId);
+		}
 		activeCorrectionId = correctionId;
 		coachOpen = true;
 	}
@@ -103,18 +128,26 @@
 			renaming = false;
 			return;
 		}
-		await renameSession(sessionId, title);
-		renaming = false;
-		toast('Session renamed');
+		try {
+			await renameSession(sessionId, title);
+			renaming = false;
+			toast('Session renamed');
+		} catch (error) {
+			toast(error instanceof Error ? `Could not rename: ${error.message}` : 'Could not rename the session.');
+		}
 	}
 
 	async function deleteCurrent(): Promise<void> {
 		const sessionId = $practice.sessionId;
 		if (!sessionId) return;
-		await deleteSession(sessionId);
+		try {
+			await deleteSession(sessionId);
+		} catch (error) {
+			toast(error instanceof Error ? `Could not delete: ${error.message}` : 'Could not delete the session.');
+			return;
+		}
 		newSession();
 		activeCorrectionId = null;
-		deleteOpen = false;
 		toast('Session deleted');
 	}
 
@@ -207,11 +240,13 @@
 					options={MODE_OPTIONS}
 					ariaLabel="Practice mode"
 					disabled={locked}
+					lockedHint="The mode is fixed once a session has takes. Start a new session to switch."
 					onValueChange={(value) => setSessionMode(value as 'exam' | 'casual')}
 					class="practice-mode-control"
 				/>
 
-				{#if locked}
+				<!-- Renaming or deleting mid-take would race the take being saved into this session. -->
+				{#if locked && !busy && !recording}
 					<PopMenu items={sessionActions} placement="bottom-end" onSelect={onSessionAction} rounded>
 						<NeoButton text rounded class="icon-button" aria-label="Session actions">
 							{#snippet icon()}<MoreHorizontal size={16} />{/snippet}
@@ -234,7 +269,7 @@
 			{/if}
 		</div>
 
-		<footer class="composer-wrap relative z-20 px-3 pb-0 sm:px-6 sm:pb-0">
+		<footer class="composer-wrap relative z-20 px-2 pb-0 sm:px-3 sm:pb-0">
 			<NeoCard class="composer-card" spacing="1rem 1rem 0.75rem" width="100%" elevation={3} glass borderless>
 					{#key $practice.phase}
 						<div in:fly={{ y: 10, duration: 320, opacity: 0 }} out:fade={{ duration: 140 }}>
@@ -254,6 +289,8 @@
 											rounded
 										/>
 									</div>
+									<!-- A slow provider must not hold the learner hostage until its timeout. -->
+									<NeoButton text rounded class="composer-action shrink-0" onclick={cancelRecording}>Cancel</NeoButton>
 								</div>
 							{:else if recording}
 								<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -263,11 +300,16 @@
 										{/each}
 									</div>
 									<div class="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
-										<span class="font-mono text-sm text-muted-foreground tabular-nums"><span class="text-foreground">{fmtTime($practice.elapsed)}</span> / 1:00</span>
+										<span class="font-mono text-sm text-muted-foreground tabular-nums"><span class="text-foreground">{fmtTime($practice.elapsed)}</span> / {fmtTime(MAX_RECORDING_SEC)}</span>
+										<span class="flex items-center gap-1">
+										<NeoButton text rounded class="icon-button" aria-label="Discard this take" title="Discard this take" onclick={cancelRecording}>
+											{#snippet icon()}<X size={16} />{/snippet}
+										</NeoButton>
 										<NeoButton color="error" rounded class="composer-action" onclick={() => stopAndAnalyze()}>
 											{#snippet icon()}<Square size={14} />{/snippet}
 											Stop & analyze
 										</NeoButton>
+										</span>
 									</div>
 								</div>
 							{:else}
@@ -281,7 +323,12 @@
 											{#snippet icon()}<SkipForward size={16} />{/snippet}
 											New prompt
 										</NeoButton>
-										{#if sessionReady}
+										{#if sessionReady && !$llmConfigured}
+											<NeoButton rounded color="primary" class="composer-action" onclick={() => goto('/settings/#ai-provider')}>
+												{#snippet icon()}<KeyRound size={16} />{/snippet}
+												Add API key
+											</NeoButton>
+										{:else if sessionReady}
 											<NeoButton rounded class="composer-action record-button solid-action" onclick={() => startRecording()}>
 												{#snippet icon()}<Mic size={16} />{/snippet}
 												Start speaking
@@ -294,6 +341,19 @@
 										{/if}
 									</div>
 								</div>
+								{#if sessionReady && !$llmConfigured}
+									<div class="data-notice mt-3 flex items-start gap-2.5 rounded-xl border border-[var(--warn)]/30 bg-[var(--warn-soft)] p-3 text-sm" role="status" in:fly={{ y: 6, duration: 240 }}>
+										<AlertTriangle class="mt-0.5 size-4 shrink-0 text-[var(--warn)]" />
+										<p class="min-w-0 leading-relaxed">
+											<span class="sm:hidden">Add an API key in Settings to start.</span>
+											<span class="hidden sm:inline">
+												Your takes are corrected by an AI model you choose. Add {providerNeed} in
+												<a class="font-medium text-[var(--brand)] underline underline-offset-4" href="/settings/#ai-provider">Settings → AI provider</a>
+												before you start speaking.
+											</span>
+										</p>
+									</div>
+								{/if}
 								{#if !sessionReady}
 									<div class="data-notice mt-3 flex items-start gap-2.5 rounded-xl border border-[var(--warn)]/30 bg-[var(--warn-soft)] p-3 text-sm" role="status" in:fly={{ y: 6, duration: 240 }}>
 										<AlertTriangle class="mt-0.5 size-4 shrink-0 text-[var(--warn)]" />

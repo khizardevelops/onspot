@@ -7,6 +7,13 @@
 - [ ] Verify a real Japanese evaluation with an LLM key (corrections offsets on unspaced text).
 - [ ] Optional: furigana (ruby) for kanji in transcripts/corrections, neo-styled.
 
+## Follow-ups from the 2026-10-03 audit
+- [ ] Review and commit the audit fixes (38 files, uncommitted).
+- [ ] Run a real take with the downloaded model to exercise the reworked STT worker load/idle path.
+- [ ] Tune the silent-take threshold (-46 dBFS) on a real microphone.
+- [ ] Decide on light `--muted-foreground` contrast (4.25-4.49:1 on rail/inset/control).
+- [ ] Tauri: atomic migrations/corrections and `.sqlite` import validation + rollback.
+
 ## Current priority — Phase 3: BYOC sync
 - [ ] Google Drive OAuth 2.0 PKCE, client-side upload/download.
 - [ ] WebDAV support for Nextcloud, ownCloud, and pCloud.

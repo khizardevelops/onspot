@@ -43,6 +43,12 @@
 		return slot.offsetTop + (parseFloat(getComputedStyle(slot).paddingTop) || 0);
 	}
 
+	/** Scroll position that rests a card one list inset below the top, so its edge stays visible. */
+	function restTop(slot: HTMLElement): number {
+		const inset = container ? parseFloat(getComputedStyle(container).paddingTop) || 0 : 0;
+		return Math.max(0, cardTop(slot) - inset);
+	}
+
 	/**
 	 * Sizes the floor spacer so the newest card settles at the top of the viewport
 	 * when scrolled to the end. Scrolling is deliberately visual only; selecting an
@@ -55,7 +61,8 @@
 			spacerHeight = 0;
 			return;
 		}
-		spacerHeight = Math.max(0, container.clientHeight - surfaceOf(cards[cards.length - 1]).offsetHeight - 24);
+		const inset = parseFloat(getComputedStyle(container).paddingTop) || 0;
+		spacerHeight = Math.max(0, container.clientHeight - surfaceOf(cards[cards.length - 1]).offsetHeight - inset);
 	}
 
 	/**
@@ -220,10 +227,10 @@
 
 		if (animate) {
 			animateArrival(el);
-			animateTo(cardTop(el), attemptId, ARRIVAL_DURATION_MS);
+			animateTo(restTop(el), attemptId, ARRIVAL_DURATION_MS);
 		} else {
 			cancelAnimatedScroll();
-			container.scrollTop = cardTop(el);
+			container.scrollTop = restTop(el);
 			setActiveAttempt(attemptId);
 			measure();
 		}
@@ -235,7 +242,7 @@
 		if (target.closest('button, select, a, input, textarea')) return;
 		if (id !== $practice.activeAttemptId) setActiveAttempt(id);
 		const el = container?.querySelector<HTMLElement>(`[data-attempt-id="${id}"]`);
-		if (el) animateTo(cardTop(el), id, CARD_SELECT_DURATION_MS);
+		if (el) animateTo(restTop(el), id, CARD_SELECT_DURATION_MS);
 	}
 
 	onMount(() => {
@@ -285,7 +292,7 @@
 
 <div class="relative h-full" role="group" aria-label="Attempt history">
 	<div
-		class="attempt-scroll h-full overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-7 sm:py-6"
+		class="attempt-scroll h-full overflow-x-hidden overflow-y-auto px-2 py-2 sm:px-3 sm:py-3"
 		role="region"
 		aria-label="Attempts"
 		bind:this={container}
@@ -302,9 +309,13 @@
 					class="attempt-slot min-w-0 cursor-pointer outline-none"
 					role="button"
 					tabindex="0"
-					aria-label="Attempt {index + 1}, select and bring to the top"
+					aria-label="Take {index + 1}, select and bring to the top"
+					aria-current={attempt.id === $practice.activeAttemptId ? 'true' : undefined}
 					onclick={(event) => selectCard(event, attempt.id)}
 					onkeydown={(event) => {
+						// Keys pressed on a control inside the card belong to that control;
+						// preventing them here stopped Enter/Space activating every card button.
+						if (event.target !== event.currentTarget) return;
 						if (event.key === 'Enter' || event.key === ' ') {
 							event.preventDefault();
 							selectCard(event as unknown as MouseEvent, attempt.id);
@@ -324,7 +335,7 @@
 			<div style="height: {spacerHeight}px"></div>
 		</div>
 	</div>
-	<div class="conveyor-lip pointer-events-none absolute inset-x-0 top-0 z-10 h-5"></div>
+	<div class="conveyor-lip pointer-events-none absolute inset-x-0 top-0 z-10 h-2 sm:h-3"></div>
 </div>
 
 <style>
@@ -348,20 +359,22 @@
 		perspective: 1050px;
 		overscroll-behavior: contain;
 		scrollbar-gutter: stable;
+		/* A thin bar keeps the right inset close to the left one. */
+		scrollbar-width: thin;
 	}
 
 	/*
 	 * `content-visibility: auto` keeps long histories cheap, but it clips
 	 * painting to the slot box, which cut the card's shadow into a hard,
 	 * differently-rounded "ghost" corner. The slot is padded by the shadow's
-	 * reach (negative margins keep the 16px rhythm), so the whole shadow is
+	 * reach (negative margins keep the 8px rhythm), so the whole shadow is
 	 * painted inside it.
 	 */
 	.attempt-slot {
 		--slot-pad: 16px;
 		padding: var(--slot-pad);
 		margin: calc(-1 * var(--slot-pad));
-		margin-bottom: calc(1rem - var(--slot-pad));
+		margin-bottom: calc(0.5rem - var(--slot-pad));
 		content-visibility: auto;
 		contain-intrinsic-size: auto 352px;
 		transform-origin: top center;

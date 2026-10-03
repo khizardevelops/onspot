@@ -8,6 +8,7 @@ const EXAM_STATUSES = ['strictly-avoid', 'avoid', 'use-sparingly', 'allowed'] as
 
 function schemaFor(language: string): string {
 	return `{
+  "spokenLanguage": string,       // the language the learner mainly spoke, named in English, e.g. "${language}", "English"
   "correctedText": string,        // the learner's transcript with your corrections applied
   "naturalSpeech": string,        // fluent, natural spoken ${language} version of what they meant
   "translations": ${TRANSLATION_SCHEMA},
@@ -39,6 +40,8 @@ function rulesFor(language: string, translationTarget: string): string {
 	return `Rules:
 - The transcript comes from speech recognition. Ignore obvious transcription artefacts (misheard proper nouns, missing punctuation) unless they change the meaning; do not "correct" the recogniser's mistakes as if they were the learner's.
 - Only correct what the learner actually said. Never invent context or content.
+- The learner must answer in ${language}. Set "spokenLanguage" to the language most of the transcript is in. If it is not ${language}, return an empty "corrections" array, give the ${language} version of what they meant as "correctedText" and "naturalSpeech", and use "summary" to tell them they answered in the wrong language.
+- A word or phrase from another language inside ${language} speech is a mistake: correct it to ${language} with category "grammar", severity "error" (unless it is a proper noun or a loanword ${language} speakers really use).
 - grammar → severity "error". register and filler issues → "warning". optional polish → "suggestion".
 - For register/filler corrections, set "examStatus" and give "formalAlternatives" where a formal connector exists.
 - Connectors: prefer connectors that are appropriate for spoken ${language} and, in exam mode, formal. Do not suggest written-only connectors the learner cannot say.

@@ -3,7 +3,14 @@ import { getDatabaseAdapter } from '$lib/adapters/db';
 import type { RunMode } from '$lib/adapters/db';
 import type { LlmModelId, LlmProviderId } from '$lib/adapters/llm';
 import { getProvider } from '$lib/adapters/llm';
-import { OFFERED_LANGUAGES, DEFAULT_LANGUAGE_ID, NEUTRAL_TUNING, type VoiceTuning } from '$lib/languages';
+import {
+	OFFERED_LANGUAGES,
+	DEFAULT_LANGUAGE_ID,
+	NEUTRAL_TUNING,
+	getLanguage,
+	getVoice,
+	type VoiceTuning
+} from '$lib/languages';
 
 /** How much translation to show under an attempt. */
 export type TranslationMode = 'off' | 'idiomatic' | 'all';
@@ -58,6 +65,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const FIELD_PREFIX = 'onspot.setting.';
+
+/** CEFR levels offered in Settings. */
+export const LEVELS = ['A2', 'B1', 'B2', 'C1'] as const;
+
+/** Allowed values of the settings rendered as fixed-choice selects. */
+const CHOICES = {
+	level: LEVELS,
+	mode: ['exam', 'casual'],
+	sttMode: ['local', 'cloud'],
+	ttsMode: ['local', 'cloud'],
+	translationMode: ['off', 'idiomatic', 'all'],
+	llmProvider: ['groq', 'deepseek', 'custom']
+} as const satisfies Partial<Record<keyof AppSettings, readonly string[]>>;
 const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
 
 /** True once persisted settings have been loaded; prevents first-run flicker. */
@@ -70,14 +90,38 @@ store.subscribe((value) => {
 	void persist(value);
 });
 
+/** Last JSON written per field; only fields that changed are written again. */
+const written = new Map<string, string>();
+let queued: AppSettings | null = null;
+let writing = false;
+
+/**
+ * Writes are serialized and coalesced: typing in a field produces many store
+ * updates, and overlapping full-snapshot writes could land out of order and
+ * leave an older value in the database.
+ */
 async function persist(value: AppSettings): Promise<void> {
+	queued = value;
+	if (writing) return;
+	writing = true;
 	try {
-		const db = await getDatabaseAdapter();
-		for (const [field, fieldValue] of Object.entries(value)) {
-			await db.setSetting(`${FIELD_PREFIX}${field}`, JSON.stringify(fieldValue));
+		while (queued) {
+			const next = queued;
+			queued = null;
+			try {
+				const db = await getDatabaseAdapter();
+				for (const [field, fieldValue] of Object.entries(next)) {
+					const json = JSON.stringify(fieldValue);
+					if (written.get(field) === json) continue;
+					await db.setSetting(`${FIELD_PREFIX}${field}`, json);
+					written.set(field, json);
+				}
+			} catch (error) {
+				console.error('[settings] failed to persist', error);
+			}
 		}
-	} catch (error) {
-		console.error('[settings] failed to persist', error);
+	} finally {
+		writing = false;
 	}
 }
 
@@ -86,10 +130,13 @@ export async function initSettings(): Promise<void> {
 	const db = await getDatabaseAdapter();
 	const rows = await db.listSettings();
 	const loaded: AppSettings = { ...DEFAULT_SETTINGS };
+	// Also runs after a database restore: what is on disk is now the restored file.
+	written.clear();
 	for (const row of rows) {
 		if (!row.key.startsWith(FIELD_PREFIX)) continue;
 		const field = row.key.slice(FIELD_PREFIX.length) as keyof AppSettings;
 		if (!(field in loaded)) continue;
+		written.set(field, row.value);
 		try {
 			// Values are JSON-encoded; ignore anything malformed.
 			(loaded as unknown as Record<string, unknown>)[field] = JSON.parse(row.value);
@@ -98,8 +145,8 @@ export async function initSettings(): Promise<void> {
 		}
 	}
 	// Settings written before the language registry used ids stored the English
-	// name ("French"). Normalise to the registry id, or clear it so the first-run
-	// picker appears.
+	// name ("French"). Normalise to the registry id, or fall back to the default
+	// language.
 	const match = OFFERED_LANGUAGES.find(
 		(language) => language.id === loaded.targetLanguage || language.name === loaded.targetLanguage
 	);
@@ -108,6 +155,18 @@ export async function initSettings(): Promise<void> {
 	// null state that prevents the data gate from resolving.
 	loaded.targetLanguage = match?.id ?? DEFAULT_LANGUAGE_ID;
 	loaded.voiceTunings = sanitizeTunings(loaded.voiceTunings);
+	// A voice saved for another language (or removed from the registry) would
+	// leave the Voice select blank and read-backs on an unknown voice.
+	if (!getVoice(loaded.targetLanguage, loaded.ttsVoice)) {
+		loaded.ttsVoice = getLanguage(loaded.targetLanguage)?.defaultVoice ?? DEFAULT_SETTINGS.ttsVoice;
+	}
+	// Choice fields: an unknown value falls back to the default rather than
+	// rendering an empty select.
+	for (const [field, allowed] of Object.entries(CHOICES) as [keyof typeof CHOICES, readonly string[]][]) {
+		if (!allowed.includes(loaded[field] as string)) {
+			(loaded as unknown as Record<string, unknown>)[field] = DEFAULT_SETTINGS[field];
+		}
+	}
 	// A settings row from before the model enum existed may name a model this
 	// build no longer ships. The Settings dropdown keeps the unknown id as an
 	// extra option rather than silently discarding the user's choice.

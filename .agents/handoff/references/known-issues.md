@@ -117,3 +117,11 @@ as a WER number rather than as a plausible-looking transcript.
 - **Issue**: Whisper models have a fixed 30-second attention window. Audio longer than 30s requires chunked processing with overlap.
 - **Impact**: Chunked ASR can introduce artifacts at chunk boundaries. The `stride_length_s: 5` overlap mitigates but doesn't eliminate this.
 - **Resolution**: Inherent Whisper architecture limit. Consider using models with longer context windows (e.g., Distil-Whisper) for very long audio.
+
+## Web: one tab at a time (OPFS SAH pool)
+- sqlite-wasm's `opfs-sahpool` VFS holds exclusive OPFS access handles, so a second onspot tab
+  (or a page whose predecessor is still unloading) gets `NoModificationAllowedError`.
+- Mitigation (2026-10-03): `adapters/db/index.ts` retries a lock for ~3.5s, then throws
+  "onspot is already open in another tab or window…"; the layout toasts it and Practice keeps it
+  in its error box. Firefox-verified with two tabs; closing the other tab + reload recovers.
+- A real fix is a takeover (BroadcastChannel asks the holder to `pauseVfs()`) — not built.
