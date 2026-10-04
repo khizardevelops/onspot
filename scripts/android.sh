@@ -25,6 +25,14 @@ if [[ -z "${NDK_HOME:-}" ]]; then
 	NDK_HOME="$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1 || true)"
 fi
 export NDK_HOME
+# whisper.cpp (src-tauri/plugins/speech) is C++ built through CMake, with Rust
+# bindings from bindgen. Point both at the NDK, per Android target only, so
+# desktop builds are unaffected.
+for pair in aarch64-linux-android:arm64-v8a x86_64-linux-android:x86_64; do
+	triple="${pair%%:*}"; abi="${pair##*:}"; suffix="${triple//-/_}"
+	export "CMAKE_TOOLCHAIN_FILE_${suffix}=$HERE/android-cmake/$abi/android.toolchain.cmake"
+	export "BINDGEN_EXTRA_CLANG_ARGS_${suffix}=--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+done
 [[ -n "${JAVA_HOME:-}" ]] && export JAVA_HOME && export PATH="$JAVA_HOME/bin:$PATH"
 if [[ -n "${RUSTUP_HOME:-}" && -n "${CARGO_HOME:-}" ]]; then
 	export RUSTUP_HOME CARGO_HOME
