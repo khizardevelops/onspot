@@ -3,8 +3,19 @@
 Document coding, naming, file organization, tooling, and communication preferences.
 
 ## Code Style
+- **The repo must read as if a careful human wrote it.** The user rejects "AI spaghetti":
+  no speculative abstractions, no layers without a second caller, no duplicated helpers, no
+  dead code left behind, no clever indirection. Prefer the obvious, boring implementation.
+- One responsibility per file; small, named functions; types next to the code that owns them.
+- Comments explain *why* (constraints, measured evidence, traps), never restate the code.
+- When replacing something, delete the old path in the same change. Grep for importers first.
 
 ## File Organization
+- Organise by feature/capability, not by kind of file. A capability folder (e.g. `src/lib/speech/`)
+  holds its interface, registry and one sub-folder per implementation.
+- Each folder that is a module boundary gets a short `README.md` only if its purpose is not
+  obvious from names (what it is, how to add one more, what not to do).
+- Dev-only tooling stays out of product folders (`src/routes/model-lab/`, `tools/`).
 
 ## Naming
 
