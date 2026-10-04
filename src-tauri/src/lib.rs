@@ -5,6 +5,7 @@ pub fn run() {
     // Settings → Storage → Export: a native Save dialog and the file write.
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
+    .plugin(tauri_plugin_speech::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

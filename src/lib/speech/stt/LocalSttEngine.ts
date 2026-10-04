@@ -26,6 +26,9 @@ export interface LocalSttEngine {
 	/** Stops an in-flight `prepare` and frees whatever it had loaded. */
 	cancelPrepare(): void;
 
+	/** Deletes the downloaded model, giving the disk space back. */
+	remove(language: LanguageDefinition): Promise<void>;
+
 	/** 16 kHz mono PCM in, text out. Prepares the model first if it is not loaded. */
 	transcribe(
 		pcm16k: Float32Array,

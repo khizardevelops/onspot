@@ -1,0 +1,11 @@
+[default]
+description = "Everything onspot's speech UI needs: manage the downloaded model and transcribe."
+permissions = [
+  "allow-model-status",
+  "allow-download-model",
+  "allow-cancel-download",
+  "allow-delete-model",
+  "allow-load-model",
+  "allow-transcribe",
+  "allow-release",
+]

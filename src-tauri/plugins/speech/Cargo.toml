@@ -1,0 +1,22 @@
+[package]
+name = "tauri-plugin-speech"
+version = "0.1.0"
+description = "onspot's on-device speech engines: whisper.cpp speech-to-text."
+license = "AGPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.77.2"
+# Required by tauri-plugin's build step, which generates this plugin's permissions.
+links = "tauri-plugin-speech"
+
+[dependencies]
+tauri = "2.11.3"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+whisper-rs = "0.16"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
+futures-util = "0.3"
+sha2 = "0.11"
+tokio = { version = "1", features = ["fs", "io-util", "time"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2.7", features = ["build"] }

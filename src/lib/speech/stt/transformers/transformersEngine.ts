@@ -31,13 +31,14 @@ function adapterFor(language: LanguageDefinition): WorkerWhisperAdapter {
 	return adapter;
 }
 
-async function isDownloaded(repo: string): Promise<boolean> {
+/** The cached requests that belong to a repo's weights and config. */
+async function cachedFiles(repo: string): Promise<Request[]> {
 	try {
 		const cache = await caches.open(CACHE_NAME);
 		const requests = await cache.keys();
-		return requests.some((request) => request.url.includes(repo));
+		return requests.filter((request) => request.url.includes(repo));
 	} catch {
-		return false;
+		return [];
 	}
 }
 
@@ -49,7 +50,7 @@ export const transformersEngine: LocalSttEngine = {
 
 	async missingBytes(language) {
 		const { repo, bytes } = language.stt.models.transformers;
-		return (await isDownloaded(repo)) ? 0 : bytes;
+		return (await cachedFiles(repo)).length > 0 ? 0 : bytes;
 	},
 
 	async prepare(language, onProgress) {
@@ -60,6 +61,13 @@ export const transformersEngine: LocalSttEngine = {
 		void adapter?.dispose();
 		adapter = null;
 		adapterLanguage = '';
+	},
+
+	async remove(language) {
+		this.cancelPrepare();
+		const cache = await caches.open(CACHE_NAME);
+		const files = await cachedFiles(language.stt.models.transformers.repo);
+		await Promise.all(files.map((request) => cache.delete(request)));
 	},
 
 	async transcribe(pcm16k, language, onProgress) {

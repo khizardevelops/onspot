@@ -82,6 +82,8 @@ export function isNeutralTuning(tuning: VoiceTuning): boolean {
 
 /** The Whisper weights as each STT engine needs them (see `src/lib/speech/stt/`). */
 export interface SttModels {
+	/** ggml file from whisper.cpp's Hugging Face repo, for the native desktop/Android engine. */
+	whisperCpp: { file: string; url: string; sha256: string; bytes: number };
 	/** Transformers.js repo, for the browser engine. */
 	transformers: { repo: string; dtype: string; bytes: number };
 }
@@ -91,6 +93,13 @@ export interface SttModels {
  * decoder language changes, so a model downloaded for one language serves all.
  */
 const WHISPER_SMALL: SttModels = {
+	// q5_1: same accuracy as the q4 ONNX build in 190 MB (docs/benchmarks/stt.md).
+	whisperCpp: {
+		file: 'ggml-small-q5_1.bin',
+		url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin',
+		sha256: 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb',
+		bytes: 190_085_487
+	},
 	transformers: { repo: 'onnx-community/whisper-small', dtype: 'q4', bytes: 299_000_000 }
 };
 

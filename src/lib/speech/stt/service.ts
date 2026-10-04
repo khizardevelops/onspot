@@ -1,7 +1,7 @@
 import { requireLanguage } from '#lib/languages/index.js';
 import type { ModelProgress } from '#lib/types.js';
 import { GroqWhisperAdapter } from './cloud/GroqWhisperAdapter';
-import { localSttEngine } from './localEngine';
+import { localSttEngine, removeSupersededStt } from './localEngine';
 import type { SttModelInfo } from './LocalSttEngine';
 
 /**
@@ -45,11 +45,13 @@ export function missingLocalSttBytes(languageId: string): Promise<number> {
 }
 
 /** Downloads (if needed) and loads the on-device model. */
-export function prepareLocalStt(
+export async function prepareLocalStt(
 	languageId: string,
 	onProgress?: (progress: ModelProgress) => void
 ): Promise<void> {
-	return localSttEngine().prepare(requireLanguage(languageId), onProgress);
+	const language = requireLanguage(languageId);
+	await localSttEngine().prepare(language, onProgress);
+	await removeSupersededStt(language);
 }
 
 export function cancelLocalSttPrepare(): void {
