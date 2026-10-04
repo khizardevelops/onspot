@@ -72,14 +72,11 @@ pub async fn load_model<R: Runtime>(app: AppHandle<R>, file: String) -> Result<(
     Ok(())
 }
 
-/// The body is the raw 16 kHz mono PCM as little-endian f32 (no JSON, so a
-/// minute of audio crosses the IPC as 3.8 MB of bytes, not a number array).
-/// The model file and language travel as headers.
+/// The body is the 16 kHz mono PCM as little-endian f32 bytes. The model file
+/// and language travel as headers.
 #[tauri::command]
 pub async fn transcribe<R: Runtime>(app: AppHandle<R>, request: Request<'_>) -> Result<String> {
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err(Error::Invalid("transcribe expects raw PCM bytes".into()));
-    };
+    let bytes = body_bytes(request.body())?;
     let header = |name: &str| {
         request
             .headers()
@@ -105,6 +102,20 @@ pub async fn transcribe<R: Runtime>(app: AppHandle<R>, request: Request<'_>) -> 
 #[tauri::command]
 pub fn release<R: Runtime>(app: AppHandle<R>) {
     app.state::<Engine>().release();
+}
+
+/// Desktop delivers a binary body as raw bytes. Android's IPC bridge has no
+/// binary channel and delivers the same bytes as a JSON array of numbers.
+fn body_bytes(body: &InvokeBody) -> Result<Vec<u8>> {
+    match body {
+        InvokeBody::Raw(bytes) => Ok(bytes.clone()),
+        InvokeBody::Json(serde_json::Value::Array(values)) => values
+            .iter()
+            .map(|value| value.as_u64().and_then(|n| u8::try_from(n).ok()))
+            .collect::<Option<Vec<u8>>>()
+            .ok_or_else(|| Error::Invalid("transcribe expects PCM bytes".into())),
+        InvokeBody::Json(_) => Err(Error::Invalid("transcribe expects PCM bytes".into())),
+    }
 }
 
 /// whisper.cpp blocks for seconds; keep it off the async runtime's threads.

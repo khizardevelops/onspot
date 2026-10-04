@@ -43,6 +43,18 @@ pub fn model_path<R: Runtime>(app: &AppHandle<R>, file: &str) -> Result<PathBuf>
     Ok(dir.join(file))
 }
 
+/// A client that carries Mozilla's root certificates instead of asking the OS.
+/// On Android the OS store is only reachable after a JNI setup step; without
+/// it reqwest's platform verifier panics and the download never starts (seen
+/// on a phone, 2026-10-04). Bundled roots behave the same on every platform.
+fn http_client() -> Result<reqwest::Client> {
+    let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .map(|cert| reqwest::Certificate::from_der(cert.as_ref()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(reqwest::Client::builder().tls_certs_only(roots).build()?)
+}
+
 pub async fn download(
     url: &str,
     path: &Path,
@@ -60,7 +72,7 @@ pub async fn download(
     }
     let partial = path.with_extension("bin.part");
 
-    let response = reqwest::get(url).await?.error_for_status()?;
+    let response = http_client()?.get(url).send().await?.error_for_status()?;
     let total = response.content_length().unwrap_or(0);
     let mut file = tokio::fs::File::create(&partial).await?;
     let mut hasher = Sha256::new();
