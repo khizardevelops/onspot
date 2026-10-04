@@ -15,6 +15,8 @@ stt/
   service.ts          what the app calls; local engine or Groq cloud
   localEngine.ts      picks this build's on-device engine (the only place that decides)
   LocalSttEngine.ts   the interface every on-device engine implements
+  native/             whisper.cpp in the desktop and Android apps, via the Rust plugin
+                      src-tauri/plugins/speech
   transformers/       Whisper via Transformers.js in a Web Worker (browser build)
   cloud/              Groq, bring-your-own-key
 ```

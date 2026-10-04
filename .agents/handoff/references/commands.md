@@ -34,6 +34,11 @@
 - `tools/whisper-webgpu/build.sh` — builds whisper.cpp + ggml WebGPU for the model lab into
   `src/routes/model-lab/vendor/whisper-webgpu/` (gitignored). Needs emsdk + whisper.cpp in
   `/mnt/data/not_synced/dev-cache/` (override with EMSDK_DIR / WHISPER_DIR).
+- `cargo run --release -p tauri-plugin-speech --example bench -- <model.bin> <lang> <clip.f32>...`
+  (in `src-tauri/`) — measures the native STT engine on raw 16 kHz f32 clips
+  (`ffmpeg -i in.mp3 -ac 1 -ar 16000 -f f32le out.f32`).
+- `scripts/android.sh build --apk --debug --target aarch64` — debug APK for a phone; installs as
+  `app.onspot.desktop.debug` beside the release app (`adb install -r …/universal/debug/…apk`).
 - `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
 - `npm run tauri build` — package the desktop app.
 

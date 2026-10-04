@@ -1,5 +1,19 @@
 # Last Session
 
+## 2026-10-04: native speech plugin architecture (branch feature/native-speech)
+- Commits: speech code moved into `src/lib/speech/{stt,tts}` (−844 lines, dead lab code gone);
+  `LocalSttEngine` interface + `localEngine.ts` + `platform/runtime.ts`; Rust workspace with
+  `src-tauri/plugins/speech` (whisper.cpp); thread tuning; Android NDK wiring
+  (`scripts/android-cmake/`, env in `scripts/android.sh`); Android fixes (TLS roots, JSON PCM body,
+  string errors); GPT-OSS reasoning_effort=low.
+- Verified: desktop app end to end via tauri-driver (`/mnt/data/not_synced/dev-cache/tools/bin/
+  tauri-driver`, needs the `gcc` linker env to install); phone debug app (`app.onspot.desktop.debug`,
+  installs beside release) end to end: Settings download → mic recording of laptop-played French →
+  native transcription → Groq feedback. Numbers in docs/benchmarks/stt.md.
+- Not done: Vulkan GPU (needs `vulkan-headers` on this machine; user asked to install), release
+  APK size check, GGML_NATIVE for shipped desktop builds, CI (`.github/workflows/android.yml`
+  needs cmake/clang; untested), merging the branch.
+
 ## 2026-10-04: whisper.cpp WebGPU spike (branch spike/whisper-webgpu)
 - `migration` snapshot committed (4b0c82a), spike branched from it.
 - Toolchain: emsdk 6.0.11 + whisper.cpp clone in /mnt/data/not_synced/dev-cache/.

@@ -1,6 +1,8 @@
 # Model problem: local STT uses too much RAM
 
-Status: **open**, 2026-10-01. Written to drive a manual search for alternatives.
+Status: **resolved for the desktop and Android apps** (2026-10-04): native whisper.cpp, see
+[`benchmarks/stt.md`](../benchmarks/stt.md). The browser build still uses Transformers.js. Written
+2026-10-01 to drive a manual search for alternatives.
 The raw measurements live in [`benchmarks/stt.md`](../benchmarks/stt.md),
 [`benchmarks/runtime.md`](../benchmarks/runtime.md) and [`benchmarks/tts.md`](../benchmarks/tts.md).
 

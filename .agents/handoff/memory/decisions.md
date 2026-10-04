@@ -1,5 +1,28 @@
 # Decisions
 
+### STT: native whisper.cpp in the desktop and Android apps (2026-10-04)
+The apps run whisper.cpp natively through the in-repo Tauri plugin `src-tauri/plugins/speech`
+(whisper-rs 0.16, `ggml-small-q5_1.bin`, 190 MB). Measured: WER 5.8% on desktop and phone,
+rtf ~0.75 on the phone (S24 FE) and below 1 on a busy laptop, ~600 MB for the whole Android app
+with the model loaded, against ~1.9–2.1 GB extra for Transformers.js. The browser build keeps
+Transformers.js. `src/lib/speech/stt/localEngine.ts` is the only place that picks the engine.
+Supersedes the 2026-09-30 "stay on Transformers.js" and the WebGPU-spike decisions. CPU only for
+now; Vulkan is a later step.
+
+### Android IPC and TLS traps (2026-10-04)
+- Android's Tauri IPC has no binary channel: a `Uint8Array` body reaches Rust as a JSON array of
+  numbers, not `InvokeBody::Raw`. `commands.rs::body_bytes` accepts both.
+- reqwest's default rustls platform verifier panics on Android without a JNI init step (download
+  hangs at 0%; a release build would abort). Model downloads use bundled Mozilla roots
+  (`webpki-root-certs` + `tls_certs_only`).
+- Tauri rejects commands with the Rust error as a *string*; the practice screen only shows
+  `Error` messages, so `nativeEngine.ts` rethrows strings as `Error`.
+
+### LLM: GPT-OSS uses reasoning_effort=low (2026-10-04)
+At default effort gpt-oss-120b's reasoning used ~2100 of the 3072-token evaluation budget and the
+JSON answer was truncated (`json_validate_failed`). `client.ts` sends `reasoning_effort: 'low'` to
+GPT-OSS models only: 3/3 valid, ~4 s.
+
 ### STT on WebGPU: whisper.cpp + ggml WebGPU passes on desktop, blocked on Android (2026-10-04)
 Spike on branch `spike/whisper-webgpu`: 190 MB vs 299 MB, +0.57/+1.0 GB vs +1.9/+2.1 GB RAM,
 rtf ~0.2 vs ~1.9, WER 5.8% vs 5.5% (docs/benchmarks/stt.md). Not yet adopted: Chrome/WebView

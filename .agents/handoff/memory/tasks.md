@@ -43,14 +43,18 @@
   neo equivalents where they don't fight the conveyor/transcript layout.
 
 ## Resource usage
-- [ ] Decide the Android STT path before adopting the WebGPU engine: native whisper.cpp in Tauri
-  (whisper-rs) vs Transformers.js fallback. WebGPU spike passes on desktop (branch
-  `spike/whisper-webgpu`, docs/benchmarks/stt.md).
+- [x] Native whisper.cpp STT for desktop and Android (branch `feature/native-speech`).
+- [ ] Vulkan GPU for native whisper (`whisper-rs` feature `vulkan`); measure desktop and phone.
+- [ ] Shipped desktop builds: ggml builds with GGML_NATIVE (build-machine CPU flags) by default;
+  set a portable baseline before distributing binaries.
+- [ ] CI: Android workflow must build whisper.cpp (cmake, clang/libclang, NDK env from android.sh).
+- [ ] Release APK: check size/stripping with the plugin; remove the old Transformers.js cache on
+  upgrade is wired (`removeSupersededStt`) but unverified on a real upgrade.
+- [ ] Native TTS (sherpa-onnx Piper) as a second `speech/tts` engine, then the same interface.
 - [x] whisper.cpp / wllama vs Transformers.js checked 2026-09-30 — rejected (8–12x slower).
-- [ ] **User-owned (manual research):** find an STT alternative using `docs/research/model_problem.md`
-  (the problem, every model in use, specs, benchmarks, gates, research leads). The user is not
-  happy with ~1.9 GB for whisper-small q4; do not treat the current RAM as accepted.
-- [ ] Optional: reduce STT resident RAM without losing accuracy (ORT arena/session options,
+- [x] **User-owned research** on STT RAM: resolved for the apps by native whisper.cpp (2026-10-04);
+  the browser build still uses Transformers.js (`docs/research/model_problem.md`).
+- [ ] Optional, browser build only: reduce Transformers.js STT RAM (ORT arena/session options,
   quantized-embedding export, shorter idle release); measure with `/stt-bench/`.
 
 ## Language system follow-ups

@@ -130,3 +130,27 @@ Limited support / testing currently available on Android"*; `requestAdapter()` r
 it would fall back to the CPU path (rtf 15–22). The Android WebView is also not cross-origin
 isolated, which this pthreads build needs. Android needs a different path (native whisper.cpp in
 Tauri) or Transformers.js as the fallback.
+
+## Native whisper.cpp in the desktop and Android apps (2026-10-04) — adopted
+
+`src-tauri/plugins/speech` (whisper-rs 0.16, CPU) running `ggml-small-q5_1.bin` (190 MB).
+Same three clips, same scoring. Desktop numbers come from `examples/bench.rs` (the plugin's own
+`Engine`) on an i7-1165G7 under heavy unrelated load (load average 11–12 on 8 threads), so they
+are pessimistic. Phone numbers come from the debug app on a Galaxy S24 FE (Exynos 2400e), calling
+the plugin's `transcribe` command directly.
+
+| | desktop (CPU, 4 threads) | phone (CPU) | Transformers.js q4 (webview, same laptop) |
+|---|---|---|---|
+| aggregate WER (345 words) | **5.8%** (20) | **5.8%** (20) | 5.5% (19) |
+| rtf eval2 / eval3 / set1 | 0.92 / 0.81 / 0.94 | 0.65 / 0.74 / 0.84 | 1.98 / 1.74 / 2.16 |
+| memory | 569–613 MB peak RSS, whole process | ~600 MB PSS, **whole app** incl. WebView | +1.9–2.1 GB over the browser |
+| model load | 0.26 s | 0.27 s | seconds |
+| download | 190 MB | 190 MB | 299 MB |
+
+Whisper decodes a full 30 s window even for short audio, so an 8 s take costs about one
+window (~16 s on the busy laptop). The phone's mic → native transcription → LLM feedback path
+was verified through the real practice screen: a 44 s take played from the laptop's speakers was
+transcribed and evaluated (Groq, 9 feedback items) 35 s after Stop, with the app at ~950 MB PSS at
+peak (WebView, Piper TTS worker and whisper together). Over-the-air audio adds errors the clean
+file does not ("mon collier" for Montpellier). GPU (Vulkan) is not enabled yet; the desktop WebGPU
+spike (rtf ~0.2) shows the headroom.
