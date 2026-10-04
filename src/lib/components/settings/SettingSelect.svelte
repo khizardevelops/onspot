@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { quickSelect } from '$lib/neo';
+	import { quickSelect } from '#lib/neo.js';
 	import { NeoSelect } from '@dvcol/neo-svelte/inputs';
 
 	interface Option {

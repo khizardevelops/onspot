@@ -33,7 +33,7 @@ Document coding, naming, file organization, tooling, and communication preferenc
   colours add `.custom-selection`. Selected rail key: accent icon + accent border; other rail icons stay neutral ink (never a
   teal-tinted colour, or the accent stops meaning "current").
 - Menus: `PopMenu` (not NeoMenu). Tooltips/collapses: spread `quickTooltip`/`quickCollapse`
-  from `$lib/neo`. Interactions answer in ≤ ~180ms; no hover-delayed opens.
+  from `#lib/neo.js`. Interactions answer in ≤ ~180ms; no hover-delayed opens.
 - Relief: raised = `--key` card stock (convex), recessed = `--well` (concave), selected tab =
   raised key in an inset track. Don't flatten components to the page colour.
 

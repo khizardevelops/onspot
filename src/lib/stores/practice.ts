@@ -8,22 +8,22 @@ import {
 	type Session,
 	type TranslationSet,
 	type IDatabaseAdapter
-} from '$lib/adapters/db';
+} from '#lib/adapters/db/index.js';
 import { appSettings, setSetting } from './settings';
 import { groqApiKey, openaiApiKey } from './secrets';
 import { llmConfigured, resolveLlmEndpoint } from './llm';
 import { playTrack, setAudioLoading, stopAudio } from './audio';
 import { refreshLanguageData } from './languageData';
-import { VoiceRecorder, type Recording } from '$lib/utils/recorder';
-import { transcribeSpeech } from '$lib/adapters/stt/service';
-import { evaluateAttempt, generateTranslations, type EvaluationResult } from '$lib/adapters/llm';
-import { synthesizeSpeech } from '$lib/adapters/tts/service';
-import { base64ToBlob, blobToBase64 } from '$lib/utils/base64';
-import { ensurePromptsSeeded, pickRandomPrompt } from '$lib/practice/prompts';
-import { requireLanguage, getVoice } from '$lib/languages';
-import { MAX_RECORDING_SEC, capWords, countWords } from '$lib/config';
+import { VoiceRecorder, type Recording } from '#lib/utils/recorder.js';
+import { transcribeSpeech } from '#lib/adapters/stt/service.js';
+import { evaluateAttempt, generateTranslations, type EvaluationResult } from '#lib/adapters/llm/index.js';
+import { synthesizeSpeech } from '#lib/adapters/tts/service.js';
+import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
+import { ensurePromptsSeeded, pickRandomPrompt } from '#lib/practice/prompts.js';
+import { requireLanguage, getVoice } from '#lib/languages/index.js';
+import { MAX_RECORDING_SEC, capWords, countWords } from '#lib/config.js';
 import { toast } from './toast';
-import type { ModelProgress } from '$lib/types';
+import type { ModelProgress } from '#lib/types.js';
 
 export type PracticePhase = 'idle' | 'recording' | 'transcribing' | 'evaluating' | 'error';
 

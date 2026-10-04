@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Interactive 1:1 clone of `$lib/components/AttemptStream.svelte`.
+	 * Interactive 1:1 clone of `#lib/components/AttemptStream.svelte`.
 	 *
 	 * The practice store is gone (`$practice.attempts`, `setActiveAttempt`) and
 	 * replaced with bindable local state. Everything that makes the stream feel

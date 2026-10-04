@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { NeoNotificationProvider, NeoNotificationStack } from '@dvcol/neo-svelte/floating/notification';
-	import { toasts } from '$lib/stores/toast';
+	import { toasts } from '#lib/stores/toast.js';
 
 	/*
 	 * The toast store stays the app-wide API; each new message is handed to neo's

@@ -2,9 +2,14 @@
 
 ## Current State
 
-**2026-10-03 audit:** a multi-agent UI/UX/bug pass landed uncommitted fixes across shell, Practice,
+**SvelteKit 3 (2026-10-04, branch `migration`):** Kit 3 / adapter-static 4 / Vite 8.3; config is
+in `vite.config.ts`; imports are `#lib/...` with extensions. See decisions.md.
+
+**2026-10-03 audit:** a multi-agent UI/UX/bug pass landed fixes (commit `4bc2d94`) across shell, Practice,
 History/Insights/DB, Settings and the speech/LLM adapters; see last-session.md for the list and
-what remains runtime-untested.
+what remains runtime-untested. Follow-ups the same day: recording is gated on a configured LLM
+provider (`llmConfigured`), wrong-language takes are flagged as one error, attempt cards use
+minimal insets, and a DB lock held by another tab is retried ~3.5s then explained.
 **Japanese (2026-09-25):** candidate language (dev builds only): whisper-small q4 `japanese`,
 piper-plus voices with OpenJTalk/jpreprocess WASM G2P in the TTS worker; see
 `docs/architecture/supported-languages.md` and last-session.
@@ -285,7 +290,7 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 ### Phase 1 implemented
 
 SvelteKit migration (was a root-level Vite + Svelte app):
-- `svelte.config.js` + `@sveltejs/adapter-static` (`fallback: 'index.html'`, pure SPA).
+- SvelteKit 3: config lives in `vite.config.ts` (`sveltekit({ preprocess, adapter })`, no `svelte.config.js`) + `@sveltejs/adapter-static` 4 (`fallback: 'index.html'`, pure SPA).
 - `src/routes/+layout.ts` with `ssr=false`, `prerender=false` → single `index.html`.
   Do **not** set `prerender=true`: it emits a second index.html the fallback overwrites.
 - `src/app.html`, `src/app.css` (Tailwind v4 + `@tailwindcss/vite`), self-hosted
@@ -406,7 +411,7 @@ prototype's insight columns keep working without new categories.
 - `npm run bundle -- <page|path|glob...>` (`repomix/bundle.mjs`) exports any page or section of
   the real app with repomix. Pages are discovered from `src/routes` (`home`, `history`,
   `insights`, `settings`, `ui-sandbox`; `--list`), so new routes need no setup. From the page's
-  own route files it follows local imports (`$lib`, relative, `?worker`, `new URL(...,
+  own route files it follows local imports (`#lib`, relative, `?worker`, `new URL(...,
   import.meta.url)`, CSS `@import`) and passes the file list to `repomix --stdin`. The root
   `+layout` (app shell) is opt-in via `--layout` because it pulls the practice store and every
   adapter into each page. Re-export-only barrels (shadcn `ui/x/index.ts`, `adapters/*/index.ts`)

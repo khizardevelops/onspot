@@ -1,5 +1,13 @@
 # Tasks
 
+## SvelteKit 3 migration (branch `migration`, 2026-10-04)
+- [x] Migrate (sv migrate), check 0/0, build, preview smoke in Chromium (4 routes, nav, COOP/COEP).
+- [ ] Restart the dev server on :5173 (svelte.config.js is gone) and exercise Practice with real
+  STT/TTS/LLM; then the Tauri desktop + Android builds.
+- [ ] Commit and merge `migration` into main.
+- [ ] Optional: Kit 3 polls `_app/version.json` hourly (`version.pollInterval`); set it to 0 in
+  `vite.config.ts` if the Tauri/static build should not.
+
 ## Japanese (candidate → approved)
 - [ ] Listening test of CSS10 / Mera / Tsukuyomi-chan; choose default + any processing profile.
 - [ ] whisper-small q4 Japanese transcript review (CER) on real human-transcribed learner speech.
@@ -8,7 +16,12 @@
 - [ ] Optional: furigana (ruby) for kanji in transcripts/corrections, neo-styled.
 
 ## Follow-ups from the 2026-10-03 audit
-- [ ] Review and commit the audit fixes (38 files, uncommitted).
+- [x] Audit + follow-up fixes committed by the user (`4bc2d94`).
+- [ ] Verify the wrong-language flag with a real LLM call (only tested with a mocked response).
+- [ ] Optional: detect the spoken language from audio (Whisper language-id / Groq `verbose_json`),
+  since local Whisper forced to French can translate English speech into French text.
+- [ ] Optional: multi-tab takeover for the web DB (BroadcastChannel → holder `pauseVfs()`); today a
+  second tab only gets a clear "open in another tab" message.
 - [ ] Run a real take with the downloaded model to exercise the reworked STT worker load/idle path.
 - [ ] Tune the silent-take threshold (-46 dBFS) on a real microphone.
 - [ ] Decide on light `--muted-foreground` contrast (4.25-4.49:1 on rail/inset/control).

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { quickCollapse } from '$lib/neo';
+	import { quickCollapse } from '#lib/neo.js';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
@@ -9,13 +9,13 @@
 		setSetting,
 		setVoiceTuning,
 		voiceTuning
-	} from '$lib/stores/settings';
-	import { hydrateLatestSession, setTargetLanguage } from '$lib/stores/practice';
+	} from '#lib/stores/settings.js';
+	import { hydrateLatestSession, setTargetLanguage } from '#lib/stores/practice.js';
 	import {
 		cancelLanguageDownload,
 		downloadLanguageData,
 		languageData
-	} from '$lib/stores/languageData';
+	} from '#lib/stores/languageData.js';
 	import {
 		OFFERED_LANGUAGES,
 		isCandidate,
@@ -24,8 +24,8 @@
 		isNeutralTuning,
 		languageDownloadBytes,
 		type VoiceTuning
-	} from '$lib/languages';
-	import { customApiKey, deepseekApiKey, groqApiKey, openaiApiKey } from '$lib/stores/secrets';
+	} from '#lib/languages/index.js';
+	import { customApiKey, deepseekApiKey, groqApiKey, openaiApiKey } from '#lib/stores/secrets.js';
 	import {
 		LLM_PROVIDERS,
 		getModelOptions,
@@ -33,20 +33,20 @@
 		listModels,
 		testConnection,
 		type LlmProviderId
-	} from '$lib/adapters/llm';
-	import { currentLlmEndpoint } from '$lib/stores/llm';
-	import { ttsPreview } from '$lib/stores/ttsPreview';
-	import { listLocalVoices } from '$lib/adapters/tts/service';
-	import { tuningBands } from '$lib/utils/audioEffects';
-	import { exportDatabaseFile, importLegacyJsonBackup } from '$lib/utils/export';
-	import { toast } from '$lib/stores/toast';
-	import VoicePreview from '$lib/components/VoicePreview.svelte';
-	import RestoreDatabaseButton from '$lib/components/RestoreDatabaseButton.svelte';
-	import SettingsSection from '$lib/components/settings/SettingsSection.svelte';
-	import SettingRow from '$lib/components/settings/SettingRow.svelte';
-	import SecretInput from '$lib/components/settings/SecretInput.svelte';
-	import VoiceEqualizer from '$lib/components/settings/VoiceEqualizer.svelte';
-	import SettingSelect from '$lib/components/settings/SettingSelect.svelte';
+	} from '#lib/adapters/llm/index.js';
+	import { currentLlmEndpoint } from '#lib/stores/llm.js';
+	import { ttsPreview } from '#lib/stores/ttsPreview.js';
+	import { listLocalVoices } from '#lib/adapters/tts/service.js';
+	import { tuningBands } from '#lib/utils/audioEffects.js';
+	import { exportDatabaseFile, importLegacyJsonBackup } from '#lib/utils/export.js';
+	import { toast } from '#lib/stores/toast.js';
+	import VoicePreview from '#lib/components/VoicePreview.svelte';
+	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
+	import SettingsSection from '#lib/components/settings/SettingsSection.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SecretInput from '#lib/components/settings/SecretInput.svelte';
+	import VoiceEqualizer from '#lib/components/settings/VoiceEqualizer.svelte';
+	import SettingSelect from '#lib/components/settings/SettingSelect.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';

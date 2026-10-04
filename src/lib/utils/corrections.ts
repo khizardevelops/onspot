@@ -1,4 +1,4 @@
-import type { Correction } from '$lib/adapters/db';
+import type { Correction } from '#lib/adapters/db/index.js';
 
 export function isDeletion(correction: Pick<Correction, 'original' | 'replacement'>): boolean {
 	return Boolean(correction.original.trim()) && !correction.replacement.trim();

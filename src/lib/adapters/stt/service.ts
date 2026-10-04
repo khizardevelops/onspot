@@ -1,6 +1,6 @@
 import { WorkerWhisperAdapter } from './WorkerWhisperAdapter';
 import { GroqWhisperAdapter } from './GroqWhisperAdapter';
-import { requireLanguage } from '$lib/languages';
+import { requireLanguage } from '#lib/languages/index.js';
 import type { ModelProgress } from '../../types';
 
 export interface TranscribeOptions {

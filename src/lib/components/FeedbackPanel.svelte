@@ -1,17 +1,17 @@
 <script lang="ts">
-	import { quickCollapse } from '$lib/neo';
+	import { quickCollapse } from '#lib/neo.js';
 	import { untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
-	import type { Correction, CorrectionSeverity } from '$lib/adapters/db';
-	import type { AttemptView } from '$lib/stores/practice';
-	import { playAttempt, playRecording, speakText } from '$lib/stores/practice';
-	import { correctionTitle, isDeletion, isInsertion } from '$lib/utils/corrections';
+	import type { Correction, CorrectionSeverity } from '#lib/adapters/db/index.js';
+	import type { AttemptView } from '#lib/stores/practice.js';
+	import { playAttempt, playRecording, speakText } from '#lib/stores/practice.js';
+	import { correctionTitle, isDeletion, isInsertion } from '#lib/utils/corrections.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';
 	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
-	import PopMenu from '$lib/components/PopMenu.svelte';
+	import PopMenu from '#lib/components/PopMenu.svelte';
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import {

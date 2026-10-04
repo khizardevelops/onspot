@@ -3,7 +3,7 @@
 	import { Check, HardDrive, Mic, X } from '@lucide/svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
-	import { toast } from '$lib/stores/toast';
+	import { toast } from '#lib/stores/toast.js';
 
 	/*
 	 * Asks for the browser permissions onspot relies on, up front and in one

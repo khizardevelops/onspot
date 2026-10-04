@@ -29,7 +29,7 @@
 
 <script lang="ts">
 	/**
-	 * Interactive 1:1 clone of `$lib/components/AttemptCard.svelte`.
+	 * Interactive 1:1 clone of `#lib/components/AttemptCard.svelte`.
 	 *
 	 * All Svelte state logic and `{#if}` progressive-disclosure blocks are kept:
 	 * the translation menu, idiomatic variants, word breakdown, sentence segments

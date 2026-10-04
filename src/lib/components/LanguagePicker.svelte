@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
-	import { OFFERED_LANGUAGES, DEFAULT_LANGUAGE_ID, isCandidate } from '$lib/languages';
-	import { setTargetLanguage } from '$lib/stores/practice';
+	import { OFFERED_LANGUAGES, DEFAULT_LANGUAGE_ID, isCandidate } from '#lib/languages/index.js';
+	import { setTargetLanguage } from '#lib/stores/practice.js';
 	import { Check } from '@lucide/svelte';
 
 	let selected = $state(DEFAULT_LANGUAGE_ID);

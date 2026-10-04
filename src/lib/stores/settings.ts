@@ -1,8 +1,8 @@
 import { writable } from 'svelte/store';
-import { getDatabaseAdapter } from '$lib/adapters/db';
-import type { RunMode } from '$lib/adapters/db';
-import type { LlmModelId, LlmProviderId } from '$lib/adapters/llm';
-import { getProvider } from '$lib/adapters/llm';
+import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+import type { RunMode } from '#lib/adapters/db/index.js';
+import type { LlmModelId, LlmProviderId } from '#lib/adapters/llm/index.js';
+import { getProvider } from '#lib/adapters/llm/index.js';
 import {
 	OFFERED_LANGUAGES,
 	DEFAULT_LANGUAGE_ID,
@@ -10,7 +10,7 @@ import {
 	getLanguage,
 	getVoice,
 	type VoiceTuning
-} from '$lib/languages';
+} from '#lib/languages/index.js';
 
 /** How much translation to show under an attempt. */
 export type TranslationMode = 'off' | 'idiomatic' | 'all';

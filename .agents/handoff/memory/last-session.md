@@ -1,8 +1,35 @@
 # Last Session
 
-## 2026-10-03: multi-agent UI/UX + bug audit and fixes (uncommitted)
+## 2026-10-04: model lab page
+- User wanted to try the STT variants themselves. Added `src/routes/model-lab/` (+page.svelte,
+  whispercpp.worker.ts): language picker (OFFERED_LANGUAGES), load/unload per engine
+  (unload terminates the worker to free WASM memory), record / upload / French eval clip,
+  sequential runs with time, rtf and WER (spaced languages with a reference only); TTS section
+  generates each voice of the language (preload first so timing is synthesis only, optional
+  approved profile). No stores/DB imported. `@transcribe/shout` + `@transcribe/transcriber`
+  re-added as devDependencies for it.
+- Browser-verified on :5173 (headless Chromium): Piper Tom generated audio; whisper.cpp q5_1
+  loaded in its worker and transcribed an 8 s French clip correctly (rtf ~22 — it always
+  decodes a full 30 s window). No TTS alternative runtime exists (Piper is ONNX-only).
+- Note: uncommitted SvelteKit 3 migration (`$lib` → `#lib/....js`, `$app/tsconfig`) from the
+  user/another tool is in the tree; `svelte-check` currently fails on tsconfig because of it.
+
+## 2026-10-04: SvelteKit 3 migration (branch `migration`, uncommitted)
+- `npx sv migrate sveltekit-3 --tasks all --confirm --no-install` (needs a clean tree: the user's
+  uncommitted handoff edits were stashed and restored). It moved config into `vite.config.ts`,
+  deleted `svelte.config.js`, rewrote `$lib` → `#lib/*.js|.svelte` in ~45 files, added the
+  package.json `imports`, and the tsconfig. Manual: tsconfig vendor exclude, `repomix/bundle.mjs`
+  resolves `#lib`, Svelte/Vite/vite-plugin-svelte minimums. MIGRATION_TASKS.md reviewed (goto
+  targets all internal, no `page.url` mutation, no invalidateAll, no CORS reliance) and deleted.
+- Verified: `npm run check` 0/0, `npm run build`, `vite preview` on :4173 in Chromium 1243:
+  /, /history, /insights, /settings render, rail nav works, crossOriginIsolated, 0 console errors.
+  Not verified: dev server (user's :5173 instance was left alone), real takes, Tauri, Android.
+
+## 2026-10-03: multi-agent UI/UX + bug audit and fixes (committed as `4bc2d94`)
+- Session end: the dev server Claude started on :5173 was killed for low system memory; the user
+  restarts it. The user committed the work as `4bc2d94`.
 - Five parallel sub-agents, each owning a file set: shell/global, Practice, History+Insights+DB,
-  Settings, STT/TTS/LLM adapters+workers. All fixes uncommitted; `npm run check` 0/0; final
+  Settings, STT/TTS/LLM adapters+workers. `npm run check` 0/0; final
   Chromium pass over / /history /insights /settings at 1280 and 390: no console errors, no overflow.
 - Highlights: restore rejects non-onspot `.sqlite` files (used to wipe data); migrations and
   correction replacement are atomic on web (Tauri still per-statement); LLM/Groq/OpenAI calls

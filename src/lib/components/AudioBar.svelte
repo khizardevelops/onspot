@@ -5,7 +5,7 @@
 		setRate,
 		toggleLoop,
 		togglePlay
-	} from '$lib/stores/audio';
+	} from '#lib/stores/audio.js';
 	import { Pause, Play, Repeat } from '@lucide/svelte';
 
 	interface Props {

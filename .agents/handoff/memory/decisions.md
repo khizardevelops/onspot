@@ -1,5 +1,26 @@
 # Decisions
 
+### SvelteKit 3 migration (2026-10-04, branch `migration`)
+Migrated with `npx sv migrate sveltekit-3 --tasks all`. Kit 3.0.0, adapter-static 4, Svelte
+5.57.1, Vite 8.3.2, vite-plugin-svelte 7.3.1. TypeScript stays 6.x: Kit 3 and svelte-check peer
+`^6` (npm `latest` is 7). Imports use `#lib/...` (package.json `imports`) with explicit
+extensions (`.js` for `.ts` modules, `.svelte`); `$lib` no longer exists. tsconfig extends
+`$app/tsconfig`, includes `src` + `vite.config.ts`, and excludes the vendored piper-plus glue
+`.js` (the new base config type-checks it; it must stay byte-matched, its `.d.ts` types it).
+Other deps deliberately not bumped: Tauri JS plugins must track the Rust crates' minor versions,
+`onnxruntime-web`/transformers need browser re-verification, `piper-plus`/neo are pinned.
+
+### Practice requires a configured LLM before recording (2026-10-03)
+User decision: Start speaking is replaced by "Add API key" (→ `/settings/#ai-provider`) until the
+selected provider is usable — Groq/DeepSeek need a key, custom needs URL + model (key optional).
+Every take is evaluated by the LLM, so recording without one only fails after the learner speaks.
+`startRecording()` enforces the same rule.
+
+### Wrong-language takes are one whole-transcript error (2026-10-03)
+User decision: answering in another language must never read as a "Clean take". The LLM reports
+`spokenLanguage`; `normalizeEvaluation` replaces the corrections with a single grammar error
+("Answered in X instead of <language>") so totals and Insights count it. No schema migration.
+
 ### STT runtime: stay on Transformers.js, not whisper.cpp / wllama (2026-09-30)
 wllama is llama.cpp for GGUF LLMs; it cannot run Whisper or Piper and there is no local LLM.
 whisper.cpp (`@transcribe/shout`) was measured on `/stt-bench/`: ~0.6 GB browser PSS vs

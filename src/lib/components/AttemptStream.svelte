@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { practice, setActiveAttempt } from '$lib/stores/practice';
+	import { practice, setActiveAttempt } from '#lib/stores/practice.js';
 	import AttemptCard from './AttemptCard.svelte';
 
 	interface Props {

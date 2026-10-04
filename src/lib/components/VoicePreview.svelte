@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { getLanguage } from '$lib/languages';
-	import { appSettings } from '$lib/stores/settings';
-	import { openaiApiKey } from '$lib/stores/secrets';
+	import { getLanguage } from '#lib/languages/index.js';
+	import { appSettings } from '#lib/stores/settings.js';
+	import { openaiApiKey } from '#lib/stores/secrets.js';
 	import {
 		pauseVoicePreview,
 		playVoicePreview,
@@ -10,10 +10,10 @@
 		stopVoicePreview,
 		toggleVoicePreviewLoop,
 		ttsPreview
-	} from '$lib/stores/ttsPreview';
+	} from '#lib/stores/ttsPreview.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
-	import { closeOnBack } from '$lib/platform/backButton.svelte';
+	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import { AlertTriangle, Loader2, Pause, Play, Repeat, RotateCcw } from '@lucide/svelte';

@@ -4,7 +4,7 @@ import type {
 	CorrectionCategory,
 	CorrectionSeverity,
 	Session
-} from '$lib/adapters/db';
+} from '#lib/adapters/db/index.js';
 
 export interface Occurrence {
 	session: Session | undefined;

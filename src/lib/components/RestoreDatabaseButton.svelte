@@ -2,9 +2,9 @@
 	import { AlertTriangle, Loader2, Upload } from '@lucide/svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
-	import { toast } from '$lib/stores/toast';
-	import { importSqliteBackup, type SqliteRestoreResult } from '$lib/utils/export';
-	import { closeOnBack } from '$lib/platform/backButton.svelte';
+	import { toast } from '#lib/stores/toast.js';
+	import { importSqliteBackup, type SqliteRestoreResult } from '#lib/utils/export.js';
+	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 
 	interface Props {
 		/** Button text. */

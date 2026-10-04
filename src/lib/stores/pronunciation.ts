@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { appSettings } from './settings';
 import { openaiApiKey } from './secrets';
-import { synthesizeSpeech } from '$lib/adapters/tts/service';
+import { synthesizeSpeech } from '#lib/adapters/tts/service.js';
 
 /**
  * Per-word pronunciation.

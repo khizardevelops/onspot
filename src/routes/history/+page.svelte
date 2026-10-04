@@ -1,24 +1,24 @@
 <script lang="ts">
-	import { quickCollapse } from '$lib/neo';
+	import { quickCollapse } from '#lib/neo.js';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getDatabaseAdapter, type Attempt, type Session } from '$lib/adapters/db';
-	import { importLegacyJsonBackup } from '$lib/utils/export';
-	import RestoreDatabaseButton from '$lib/components/RestoreDatabaseButton.svelte';
+	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
+	import { importLegacyJsonBackup } from '#lib/utils/export.js';
+	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
 	import {
 		deleteSession,
 		hydrateLatestSession,
 		openSession,
 		playStoredAudio,
 		renameSession
-	} from '$lib/stores/practice';
-	import { toast } from '$lib/stores/toast';
+	} from '#lib/stores/practice.js';
+	import { toast } from '#lib/stores/toast.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';
 	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
-	import PopMenu from '$lib/components/PopMenu.svelte';
+	import PopMenu from '#lib/components/PopMenu.svelte';
 	import { NeoInput } from '@dvcol/neo-svelte/inputs';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import {

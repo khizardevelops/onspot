@@ -21,7 +21,7 @@
 
 <script lang="ts">
 	/**
-	 * Interactive 1:1 clone of `$lib/components/Transcript.svelte`.
+	 * Interactive 1:1 clone of `#lib/components/Transcript.svelte`.
 	 *
 	 * The only production dependency removed is `playWord()` from the
 	 * pronunciation store. Everything else — token splitting, correction

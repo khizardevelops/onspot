@@ -6,12 +6,12 @@ import {
 	type Prompt,
 	type Session,
 	type TranslationSet
-} from '$lib/adapters/db';
-import { initSettings } from '$lib/stores/settings';
-import { toast } from '$lib/stores/toast';
-import { DatabaseImportError } from '$lib/adapters/db/types';
+} from '#lib/adapters/db/index.js';
+import { initSettings } from '#lib/stores/settings.js';
+import { toast } from '#lib/stores/toast.js';
+import { DatabaseImportError } from '#lib/adapters/db/types.js';
 import { StorageFullError, requestPersistentStorage, storageRoom } from './storage';
-import { hydrateLatestSession } from '$lib/stores/practice';
+import { hydrateLatestSession } from '#lib/stores/practice.js';
 
 const SQLITE_MIME = 'application/vnd.sqlite3';
 const SQLITE_MAGIC = 'SQLite format 3\u0000';

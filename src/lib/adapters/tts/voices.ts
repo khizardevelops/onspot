@@ -1,4 +1,4 @@
-import { OFFERED_LANGUAGES, voicesFor, type VoiceEngine } from '$lib/languages';
+import { OFFERED_LANGUAGES, voicesFor, type VoiceEngine } from '#lib/languages/index.js';
 import type { TtsChoice } from '../../types';
 
 export interface LocalVoiceDefinition {

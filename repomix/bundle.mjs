@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Packs one or more pages of the app (or any folder/file "section") into a repomix bundle.
-// Starting from the page's route files, it follows local imports ($lib, relative, ?worker,
+// Starting from the page's route files, it follows local imports (#lib, relative, ?worker,
 // new URL(..., import.meta.url), CSS @import) so the bundle carries everything the page uses.
 // Pages are discovered from src/routes, so a new route is exportable without any setup.
 // Run `npm run bundle -- --help` for usage.
@@ -212,7 +212,7 @@ function importsOf(file) {
 function resolveImport(spec, fromFile, fileSet) {
 	const bare = spec.split('?')[0];
 	let base;
-	if (bare === '$lib' || bare.startsWith('$lib/')) base = `src/lib${bare.slice(4)}`;
+	if (bare === '#lib' || bare.startsWith('#lib/')) base = `src/lib${bare.slice(4)}`;
 	else if (bare.startsWith('.')) base = path.posix.join(path.posix.dirname(fromFile), bare);
 	else return null;
 	const candidates = RESOLVE_SUFFIXES.map((suffix) => base + suffix);

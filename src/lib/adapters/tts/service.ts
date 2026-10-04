@@ -2,11 +2,11 @@ import { OpenAITtsAdapter } from './OpenAITtsAdapter';
 import { WorkerPiperAdapter } from './WorkerPiperAdapter';
 import { localVoiceChoices } from './voices';
 import { pcmToWavUrl } from './roundTrip';
-import { getDatabaseAdapter } from '$lib/adapters/db';
-import { base64ToBlob, blobToBase64 } from '$lib/utils/base64';
-import { getVoice, requireLanguage } from '$lib/languages';
-import { processPcm, tuningSignature } from '$lib/utils/audioEffects';
-import { appSettings, voiceTuning } from '$lib/stores/settings';
+import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
+import { getVoice, requireLanguage } from '#lib/languages/index.js';
+import { processPcm, tuningSignature } from '#lib/utils/audioEffects.js';
+import { appSettings, voiceTuning } from '#lib/stores/settings.js';
 import { get } from 'svelte/store';
 import type { ModelProgress, TtsChoice } from '../../types';
 

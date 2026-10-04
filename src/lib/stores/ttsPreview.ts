@@ -1,7 +1,7 @@
 import { get, writable } from 'svelte/store';
-import { synthesizeSpeech } from '$lib/adapters/tts/service';
-import { getVoice, requireLanguage } from '$lib/languages';
-import { createProcessingChain, peakOf, type ProcessingChain } from '$lib/utils/audioEffects';
+import { synthesizeSpeech } from '#lib/adapters/tts/service.js';
+import { getVoice, requireLanguage } from '#lib/languages/index.js';
+import { createProcessingChain, peakOf, type ProcessingChain } from '#lib/utils/audioEffects.js';
 import { appSettings, voiceTuning, type AppSettings } from './settings';
 import { openaiApiKey } from './secrets';
 import { stopAudio } from './audio';

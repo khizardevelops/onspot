@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { NeoMenu } from '@dvcol/neo-svelte/floating/menu';
 	import type { NeoMenuProps } from '@dvcol/neo-svelte/floating/menu';
-	import { onScreen, quickMenu, quickSubmenu } from '$lib/neo';
-	import { closeOnBack } from '$lib/platform/backButton.svelte';
+	import { onScreen, quickMenu, quickSubmenu } from '#lib/neo.js';
+	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 
 	/*
 	 * NeoMenu that opens on click, immediately. neo-svelte 1.2.0's tooltip

@@ -1,6 +1,6 @@
 import { derived, get } from 'svelte/store';
-import type { LlmEndpoint, LlmProviderId } from '$lib/adapters/llm';
-import { getProvider } from '$lib/adapters/llm';
+import type { LlmEndpoint, LlmProviderId } from '#lib/adapters/llm/index.js';
+import { getProvider } from '#lib/adapters/llm/index.js';
 import { appSettings, type AppSettings } from './settings';
 import { customApiKey, deepseekApiKey, groqApiKey } from './secrets';
 

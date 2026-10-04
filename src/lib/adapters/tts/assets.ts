@@ -1,4 +1,4 @@
-import { JAPANESE_G2P_BYTES, JAPANESE_G2P_TRANSFER_BYTES, type LanguageVoice } from '$lib/languages';
+import { JAPANESE_G2P_BYTES, JAPANESE_G2P_TRANSFER_BYTES, type LanguageVoice } from '#lib/languages/index.js';
 
 /**
  * Where each local voice's downloads come from. Shared by the adapters (which

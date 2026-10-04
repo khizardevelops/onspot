@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import { cancelLanguageDownload, languageData } from '$lib/stores/languageData';
-	import { getLanguage } from '$lib/languages';
+	import { cancelLanguageDownload, languageData } from '#lib/stores/languageData.js';
+	import { getLanguage } from '#lib/languages/index.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import { Loader2, X } from '@lucide/svelte';

@@ -12,7 +12,7 @@
  * piper-plus@0.7.0. Loaded once per worker and shared by every Japanese voice.
  */
 import { cachedFetch } from './cachedFetch';
-import { JAPANESE_G2P_BYTES } from '$lib/languages';
+import { JAPANESE_G2P_BYTES } from '#lib/languages/index.js';
 import { JAPANESE_G2P_SHA256 as G2P_SHA256, JAPANESE_G2P_URL as G2P_URL } from './assets';
 import initPhonemizer, { WasmPhonemizer } from './vendor/piper-plus-wasm/piper_plus_wasm.js';
 

@@ -2,8 +2,8 @@
 	import type { Component } from 'svelte';
 	import { NeoRange, type NeoRangeProps } from '@dvcol/neo-svelte/inputs';
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';
-	import type { VoiceTuning } from '$lib/languages';
-	import { tuningResponseDb, type TuningBand } from '$lib/utils/audioEffects';
+	import type { VoiceTuning } from '#lib/languages/index.js';
+	import { tuningResponseDb, type TuningBand } from '#lib/utils/audioEffects.js';
 
 	interface Props {
 		tuning: VoiceTuning;

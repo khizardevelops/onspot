@@ -13,9 +13,9 @@
 	 */
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { PRESET_FRENCH_SAMPLES } from '$lib/utils/audio';
-	import { calculateWER, normalizeFrenchText } from '$lib/utils/metrics';
-	import { WorkerWhisperAdapter } from '$lib/adapters/stt/WorkerWhisperAdapter';
+	import { PRESET_FRENCH_SAMPLES } from '#lib/utils/audio.js';
+	import { calculateWER, normalizeFrenchText } from '#lib/utils/metrics.js';
+	import { WorkerWhisperAdapter } from '#lib/adapters/stt/WorkerWhisperAdapter.js';
 
 	interface ClipResult {
 		id: string;

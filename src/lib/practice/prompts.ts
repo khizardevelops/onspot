@@ -1,5 +1,5 @@
-import type { IDatabaseAdapter, Prompt } from '$lib/adapters/db';
-import { requireLanguage, type LanguagePrompt } from '$lib/languages';
+import type { IDatabaseAdapter, Prompt } from '#lib/adapters/db/index.js';
+import { requireLanguage, type LanguagePrompt } from '#lib/languages/index.js';
 
 export type SeedPrompt = LanguagePrompt;
 

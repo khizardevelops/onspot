@@ -1,21 +1,21 @@
 <script lang="ts">
-	import { quickCollapse, quickTooltip } from '$lib/neo';
+	import { quickCollapse, quickTooltip } from '#lib/neo.js';
 	import { fade, fly, slide } from 'svelte/transition';
-	import type { AttemptView } from '$lib/stores/practice';
+	import type { AttemptView } from '#lib/stores/practice.js';
 	import {
 		ensureAttemptTranslations,
 		playAttempt,
 		playRecording,
 		playSegment,
 		setAttemptVoice
-	} from '$lib/stores/practice';
-	import { appSettings } from '$lib/stores/settings';
-	import { getLanguage } from '$lib/languages';
-	import { listLocalVoices } from '$lib/adapters/tts/service';
-	import { splitSentences } from '$lib/utils/segments';
-	import { fitFontSize } from '$lib/utils/fitText';
-	import { layoutLength } from '$lib/utils/words';
-	import { audioActivity, togglePlay } from '$lib/stores/audio';
+	} from '#lib/stores/practice.js';
+	import { appSettings } from '#lib/stores/settings.js';
+	import { getLanguage } from '#lib/languages/index.js';
+	import { listLocalVoices } from '#lib/adapters/tts/service.js';
+	import { splitSentences } from '#lib/utils/segments.js';
+	import { fitFontSize } from '#lib/utils/fitText.js';
+	import { layoutLength } from '#lib/utils/words.js';
+	import { audioActivity, togglePlay } from '#lib/stores/audio.js';
 	import Transcript from './Transcript.svelte';
 	import AudioBar from './AudioBar.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
@@ -23,7 +23,7 @@
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';
 	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
-	import PopMenu from '$lib/components/PopMenu.svelte';
+	import PopMenu from '#lib/components/PopMenu.svelte';
 	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import {

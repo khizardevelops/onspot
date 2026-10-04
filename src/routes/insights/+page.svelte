@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getDatabaseAdapter, type Attempt, type Session } from '$lib/adapters/db';
-	import { computeInsights, SEVERITY_RANK, type InsightsData, type Occurrence } from '$lib/insights';
-	import { openSession } from '$lib/stores/practice';
-	import { toast } from '$lib/stores/toast';
+	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
+	import { computeInsights, SEVERITY_RANK, type InsightsData, type Occurrence } from '#lib/insights.js';
+	import { openSession } from '#lib/stores/practice.js';
+	import { toast } from '#lib/stores/toast.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';

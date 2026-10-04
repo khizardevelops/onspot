@@ -3,7 +3,7 @@ import {
 	isNeutralTuning,
 	type AudioProcessingProfile,
 	type VoiceTuning
-} from '$lib/languages';
+} from '#lib/languages/index.js';
 
 function dbToGain(db: number): number {
 	return Math.pow(10, db / 20);

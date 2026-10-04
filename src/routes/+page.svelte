@@ -15,23 +15,23 @@
 		setSessionMode,
 		startRecording,
 		stopAndAnalyze
-	} from '$lib/stores/practice';
-	import { appSettings } from '$lib/stores/settings';
-	import { languageData } from '$lib/stores/languageData';
-	import { llmConfigured } from '$lib/stores/llm';
-	import { getProvider } from '$lib/adapters/llm';
-	import { getLanguage } from '$lib/languages';
-	import { toast } from '$lib/stores/toast';
-	import { MAX_RECORDING_SEC } from '$lib/config';
-	import AttemptStream from '$lib/components/AttemptStream.svelte';
-	import FeedbackPanel from '$lib/components/FeedbackPanel.svelte';
-	import { closeOnBack } from '$lib/platform/backButton.svelte';
-	import PaperSegmentedControl from '$lib/components/PaperSegmentedControl.svelte';
+	} from '#lib/stores/practice.js';
+	import { appSettings } from '#lib/stores/settings.js';
+	import { languageData } from '#lib/stores/languageData.js';
+	import { llmConfigured } from '#lib/stores/llm.js';
+	import { getProvider } from '#lib/adapters/llm/index.js';
+	import { getLanguage } from '#lib/languages/index.js';
+	import { toast } from '#lib/stores/toast.js';
+	import { MAX_RECORDING_SEC } from '#lib/config.js';
+	import AttemptStream from '#lib/components/AttemptStream.svelte';
+	import FeedbackPanel from '#lib/components/FeedbackPanel.svelte';
+	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
+	import PaperSegmentedControl from '#lib/components/PaperSegmentedControl.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
 	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
-	import PopMenu from '$lib/components/PopMenu.svelte';
+	import PopMenu from '#lib/components/PopMenu.svelte';
 	import { NeoInput } from '@dvcol/neo-svelte/inputs';
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import {

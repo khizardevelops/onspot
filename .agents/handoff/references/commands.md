@@ -28,6 +28,9 @@
   the page plus what it uses directly.
 - `/stt-bench/` (dev route) — STT benchmark of the product engine over every scored `eval/`
   clip; `?auto=1` starts it, `&limit=n` runs the first n clips; results in `window.__bench`.
+- `/model-lab/` (dev route) — hands-on A/B: STT Transformers.js whisper-small q4 vs whisper.cpp
+  small q5_1/q8_0 (`@transcribe/shout`, dev dependency, own worker + `onspot-model-lab` Cache
+  API bucket) on a recording, upload or eval clip; TTS every voice of the selected language.
 - `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
 - `npm run tauri build` — package the desktop app.
 

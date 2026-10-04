@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Correction, CorrectionSeverity } from '$lib/adapters/db';
-	import { playWord } from '$lib/stores/pronunciation';
-	import { isJapaneseText, tokenizeWords } from '$lib/utils/words';
+	import type { Correction, CorrectionSeverity } from '#lib/adapters/db/index.js';
+	import { playWord } from '#lib/stores/pronunciation.js';
+	import { isJapaneseText, tokenizeWords } from '#lib/utils/words.js';
 
 	interface Props {
 		text: string;
