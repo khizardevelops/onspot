@@ -39,8 +39,31 @@
   (`ffmpeg -i in.mp3 -ac 1 -ar 16000 -f f32le out.f32`).
 - `scripts/android.sh build --apk --debug --target aarch64` — debug APK for a phone; installs as
   `app.onspot.desktop.debug` beside the release app (`adb install -r …/universal/debug/…apk`).
-- `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
-- `npm run tauri build` — package the desktop app.
+
+## Desktop app (Tauri)
+- **Development, with hot reload: `npm run tauri dev`.** One command: it starts onspot's Vite dev
+  server (`beforeDevCommand`), compiles the Rust side, and opens the desktop window on
+  `http://localhost:5173`. Editing `.svelte`/`.ts` updates the window instantly (Vite HMR);
+  editing Rust under `src-tauri/` makes it recompile and restart the window. Stop with Ctrl+C.
+  - Port 5173 must be free first: stop any other dev server (onspot's own `npm run dev`, or
+    another project's Vite). Vite is `strictPort`, so a taken port fails loudly instead of
+    silently moving.
+  - **Never point the window at "whatever is already on :5173".** Tried 2026-10-05 with a
+    `beforeDevCommand: ""` override: the port belonged to another project (audionixdb) and the
+    onspot window loaded that site. Removed.
+  - The debug binary it builds is `src-tauri/target/debug/onspot`; it also only works while
+    onspot's dev server runs, because debug builds load the frontend from `devUrl`.
+- **Release, standalone: `npx tauri build --no-bundle`**, then run
+  `src-tauri/target/release/onspot`. The frontend is bundled into the binary; no dev server.
+  `--no-bundle` skips the `.deb`/`.rpm`/AppImage installers (`npm run tauri build` makes them;
+  AppImage packaging is unreliable on Arch). First build ~10 min.
+  - Not for other machines yet: ggml compiles for the build machine's CPU (GGML_NATIVE); see the
+    portable-build task in `memory/tasks.md`.
+- First run of either: Settings → Language data → Download. The app keeps its own storage
+  (model in `<app data>/models/`, database in the app config dir), separate from the browser.
+  Move practice history with Settings → Storage → Export / Restore.
+- `cargo run --release -p tauri-plugin-speech --example bench -- …` (see above) measures the
+  native STT engine without the app.
 
 ## Android (Tauri v2)
 - `scripts/android.sh` wraps `tauri android …` with the right toolchain. Paths come from the
