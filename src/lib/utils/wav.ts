@@ -34,3 +34,8 @@ export function encodeWav(audio: Float32Array, sampleRate: number): Blob {
 
 	return new Blob([view], { type: 'audio/wav' });
 }
+
+/** WAV object URL for an `<audio>` element. Revoke it when the audio is no longer shown. */
+export function pcmToWavUrl(audio: Float32Array, sampleRate: number): string {
+	return URL.createObjectURL(encodeWav(audio, sampleRate));
+}

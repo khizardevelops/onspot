@@ -2,7 +2,7 @@
 /**
  * whisper.cpp (`@transcribe/shout`) for the model lab, off the UI thread.
  *
- * Lab-only: the product STT engine is Transformers.js in `workers/stt.worker.ts`.
+ * Lab-only: the product STT engine is Transformers.js in `speech/stt/transformers/stt.worker.ts`.
  * The ggml file is cached by `modelCache.ts`.
  */
 import shoutUrl from '@transcribe/shout?url';
@@ -14,14 +14,7 @@ type Request =
 	| { id: number; type: 'transcribe'; pcm: Float32Array; lang: string }
 	| { id: number; type: 'release' };
 
-/** Feeds 16 kHz PCM straight in instead of letting shout decode a file. */
-class PcmTranscriber extends FileTranscriber {
-	async _loadAudio(audio: unknown): Promise<Float32Array> {
-		return audio as Float32Array;
-	}
-}
-
-let transcriber: PcmTranscriber | null = null;
+let transcriber: FileTranscriber | null = null;
 let threads = 2;
 
 function post(message: Record<string, unknown>) {
@@ -39,12 +32,16 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				);
 				post({ id: request.id, type: 'progress', progress: 100, status: 'initialising' });
 				const { default: createModule } = await import(/* @vite-ignore */ shoutUrl);
-				transcriber = new PcmTranscriber({
+				transcriber = new FileTranscriber({
 					createModule,
 					model: new File([blob], request.url.split('/').pop() ?? 'model.bin'),
 					print: () => {},
 					printErr: () => {}
 				});
+				// shout decodes a file itself (`_loadAudio`, private). We already hold 16 kHz
+				// PCM, so that step is replaced with a pass-through.
+				(transcriber as unknown as { _loadAudio: (audio: unknown) => Promise<unknown> })._loadAudio =
+					async (audio) => audio;
 				await transcriber.init();
 				post({ id: request.id, type: 'ready', bytes: blob.size });
 				return;

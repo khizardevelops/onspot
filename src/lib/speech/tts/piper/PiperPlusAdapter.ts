@@ -5,11 +5,11 @@ import {
 	trimEosRegion,
 	trimPaddingByDurations
 } from 'piper-plus';
-import { ort } from '../../ort';
-import { BaseTTSAdapter } from './BaseTTSAdapter';
+import { ort } from '#lib/ort.js';
+import { BaseTTSAdapter } from '../BaseTtsAdapter';
 import { cachedFetch } from './cachedFetch';
 import { createPhonemizer, loadJapaneseG2p, type WasmPhonemizer } from './japaneseG2p';
-import type { ModelProgress, TtsModelConfig } from '../../types';
+import type { ModelProgress, TtsModelConfig } from '#lib/types.js';
 
 interface PiperPlusConfig {
 	audio?: { sample_rate?: number; hop_size?: number };

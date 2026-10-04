@@ -36,7 +36,7 @@
 	} from '#lib/adapters/llm/index.js';
 	import { currentLlmEndpoint } from '#lib/stores/llm.js';
 	import { ttsPreview } from '#lib/stores/ttsPreview.js';
-	import { listLocalVoices } from '#lib/adapters/tts/service.js';
+	import { listLocalVoices } from '#lib/speech/tts/service.js';
 	import { tuningBands } from '#lib/utils/audioEffects.js';
 	import { exportDatabaseFile, importLegacyJsonBackup } from '#lib/utils/export.js';
 	import { toast } from '#lib/stores/toast.js';

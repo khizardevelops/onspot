@@ -1,6 +1,6 @@
-import { BaseTTSAdapter } from './BaseTTSAdapter';
-import { fetchWithTimeout } from '../llm/client';
-import type { ModelProgress, TtsModelConfig } from '../../types';
+import { BaseTTSAdapter } from '../BaseTtsAdapter';
+import { fetchWithTimeout } from '#lib/adapters/llm/client.js';
+import type { ModelProgress, TtsModelConfig } from '#lib/types.js';
 
 const OPENAI_SPEECH_URL = 'https://api.openai.com/v1/audio/speech';
 

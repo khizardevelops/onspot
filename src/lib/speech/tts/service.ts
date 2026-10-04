@@ -1,14 +1,14 @@
-import { OpenAITtsAdapter } from './OpenAITtsAdapter';
-import { WorkerPiperAdapter } from './WorkerPiperAdapter';
+import { OpenAITtsAdapter } from './cloud/OpenAITtsAdapter';
+import { WorkerPiperAdapter } from './piper/WorkerPiperAdapter';
 import { localVoiceChoices } from './voices';
-import { pcmToWavUrl } from './roundTrip';
+import { pcmToWavUrl } from '#lib/utils/wav.js';
 import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
 import { getVoice, requireLanguage } from '#lib/languages/index.js';
 import { processPcm, tuningSignature } from '#lib/utils/audioEffects.js';
 import { appSettings, voiceTuning } from '#lib/stores/settings.js';
 import { get } from 'svelte/store';
-import type { ModelProgress, TtsChoice } from '../../types';
+import type { ModelProgress, TtsChoice } from '#lib/types.js';
 
 export interface SynthesizeOptions {
 	text: string;

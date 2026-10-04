@@ -1,6 +1,6 @@
-import { BaseSTTAdapter } from './BaseAdapter';
-import STTWorker from '../../workers/stt.worker?worker';
-import type { ModelConfig, ModelProgress, TranscribeOptions } from '../../types';
+import { BaseSTTAdapter } from '../BaseSttAdapter';
+import STTWorker from './stt.worker?worker';
+import type { ModelConfig, ModelProgress, TranscribeOptions } from '#lib/types.js';
 
 interface Pending {
 	resolve: (value: unknown) => void;
@@ -10,16 +10,13 @@ interface Pending {
 
 interface WorkerMessage {
 	id: number;
-	type: 'progress' | 'ready' | 'text' | 'error' | 'pong' | 'released';
+	type: 'progress' | 'ready' | 'text' | 'error' | 'released';
 	status?: string;
 	progress?: number;
 	device?: string;
 	dtype?: string;
 	text?: string;
 	message?: string;
-	crossOriginIsolated?: boolean;
-	hardwareConcurrency?: number;
-	hasGpu?: boolean;
 }
 
 /**
@@ -103,15 +100,6 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 				entry.resolve(message.text ?? '');
 				return;
 			}
-			case 'pong': {
-				this.pending.delete(message.id);
-				entry.resolve({
-					crossOriginIsolated: message.crossOriginIsolated,
-					hardwareConcurrency: message.hardwareConcurrency,
-					hasGpu: message.hasGpu
-				});
-				return;
-			}
 			case 'error': {
 				this.pending.delete(message.id);
 				entry.reject(new Error(message.message ?? 'STT worker error'));
@@ -123,19 +111,6 @@ export class WorkerWhisperAdapter extends BaseSTTAdapter {
 	private rejectAll(error: Error): void {
 		for (const { reject } of this.pending.values()) reject(error);
 		this.pending.clear();
-	}
-
-	/** Confirms the worker is alive and reports its isolation/thread capability. */
-	public ping(): Promise<{
-		crossOriginIsolated?: boolean;
-		hardwareConcurrency?: number;
-		hasGpu?: boolean;
-	}> {
-		return this.request({ type: 'ping' }) as Promise<{
-			crossOriginIsolated?: boolean;
-			hardwareConcurrency?: number;
-			hasGpu?: boolean;
-		}>;
 	}
 
 	private request(

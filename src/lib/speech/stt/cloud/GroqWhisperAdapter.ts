@@ -1,7 +1,7 @@
-import { BaseSTTAdapter } from './BaseAdapter';
-import { encodeWav } from '../../utils/wav';
-import { fetchWithTimeout } from '../llm/client';
-import type { ModelConfig, ModelProgress, TranscribeOptions } from '../../types';
+import { BaseSTTAdapter } from '../BaseSttAdapter';
+import { encodeWav } from '#lib/utils/wav.js';
+import { fetchWithTimeout } from '#lib/adapters/llm/client.js';
+import type { ModelConfig, ModelProgress, TranscribeOptions } from '#lib/types.js';
 
 const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 

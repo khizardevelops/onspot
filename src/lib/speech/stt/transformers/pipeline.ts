@@ -1,13 +1,13 @@
 /**
- * Shared Transformers.js engine setup for every ONNX adapter.
+ * Transformers.js Whisper pipeline, used by the STT worker (`stt.worker.ts`).
  *
- * Centralises the two things each adapter previously copy-pasted, and got
- * wrong: picking an execution device the runtime can actually provide, and
- * decoding audio longer than a model's context window without losing any of it.
+ * Two things here are easy to get wrong and were measured: picking an execution
+ * device the runtime can actually provide, and decoding audio longer than
+ * Whisper's 30 s window without losing any of it.
  */
-import type { ModelProgress, TranscribeOptions } from '../../types';
+import type { TranscribeOptions } from '#lib/types.js';
 
-export type ASRDevice = 'webgpu' | 'wasm';
+type ASRDevice = 'webgpu' | 'wasm';
 
 type Transformers = typeof import('@huggingface/transformers');
 
@@ -17,11 +17,10 @@ let devicePromise: Promise<ASRDevice> | null = null;
 /**
  * WebGPU is opt-in. Transformers.js/ORT-Web produce correct results on WASM on
  * every browser, whereas the WebGPU backend's numerics vary by driver — not a
- * trade an evaluation tool should make silently. Set `VITE_STT_DEVICE=webgpu`
- * (or call `setPreferredDevice`) to try the GPU instead.
+ * trade to make silently. Set `VITE_STT_DEVICE=webgpu` to try the GPU instead.
  */
 const ENV_DEVICE = (import.meta.env?.VITE_STT_DEVICE as string | undefined)?.toLowerCase();
-let preferredDevice: ASRDevice = ENV_DEVICE === 'webgpu' ? 'webgpu' : 'wasm';
+const preferredDevice: ASRDevice = ENV_DEVICE === 'webgpu' ? 'webgpu' : 'wasm';
 
 /**
  * Weight precision to request.
@@ -43,14 +42,7 @@ let preferredDevice: ASRDevice = ENV_DEVICE === 'webgpu' ? 'webgpu' : 'wasm';
  * step -- but check in a browser, with a cold cache.
  */
 const ENV_DTYPE = (import.meta.env?.VITE_STT_DTYPE as string | undefined)?.toLowerCase();
-export const DEFAULT_DTYPE = ENV_DTYPE || 'fp32';
-
-export function setPreferredDevice(device: ASRDevice) {
-  if (device !== preferredDevice) {
-    preferredDevice = device;
-    devicePromise = null;
-  }
-}
+const DEFAULT_DTYPE = ENV_DTYPE || 'fp32';
 
 async function getEngine(): Promise<Transformers> {
   if (!enginePromise) {
@@ -80,7 +72,7 @@ async function getEngine(): Promise<Transformers> {
  * `Unsupported device: "webgpu". Should be one of: wasm.` before any model
  * loads, so probe for a real adapter first.
  */
-export async function detectDevice(): Promise<ASRDevice> {
+async function detectDevice(): Promise<ASRDevice> {
   if (!devicePromise) {
     devicePromise = (async (): Promise<ASRDevice> => {
       if (preferredDevice !== 'webgpu') return 'wasm';
@@ -203,15 +195,16 @@ export function createDownloadProgress(
   };
 }
 
-export interface CreatePipelineOptions {
+interface CreatePipelineOptions {
   dtype?: any;
   progress_callback?: (info: any) => void;
   onDeviceResolved?: (device: ASRDevice, dtype: string) => void;
 }
 
 /**
- * Creates an ASR pipeline, falling back from the preferred device to WASM (a
- * stale driver or a lost adapter can fail after the probe succeeds).
+ * Creates the speech-recognition pipeline, falling back from the preferred
+ * device to WASM (a stale driver or a lost adapter can fail after the probe
+ * succeeds).
  *
  * Deliberately does NOT retry with a different dtype. A failed session leaves
  * the runtime in a state where the retry fails too: a q8 attempt followed by an
@@ -219,8 +212,7 @@ export interface CreatePipelineOptions {
  * its own. A wasted 77MB download followed by a misleading error is worse than
  * failing once, clearly.
  */
-export async function createPipeline(
-  task: string,
+export async function createASRPipeline(
   modelRepoId: string,
   { dtype = DEFAULT_DTYPE, progress_callback, onDeviceResolved }: CreatePipelineOptions = {}
 ): Promise<any> {
@@ -233,7 +225,7 @@ export async function createPipeline(
   let lastError: unknown;
   for (const attempt of attempts) {
     try {
-      const instance = await pipeline(task as any, modelRepoId, {
+      const instance = await pipeline('automatic-speech-recognition', modelRepoId, {
         device: attempt.device,
         dtype: attempt.dtype,
         progress_callback
@@ -252,15 +244,7 @@ export async function createPipeline(
   throw lastError;
 }
 
-/** Speech-to-text convenience wrapper over `createPipeline`. */
-export async function createASRPipeline(
-  modelRepoId: string,
-  options: CreatePipelineOptions = {}
-): Promise<any> {
-  return createPipeline('automatic-speech-recognition', modelRepoId, options);
-}
-
-export const SAMPLE_RATE = 16000;
+const SAMPLE_RATE = 16000;
 const WINDOW_SEC = 30;
 
 /**
@@ -355,50 +339,8 @@ function nextSeekSeconds(result: any): number {
   return WINDOW_SEC;
 }
 
-/**
- * Runs a pipeline over fixed, non-overlapping windows.
- *
- * For models that cannot emit timestamps, so `whisperTranscribe`'s seek-to-last-
- * segment trick has nothing to seek on. Moonshine is the case that matters here:
- * it silently ignores `chunk_length_s` (passing it produces byte-identical
- * output), and feeding it the whole clip at once makes it fall apart. On
- * `eval/set1` with moonshine-tiny-fr: 91.2% WER unwindowed, 64.8% at 30s
- * windows. Still a weak baseline -- the model card calls it a proof of concept
- * -- but no longer nonsense.
- */
-export async function windowedTranscribe(
-  transcriber: any,
-  audio16kMono: Float32Array,
-  durationSec: number,
-  windowSec: number,
-  decodeOptionsFor: (windowDurationSec: number) => Record<string, unknown>
-): Promise<string> {
-  if (durationSec <= windowSec) {
-    return extractText(await transcriber(audio16kMono, decodeOptionsFor(durationSec)));
-  }
-
-  const windowSamples = windowSec * SAMPLE_RATE;
-  const parts: string[] = [];
-
-  for (let offset = 0; offset < audio16kMono.length; offset += windowSamples) {
-    const window = audio16kMono.subarray(
-      offset,
-      Math.min(audio16kMono.length, offset + windowSamples)
-    );
-    // A sliver of trailing audio yields nothing but hallucination.
-    if (window.length < SAMPLE_RATE) break;
-
-    const text = extractText(
-      await transcriber(window, decodeOptionsFor(window.length / SAMPLE_RATE))
-    ).trim();
-    if (text) parts.push(text);
-  }
-
-  return parts.join(' ');
-}
-
 /** Normalises the several shapes a Transformers.js ASR pipeline can return. */
-export function extractText(result: any): string {
+function extractText(result: any): string {
   if (typeof result === 'string') return result;
   if (Array.isArray(result)) {
     return result.map((r) => (typeof r === 'string' ? r : r?.text ?? '')).join(' ');
@@ -407,4 +349,3 @@ export function extractText(result: any): string {
   return '';
 }
 
-export type { ModelProgress };

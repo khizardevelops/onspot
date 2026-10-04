@@ -5,10 +5,10 @@ import {
 	type LanguageDefinition,
 	type LanguageVoice
 } from '#lib/languages/index.js';
-import { cancelLocalSTTDownload, preloadLocalSTT } from '#lib/adapters/stt/service.js';
-import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/adapters/tts/service.js';
-import { isCached } from '#lib/adapters/tts/cachedFetch.js';
-import { voiceAssets } from '#lib/adapters/tts/assets.js';
+import { cancelLocalSTTDownload, preloadLocalSTT } from '#lib/speech/stt/service.js';
+import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/speech/tts/service.js';
+import { isCached } from '#lib/speech/tts/piper/cachedFetch.js';
+import { voiceAssets } from '#lib/speech/tts/piper/assets.js';
 import { appSettings } from './settings';
 
 export type LanguageDataStatus = 'checking' | 'missing' | 'downloading' | 'ready' | 'error';

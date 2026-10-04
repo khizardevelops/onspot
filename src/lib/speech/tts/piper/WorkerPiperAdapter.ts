@@ -1,5 +1,5 @@
-import TTSWorker from '../../workers/tts.worker?worker';
-import type { ModelProgress } from '../../types';
+import TTSWorker from './tts.worker?worker';
+import type { ModelProgress } from '#lib/types.js';
 
 interface SpeechPayload {
 	audio: Float32Array;

@@ -90,7 +90,7 @@ The "best" model on one clip was the worst overall. **345 words is still small**
 
 1. Check `onnx-community/<model>` exists and has a **q4** build.
 2. Compute the real download: `encoder_model_q4` + `decoder_model_merged_q4`.
-3. Add a card in `src/lib/adapters/stt/registry.ts` with an explicit `dtype`.
+3. Try it in the dev page `/model-lab/` (`src/routes/model-lab/`) with an explicit `dtype`.
 4. **Load it in a browser before trusting it.** Confirm the card reaches `Ready`, and that the
    progress bar shows real MB.
 5. Benchmark against **every** clip in `eval/`, not just one.

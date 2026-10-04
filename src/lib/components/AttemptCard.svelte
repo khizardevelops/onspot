@@ -11,7 +11,7 @@
 	} from '#lib/stores/practice.js';
 	import { appSettings } from '#lib/stores/settings.js';
 	import { getLanguage } from '#lib/languages/index.js';
-	import { listLocalVoices } from '#lib/adapters/tts/service.js';
+	import { listLocalVoices } from '#lib/speech/tts/service.js';
 	import { splitSentences } from '#lib/utils/segments.js';
 	import { fitFontSize } from '#lib/utils/fitText.js';
 	import { layoutLength } from '#lib/utils/words.js';

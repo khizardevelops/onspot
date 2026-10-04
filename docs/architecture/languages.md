@@ -10,7 +10,7 @@ approved; the machine-readable source of truth is
 | Concern | Location |
 |---|---|
 | Approval status, STT/TTS descriptors, prompts, audio profiles | `src/lib/languages/index.ts` (`LanguageDefinition`) |
-| Piper voice definitions the TTS worker builds | `src/lib/adapters/tts/voices.ts` (derived from the registry) |
+| Piper voice definitions the TTS worker builds | `src/lib/speech/tts/voices.ts` (derived from the registry) |
 | STT model + language hint | `LanguageDefinition.stt` |
 | Voice EQ / compression / loudness profile | `LanguageDefinition.voices[].processing` |
 | Download + progress + cancel | `src/lib/stores/languageData.ts` |

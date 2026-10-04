@@ -102,7 +102,7 @@ versions in one page.
   cost real memory — over a gigabyte, easily.
 - **Model loading and inference used to run on the main thread** and freeze the tab, badly enough
   that a Playwright driver could not click during a load. This is fixed for local STT by
-  `src/lib/workers/stt.worker.ts`; keep any new heavy work off the UI thread.
+  `src/lib/speech/stt/transformers/stt.worker.ts`; keep any new heavy work off the UI thread.
 
 ## Memory: Transformers.js holds ~2 GB for whisper-small q4 (2026-09-30)
 

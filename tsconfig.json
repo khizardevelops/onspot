@@ -7,6 +7,8 @@
 	"include": ["src", "vite.config.ts"],
 	"exclude": [
 		// Vendored wasm-bindgen glue, byte-matched to its .wasm; typed by the sibling .d.ts.
-		"src/lib/adapters/tts/vendor/**/*.js"
+		"src/lib/speech/tts/piper/vendor/**/*.js",
+		// Emscripten output of tools/whisper-webgpu/build.sh (model lab only, gitignored).
+		"src/routes/model-lab/vendor/**"
 	]
 }

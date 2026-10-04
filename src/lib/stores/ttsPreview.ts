@@ -1,5 +1,5 @@
 import { get, writable } from 'svelte/store';
-import { synthesizeSpeech } from '#lib/adapters/tts/service.js';
+import { synthesizeSpeech } from '#lib/speech/tts/service.js';
 import { getVoice, requireLanguage } from '#lib/languages/index.js';
 import { createProcessingChain, peakOf, type ProcessingChain } from '#lib/utils/audioEffects.js';
 import { appSettings, voiceTuning, type AppSettings } from './settings';

@@ -166,7 +166,7 @@ suggestions; connector advice becomes `register`/`filler`.
 ### Local STT runs in a Web Worker
 The lab left main-thread inference open because the tab froze hard enough that Playwright could
 not click during a load. The product needs a responsive UI (live waveform, progress bar), so
-`workers/stt.worker.ts` now owns the pipeline and the decode loop; `WorkerWhisperAdapter` is the
+`speech/stt/transformers/stt.worker.ts` now owns the pipeline and the decode loop; `WorkerWhisperAdapter` is the
 main-thread proxy. PCM is moved in by transfer (the caller's array is sliced first, because a
 transfer detaches the buffer). Verified: the worker imports Transformers.js and relays real
 download progress with no main-thread block.
@@ -287,7 +287,7 @@ never printed.
   interactive, neighbours are rotated/scaled/faded off-centre. Wheel/keyboard/chevrons move
   between attempts. It was replaced by `AttemptStream.svelte`; the current behavior is documented
   below.
-- **TTS is cached in the database** (`adapters/tts/service.ts`) keyed by
+- **TTS is cached in the database** (`speech/tts/service.ts`) keyed by
   `tts:<mode>:<voice>:<hash(text)>`. Repeats cost no model call and survive reload; changing the
   voice is a new key, which is what makes retroactive re-render work. `attempts.tts_voice`
   remembers the last voice used. Agent cards expose a "Play corrected audio" button, a

@@ -212,7 +212,7 @@ Active defects that can be fixed within the current foundational technology.
 - **Cause**: ONNX Runtime running on CPU (WASM) in the main thread.
 - **Fix**: Set `device: 'webgpu'` to offload inference to GPU.
 - **Files**: `MoonshineTinyFrAdapter.ts`, `WhisperAdapter.ts`
-- **Superseded**: hardcoding webgpu broke every browser without it. WASM is the default again, now with `numThreads` set when the page is cross-origin isolated. The product fix is complete: local STT loading and inference run in `src/lib/workers/stt.worker.ts`.
+- **Superseded**: hardcoding webgpu broke every browser without it. WASM is the default again, now with `numThreads` set when the page is cross-origin isolated. The product fix is complete: local STT loading and inference run in `src/lib/speech/stt/transformers/stt.worker.ts`.
 
 ### Long Audio Tokenization Crash
 - **Symptom**: `Error: token_ids must be a non-empty array of integers.`
@@ -230,8 +230,8 @@ Active defects that can be fixed within the current foundational technology.
 ### Inference And Model Loading Ran On The Main Thread
 - **Symptom**: the tab is unresponsive while a model loads or a transcription runs. Severe enough that in a Playwright run against the real UI, the driver could not click the second "Pre-load" button — its actionability checks time out because the page never yields. Preloading several models makes it much worse.
 - **Cause**: `createASRPipeline` ran in the page context. ORT-Web uses worker threads for compute kernels when cross-origin isolated, but the pipeline's own JS — feature extraction, the decode loop, and ONNX session construction — stayed on the main thread.
-- **Fix (product)**: `src/lib/workers/stt.worker.ts` owns the pipeline, download progress and the decode loop; `src/lib/adapters/stt/WorkerWhisperAdapter.ts` is the main-thread proxy and moves PCM in by transfer. Browser-verified that the worker imports Transformers.js and relays real download progress (`31 / 302 MB`) with no console errors. See `state.md` and `tasks.md`.
-- **Files**: `src/lib/workers/stt.worker.ts`, `src/lib/adapters/stt/WorkerWhisperAdapter.ts`, `src/lib/adapters/stt/service.ts`
+- **Fix (product)**: `src/lib/speech/stt/transformers/stt.worker.ts` owns the pipeline, download progress and the decode loop; `src/lib/speech/stt/transformers/WorkerWhisperAdapter.ts` is the main-thread proxy and moves PCM in by transfer. Browser-verified that the worker imports Transformers.js and relays real download progress (`31 / 302 MB`) with no console errors. See `state.md` and `tasks.md`.
+- **Files**: `src/lib/speech/stt/transformers/stt.worker.ts`, `src/lib/speech/stt/transformers/WorkerWhisperAdapter.ts`, `src/lib/speech/stt/service.ts`
 
 ## Fixed 2026-09-25: Firefox `.sqlite` restore "Unknown write() failure" + data loss on failure
 - **Symptom**: restore works in Chrome, fails in Firefox/Zen with `Unknown write() failure.`.

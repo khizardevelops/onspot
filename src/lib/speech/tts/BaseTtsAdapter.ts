@@ -1,4 +1,4 @@
-import type { ModelProgress, STTAdapterStatus, TtsModelConfig, TtsSynthesis } from '../../types';
+import type { ModelProgress, STTAdapterStatus, TtsModelConfig, TtsSynthesis } from '#lib/types.js';
 
 export interface ITTSAdapter {
   config: TtsModelConfig;

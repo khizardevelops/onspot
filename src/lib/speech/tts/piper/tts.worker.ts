@@ -6,7 +6,7 @@
  * word-clicks at once. Only one voice stays resident; it is released after an
  * idle period to return memory to the browser.
  */
-import type { ModelProgress } from '../types';
+import type { ModelProgress } from '#lib/types.js';
 
 interface SynthesizeRequest {
 	id: number;
@@ -46,10 +46,10 @@ type Response =
 const IDLE_RELEASE_MS = 90_000;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let queue = Promise.resolve();
-let registryPromise: Promise<typeof import('../adapters/tts/registry').ttsRegistry> | null = null;
+let registryPromise: Promise<typeof import('./registry').ttsRegistry> | null = null;
 
-function getRegistry(): Promise<typeof import('../adapters/tts/registry').ttsRegistry> {
-	registryPromise ??= import('../adapters/tts/registry').then((module) => module.ttsRegistry);
+function getRegistry(): Promise<typeof import('./registry').ttsRegistry> {
+	registryPromise ??= import('./registry').then((module) => module.ttsRegistry);
 	return registryPromise;
 }
 

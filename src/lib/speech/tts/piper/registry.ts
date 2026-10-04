@@ -1,8 +1,8 @@
-import type { ITTSAdapter } from './BaseTTSAdapter';
+import type { ITTSAdapter } from '../BaseTtsAdapter';
 import { PiperAdapter } from './PiperAdapter';
 import { PiperPlusAdapter } from './PiperPlusAdapter';
-import { LOCAL_VOICES } from './voices';
-import type { ModelProgress, TtsModelConfig, TtsSynthesis } from '../../types';
+import { LOCAL_VOICES } from '../voices';
+import type { ModelProgress, TtsModelConfig, TtsSynthesis } from '#lib/types.js';
 
 /**
  * Local TTS voices for onspot (French: Piper; Japanese: piper-plus).

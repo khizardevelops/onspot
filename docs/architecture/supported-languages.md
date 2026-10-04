@@ -56,9 +56,9 @@ them marked "candidate, not yet approved" so the listening test can be run in th
 
 | Layer | Technology |
 |---|---|
-| Speech-to-text engine | [Transformers.js](https://huggingface.co/docs/transformers.js) (`@huggingface/transformers`), ONNX Runtime Web **WASM** backend, in the STT Web Worker (`src/lib/workers/stt.worker.ts`) |
+| Speech-to-text engine | [Transformers.js](https://huggingface.co/docs/transformers.js) (`@huggingface/transformers`), ONNX Runtime Web **WASM** backend, in the STT Web Worker (`src/lib/speech/stt/transformers/stt.worker.ts`) |
 | Long recordings | Sequential 30 s Whisper windows seeking to the last timestamp (not pipeline chunking) |
-| Text-to-speech runtime | `onnxruntime-web` (WASM), in the lazy TTS Web Worker (`src/lib/workers/tts.worker.ts`); one voice resident, released after 90 s idle |
+| Text-to-speech runtime | `onnxruntime-web` (WASM), in the lazy TTS Web Worker (`src/lib/speech/tts/piper/tts.worker.ts`); one voice resident, released after 90 s idle |
 | Model storage | Browser Cache API: `transformers-cache` (STT), `onspot-tts-cache` (voices, phonemizers) |
 | Speech cache | Rendered read-backs stored in the local SQLite DB, keyed `tts:<mode>:<language>:<voice>:<tuning>:<hash>` |
 | Audio post-processing | Web Audio chain per voice: 4-band EQ, compressor/limiter, makeup gain, peak normalization (`src/lib/utils/audioEffects.ts`), plus the learner's Advanced EQ |
@@ -112,7 +112,7 @@ Japanese, as a second engine in the same TTS worker.
 | | |
 |---|---|
 | Engine | [piper-plus](https://github.com/ayutaz/piper-plus) VITS, run directly on onspot's onnxruntime-web (`PiperPlusAdapter`) with piper-plus's short-text padding/trim helpers ([`piper-plus`](https://www.npmjs.com/package/piper-plus) 0.7.0, MIT) |
-| Grapheme-to-phoneme | OpenJTalk-compatible **jpreprocess** front end with the NAIST-JDIC dictionary, compiled to WASM by piper-plus. Produces phoneme IDs plus per-phoneme pitch-accent features (A1/A2/A3). 60 MB (~20 MB transferred), downloaded once from unpkg, **SHA-256-verified** against the npm release before it runs, shared by all Japanese voices (`src/lib/adapters/tts/japaneseG2p.ts`) |
+| Grapheme-to-phoneme | OpenJTalk-compatible **jpreprocess** front end with the NAIST-JDIC dictionary, compiled to WASM by piper-plus. Produces phoneme IDs plus per-phoneme pitch-accent features (A1/A2/A3). 60 MB (~20 MB transferred), downloaded once from unpkg, **SHA-256-verified** against the npm release before it runs, shared by all Japanese voices (`src/lib/speech/tts/piper/japaneseG2p.ts`) |
 | Model inputs | `input`, `input_lengths`, `scales`, `lid` (language id), `prosody_features`, and a zero `speaker_embedding` (+ mask) where the export requires one |
 | Voices | **CSS10 (F)** — default; CSS10 Japanese public-domain audiobook data, ~40 MB fp16 · **Mera (F)** — Apache-2.0, ~39 MB · **Tsukuyomi-chan (F)** — Tsukuyomi-chan corpus terms (credit required), ~40 MB. All 22 kHz |
 | Correction profile | None yet (raw output); set after the listening test if needed |

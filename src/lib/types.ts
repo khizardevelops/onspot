@@ -106,7 +106,4 @@ export interface TtsSynthesis {
   /** Peak amplitude: distinguishes real speech from a correctly-sized silence. */
   peak: number;
   timestamp: string;
-  /** Round-trip through the STT model; undefined until scored. */
-  roundTripWer?: number;
-  roundTripText?: string;
 }

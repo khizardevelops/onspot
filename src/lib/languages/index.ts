@@ -286,7 +286,7 @@ const FRENCH: LanguageDefinition = {
  * Japanese G2P for every piper-plus voice: the OpenJTalk/jpreprocess
  * phonemizer (NAIST-JDIC bundled) compiled to WASM by piper-plus. One shared
  * 60 MB download (≈20 MB compressed), verified by SHA-256 before it runs;
- * see `adapters/tts/japaneseG2p.ts`.
+ * see `speech/tts/piper/japaneseG2p.ts`.
  */
 export const JAPANESE_G2P_BYTES = 60_077_874;
 /** What the dictionary costs over the network: the CDN compresses it. */

@@ -1,7 +1,7 @@
-import { WorkerWhisperAdapter } from './WorkerWhisperAdapter';
-import { GroqWhisperAdapter } from './GroqWhisperAdapter';
+import { WorkerWhisperAdapter } from './transformers/WorkerWhisperAdapter';
+import { GroqWhisperAdapter } from './cloud/GroqWhisperAdapter';
 import { requireLanguage } from '#lib/languages/index.js';
-import type { ModelProgress } from '../../types';
+import type { ModelProgress } from '#lib/types.js';
 
 export interface TranscribeOptions {
 	audio16kMono: Float32Array;
@@ -89,18 +89,4 @@ export async function transcribeSpeech(options: TranscribeOptions): Promise<Tran
 		language: language.stt.decoderLanguage
 	});
 	return { text: result.text, model: result.modelName, device: adapter.config.device ?? 'wasm' };
-}
-
-/** Diagnostic: proves the worker is alive and reports its capabilities. */
-export async function sttDiagnostics(languageId: string): Promise<{
-	crossOriginIsolated?: boolean;
-	hardwareConcurrency?: number;
-	hasGpu?: boolean;
-}> {
-	return getLocalAdapter(languageId).ping();
-}
-
-/** Alias kept for callers that only need to release the worker. */
-export function disposeLocalSTT(): void {
-	cancelLocalSTTDownload();
 }

@@ -16,14 +16,14 @@
 	import { PRESET_FRENCH_SAMPLES, AudioRecorder, resampleAudioTo16kHz } from '#lib/utils/audio.js';
 	import { calculateWER } from '#lib/utils/metrics.js';
 	import { processPcm } from '#lib/utils/audioEffects.js';
-	import { WorkerWhisperAdapter } from '#lib/adapters/stt/WorkerWhisperAdapter.js';
-	import { WorkerPiperAdapter } from '#lib/adapters/tts/WorkerPiperAdapter.js';
-	import { pcmToWavUrl } from '#lib/adapters/tts/roundTrip.js';
+	import { WorkerWhisperAdapter } from '#lib/speech/stt/transformers/WorkerWhisperAdapter.js';
+	import { WorkerPiperAdapter } from '#lib/speech/tts/piper/WorkerPiperAdapter.js';
+	import { pcmToWavUrl } from '#lib/utils/wav.js';
 	import WhisperCppWorker from './whispercpp.worker?worker';
 	import WhisperGpuWorker from './whispergpu.worker?worker';
 
 	const GGML_BASE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
-	// The thread budget ORT gets in `adapters/stt/engine.ts`, so speeds compare fairly.
+	// The thread budget ORT gets in `speech/stt/transformers/pipeline.ts`, so speeds compare fairly.
 	const THREADS = 2;
 
 	let languageId = $state(OFFERED_LANGUAGES[0]?.id ?? 'fr');

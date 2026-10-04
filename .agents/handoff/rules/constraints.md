@@ -54,5 +54,5 @@ Numbers and the exact error strings live in `docs/benchmarks/runtime.md`; the st
 - UI components come from `@dvcol/neo-svelte` (pinned to the npm 1.2.0 line). It needs
   `sass-embedded`; its `.scss` build prints Sass `if()` deprecation warnings — harmless.
 - Japanese TTS depends on `piper-plus` **0.7.0 exactly**: the vendored glue in
-  `src/lib/adapters/tts/vendor/piper-plus-wasm/` and the pinned SHA-256 in `adapters/tts/assets.ts`
+  `src/lib/speech/tts/piper/vendor/piper-plus-wasm/` and the pinned SHA-256 in `speech/tts/piper/assets.ts`
   must match the same release. Upgrading means re-vendoring the glue and updating the hash.

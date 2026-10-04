@@ -1,5 +1,5 @@
-import type { ModelConfig, STTAdapterStatus, ModelProgress, TranscriptionResult, TranscribeOptions } from '../../types';
-import { resampleAudioTo16kHz } from '../../utils/audio';
+import type { ModelConfig, STTAdapterStatus, ModelProgress, TranscriptionResult, TranscribeOptions } from '#lib/types.js';
+import { resampleAudioTo16kHz } from '#lib/utils/audio.js';
 
 export interface ISTTAdapter {
   config: ModelConfig;

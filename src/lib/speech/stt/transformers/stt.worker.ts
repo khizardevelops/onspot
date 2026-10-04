@@ -13,7 +13,7 @@ import {
 	createASRPipeline,
 	createDownloadProgress,
 	whisperTranscribe
-} from '../adapters/stt/engine';
+} from './pipeline';
 
 interface LoadRequest {
 	id: number;
@@ -34,26 +34,14 @@ interface TranscribeRequest {
 	dtype?: string;
 }
 
-interface PingRequest {
-	id: number;
-	type: 'ping';
-}
-
 interface ReleaseRequest {
 	id: number;
 	type: 'release';
 }
 
-type Request = LoadRequest | TranscribeRequest | PingRequest | ReleaseRequest;
+type Request = LoadRequest | TranscribeRequest | ReleaseRequest;
 
 type Response =
-	| {
-			id: number;
-			type: 'pong';
-			crossOriginIsolated: boolean;
-			hardwareConcurrency: number;
-			hasGpu: boolean;
-	  }
 	| { id: number; type: 'progress'; status: string; progress: number }
 	| { id: number; type: 'ready'; device: string; dtype: string }
 	| { id: number; type: 'text'; text: string }
@@ -155,17 +143,6 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 		switch (request.type) {
 			case 'release': {
 				await releasePipeline(request.id);
-				return;
-			}
-
-			case 'ping': {
-				post({
-					id: request.id,
-					type: 'pong',
-					crossOriginIsolated: self.crossOriginIsolated,
-					hardwareConcurrency: navigator.hardwareConcurrency ?? 1,
-					hasGpu: 'gpu' in navigator
-				});
 				return;
 			}
 
