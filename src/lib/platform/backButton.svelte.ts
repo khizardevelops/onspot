@@ -10,9 +10,9 @@
  */
 import { onBackButtonPress } from '@tauri-apps/api/app';
 import type { PluginListener } from '@tauri-apps/api/core';
+import { currentRuntime } from './runtime';
 
-const isAndroidApp =
-	typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && /Android/i.test(navigator.userAgent);
+const isAndroidApp = currentRuntime() === 'android';
 
 const stack: Array<() => void> = [];
 let listener: Promise<PluginListener> | null = null;

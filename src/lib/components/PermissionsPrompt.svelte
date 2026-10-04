@@ -3,6 +3,7 @@
 	import { Check, HardDrive, Mic, X } from '@lucide/svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { isTauri } from '#lib/platform/runtime.js';
 	import { toast } from '#lib/stores/toast.js';
 
 	/*
@@ -26,7 +27,7 @@
 	const LATER_KEY = 'onspot.permissions.later';
 	const MIC_KEY = 'onspot.permissions.microphone';
 	const firefox = typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
-	const tauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+	const tauri = isTauri();
 
 	let open = $state(false);
 	let asking = $state(false);

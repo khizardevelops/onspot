@@ -22,7 +22,7 @@
 		getLanguage,
 		getVoice,
 		isNeutralTuning,
-		languageDownloadBytes,
+		defaultVoiceOf,
 		type VoiceTuning
 	} from '#lib/languages/index.js';
 	import { customApiKey, deepseekApiKey, groqApiKey, openaiApiKey } from '#lib/stores/secrets.js';
@@ -37,6 +37,7 @@
 	import { currentLlmEndpoint } from '#lib/stores/llm.js';
 	import { ttsPreview } from '#lib/stores/ttsPreview.js';
 	import { listLocalVoices } from '#lib/speech/tts/service.js';
+	import { localSttModel } from '#lib/speech/stt/service.js';
 	import { tuningBands } from '#lib/utils/audioEffects.js';
 	import { exportDatabaseFile, importLegacyJsonBackup } from '#lib/utils/export.js';
 	import { toast } from '#lib/stores/toast.js';
@@ -70,6 +71,7 @@
 
 	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
 	const language = $derived(getLanguage($appSettings.targetLanguage));
+	const sttModel = $derived(language ? localSttModel(language.id) : null);
 	const downloading = $derived($languageData.status === 'downloading');
 	const dataReady = $derived($languageData.status === 'ready');
 	const dataError = $derived($languageData.status === 'error' ? $languageData.error : null);
@@ -323,7 +325,7 @@
 					</p>
 					<p class="max-w-md text-xs leading-normal text-muted-foreground">
 						The speech-recognition model and voice
-						{#if language}({language.stt.modelRepoId} and {voices[0]?.label ?? language.defaultVoice}){/if}
+						{#if language && sttModel}({sttModel.label} and {voices[0]?.label ?? language.defaultVoice}){/if}
 						download from the internet onto this device. Nothing is bundled with the app.
 					</p>
 					{#if language}
@@ -342,7 +344,7 @@
 									{/if}
 								{/if}
 							{:else}
-								Up to about {formatBytes(languageDownloadBytes(language))} on this device; less if another language already installed the speech model.
+								Up to about {formatBytes((sttModel?.bytes ?? 0) + (defaultVoiceOf(language)?.downloadBytes ?? 0))} on this device; less if another language already installed the speech model.
 							{/if}
 						</p>
 					{/if}

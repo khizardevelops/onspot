@@ -1,11 +1,16 @@
 import { get, writable } from 'svelte/store';
 import {
+	defaultVoiceOf,
 	getVoice,
 	requireLanguage,
 	type LanguageDefinition,
 	type LanguageVoice
 } from '#lib/languages/index.js';
-import { cancelLocalSTTDownload, preloadLocalSTT } from '#lib/speech/stt/service.js';
+import {
+	cancelLocalSttPrepare,
+	missingLocalSttBytes,
+	prepareLocalStt
+} from '#lib/speech/stt/service.js';
 import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/speech/tts/service.js';
 import { isCached } from '#lib/speech/tts/piper/cachedFetch.js';
 import { voiceAssets } from '#lib/speech/tts/piper/assets.js';
@@ -63,18 +68,7 @@ let phase: 'stt' | 'voice' | null = null;
  * language, otherwise the registry default (which is the listening-test winner).
  */
 function preferredVoice(language: LanguageDefinition): LanguageVoice | undefined {
-	return getVoice(language.id, get(appSettings).ttsVoice) ?? getVoice(language.id, language.defaultVoice) ?? language.voices[0];
-}
-
-/** The browser Cache API is per-origin; a cold cache means the data is absent. */
-async function hasSttWeights(language: LanguageDefinition): Promise<boolean> {
-	try {
-		const cache = await caches.open('transformers-cache');
-		const requests = await cache.keys();
-		return requests.some((request) => request.url.includes(language.stt.modelRepoId));
-	} catch {
-		return false;
-	}
+	return getVoice(language.id, get(appSettings).ttsVoice) ?? defaultVoiceOf(language);
 }
 
 /** The voice's downloads that are not cached yet (a Japanese voice also needs its dictionary). */
@@ -91,8 +85,10 @@ async function missingVoice(voice: LanguageVoice | undefined): Promise<{ bytes: 
 
 /** What is still missing for a language, per part. */
 async function pendingBytes(language: LanguageDefinition): Promise<PendingBytes> {
-	const [sttReady, voice] = await Promise.all([hasSttWeights(language), missingVoice(preferredVoice(language))]);
-	const stt = sttReady ? 0 : language.stt.downloadBytes;
+	const [stt, voice] = await Promise.all([
+		missingLocalSttBytes(language.id),
+		missingVoice(preferredVoice(language))
+	]);
 	return { stt, voice: voice.bytes, storage: stt + voice.bytes, transfer: stt + voice.transfer };
 }
 
@@ -179,7 +175,7 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 			const sttShare = missing > 0 ? (pending.stt / missing) * 100 : 50;
 			const voiceShare = 100 - sttShare;
 			phase = 'stt';
-			await preloadLocalSTT(language.id, (progress) => {
+			await prepareLocalStt(language.id, (progress) => {
 				if (token !== jobToken) return;
 				store.update((state) => ({
 					...state,
@@ -230,7 +226,7 @@ export function cancelLanguageDownload(): void {
 	// Only the worker still fetching is torn down. Once the speech model has
 	// loaded it may already be transcribing a take; killing it would fail that
 	// take with a raw "STT worker disposed." error.
-	if (cancelling === 'stt') cancelLocalSTTDownload();
+	if (cancelling === 'stt') cancelLocalSttPrepare();
 	else if (cancelling === 'voice') cancelLocalVoiceDownload();
 	store.update((state) => ({
 		...state,

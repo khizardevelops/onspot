@@ -80,17 +80,26 @@ export function isNeutralTuning(tuning: VoiceTuning): boolean {
 	);
 }
 
+/** The Whisper weights as each STT engine needs them (see `src/lib/speech/stt/`). */
+export interface SttModels {
+	/** Transformers.js repo, for the browser engine. */
+	transformers: { repo: string; dtype: string; bytes: number };
+}
+
+/**
+ * Whisper-small. Every language uses these multilingual weights; only the
+ * decoder language changes, so a model downloaded for one language serves all.
+ */
+const WHISPER_SMALL: SttModels = {
+	transformers: { repo: 'onnx-community/whisper-small', dtype: 'q4', bytes: 299_000_000 }
+};
+
 export interface LanguageStt {
-	engine: 'whisper';
-	/** Transformers.js repo id. */
-	modelRepoId: string;
-	dtype: string;
+	models: SttModels;
 	/** Language name Whisper expects, e.g. `french`. */
 	decoderLanguage: string;
-	/** ISO 639-1 code used by cloud STT APIs, e.g. `fr`. */
+	/** ISO 639-1 code, e.g. `fr`. */
 	code: string;
-	/** Approximate download size in bytes, used for the combined progress bar. */
-	downloadBytes: number;
 	approval: LanguageApproval;
 }
 
@@ -192,12 +201,9 @@ const FRENCH: LanguageDefinition = {
 		evidence: 'docs/benchmarks/stt.md, docs/benchmarks/tts.md'
 	},
 	stt: {
-		engine: 'whisper',
-		modelRepoId: 'onnx-community/whisper-small',
-		dtype: 'q4',
+		models: WHISPER_SMALL,
 		decoderLanguage: 'french',
 		code: 'fr',
-		downloadBytes: 299_000_000,
 		approval: {
 			status: 'approved',
 			by: 'Human transcript review (aggregate WER 5.5%)',
@@ -311,14 +317,9 @@ const JAPANESE: LanguageDefinition = {
 	translationTarget: 'English',
 	approval: JAPANESE_PENDING,
 	stt: {
-		// The same multilingual weights as French: already-downloaded French data
-		// is reused, only the decoder language changes.
-		engine: 'whisper',
-		modelRepoId: 'onnx-community/whisper-small',
-		dtype: 'q4',
+		models: WHISPER_SMALL,
 		decoderLanguage: 'japanese',
 		code: 'ja',
-		downloadBytes: 299_000_000,
 		approval: JAPANESE_PENDING
 	},
 	voices: [
@@ -428,9 +429,7 @@ export function voicesFor(languageId: string | null | undefined): LanguageVoice[
 	return getLanguage(languageId)?.voices ?? [];
 }
 
-/** Total bytes the user downloads for one language (STT + default voice, incl. its phonemizer). */
-export function languageDownloadBytes(language: LanguageDefinition): number {
-	const voice =
-		language.voices.find((entry) => entry.id === language.defaultVoice) ?? language.voices[0];
-	return language.stt.downloadBytes + (voice?.downloadBytes ?? 0);
+/** The language's default voice (the listening-test winner), or its first voice. */
+export function defaultVoiceOf(language: LanguageDefinition): LanguageVoice | undefined {
+	return language.voices.find((voice) => voice.id === language.defaultVoice) ?? language.voices[0];
 }

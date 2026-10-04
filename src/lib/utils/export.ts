@@ -1,12 +1,12 @@
 import {
 	getDatabaseAdapter,
-	isTauriRuntime,
 	type Attempt,
 	type Correction,
 	type Prompt,
 	type Session,
 	type TranslationSet
 } from '#lib/adapters/db/index.js';
+import { isTauri } from '#lib/platform/runtime.js';
 import { initSettings } from '#lib/stores/settings.js';
 import { toast } from '#lib/stores/toast.js';
 import { DatabaseImportError } from '#lib/adapters/db/types.js';
@@ -32,7 +32,7 @@ export async function exportDatabaseFile(): Promise<boolean> {
 	const fileName = `onspot-backup-${new Date().toISOString().slice(0, 10)}.sqlite`;
 	const db = await getDatabaseAdapter();
 
-	if (isTauriRuntime()) {
+	if (isTauri()) {
 		const { save } = await import('@tauri-apps/plugin-dialog');
 		const path = await save({
 			defaultPath: fileName,
@@ -115,7 +115,7 @@ export async function importSqliteBackup(file: File): Promise<SqliteRestoreResul
 		// Firefox only prompts for persistent storage then, and a persisted site is
 		// not held to the shared per-site allowance that makes restores fail there.
 		// Not awaited: the promise only settles once the user answers the prompt.
-		const web = !isTauriRuntime();
+		const web = !isTauri();
 		const persisting = web ? requestPersistentStorage() : Promise.resolve(false);
 		step = 'reading the backup file';
 		const bytes = new Uint8Array(await file.arrayBuffer());

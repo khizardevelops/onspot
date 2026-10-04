@@ -346,7 +346,7 @@ export async function stopAndAnalyze(): Promise<void> {
 	analysis = controller;
 
 	try {
-		const stt = await transcribeSpeech({
+		const heard = await transcribeSpeech({
 			audio16kMono: recording.pcm,
 			mode: settings.sttMode,
 			languageId: language.id,
@@ -364,7 +364,7 @@ export async function stopAndAnalyze(): Promise<void> {
 
 		// 60s of fast speech is ~240 words; cap there so a runaway transcript
 		// cannot blow the LLM output budget.
-		const transcript = capWords(stt.text);
+		const transcript = capWords(heard);
 
 		const evaluation = await evaluateAttempt({
 			transcript,

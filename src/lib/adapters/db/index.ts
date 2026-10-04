@@ -8,17 +8,13 @@
  * The adapter is a process-wide singleton: both runtimes are costly to open and
  * both pool their own connections.
  */
+import { isTauri } from '#lib/platform/runtime.js';
 import type { IDatabaseAdapter } from './types';
 
 export * from './types';
 export type { IDatabaseAdapter } from './types';
 
 let adapterPromise: Promise<IDatabaseAdapter> | null = null;
-
-/** True when running inside a Tauri webview. */
-export function isTauriRuntime(): boolean {
-	return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
 
 export function getDatabaseAdapter(): Promise<IDatabaseAdapter> {
 	if (!adapterPromise) {
@@ -38,7 +34,7 @@ export function resetDatabaseAdapter(): void {
 }
 
 async function protectBrowserStorage(): Promise<void> {
-	if (isTauriRuntime() || typeof navigator === 'undefined' || !navigator.storage?.persist) return;
+	if (isTauri() || typeof navigator === 'undefined' || !navigator.storage?.persist) return;
 	try {
 		if (!(await navigator.storage.persisted())) await navigator.storage.persist();
 	} catch {
@@ -60,10 +56,10 @@ function isLockedElsewhere(error: unknown): boolean {
 const RETRY_DELAYS_MS = [150, 300, 600, 1000, 1500];
 
 async function openDatabaseAdapter(): Promise<IDatabaseAdapter> {
-	const attempts = isTauriRuntime() ? 1 : RETRY_DELAYS_MS.length + 1;
+	const attempts = isTauri() ? 1 : RETRY_DELAYS_MS.length + 1;
 	let lastError: unknown;
 	for (let attempt = 0; attempt < attempts; attempt++) {
-		const adapter = isTauriRuntime()
+		const adapter = isTauri()
 			? new (await import('./TauriSqlAdapter')).TauriSqlAdapter()
 			: new (await import('./OpfsSqliteAdapter')).OpfsSqliteAdapter();
 		try {
