@@ -28,6 +28,18 @@ interface ChatCompletionOptions {
 	timeoutMs?: number;
 }
 
+/**
+ * GPT-OSS models reason before answering, and that reasoning counts against
+ * `max_tokens`. At the default effort it used ~2100 of the 3072-token
+ * evaluation budget, so the JSON answer was cut off and Groq rejected it
+ * (`json_validate_failed`). At low effort: 130–440 reasoning tokens, 3/3 valid
+ * answers, ~4 s instead of ~7 s (measured 2026-10-04). Only GPT-OSS gets the
+ * parameter; other providers may reject it.
+ */
+function reasoningOptions(model: string): Record<string, string> {
+	return model.includes('gpt-oss') ? { reasoning_effort: 'low' } : {};
+}
+
 /** Long enough for a reasoning model's full evaluation, short enough to surface a stall. */
 export const DEFAULT_LLM_TIMEOUT_MS = 120_000;
 
@@ -110,6 +122,7 @@ export async function chatCompletion(
 				messages,
 				temperature,
 				max_tokens: maxTokens,
+				...reasoningOptions(endpoint.model),
 				...(json ? { response_format: { type: 'json_object' } } : {})
 			})
 		},
