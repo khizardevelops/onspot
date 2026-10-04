@@ -82,9 +82,10 @@ impl Engine {
     }
 }
 
-/// All cores but one (the UI and audio keep one), capped at 8: whisper.cpp
-/// stops getting faster beyond that, and phones mix fast and slow cores.
+/// About one thread per physical core. whisper.cpp's threads spin-wait on each
+/// other, so hyper-threads add CPU load without adding speed: on a
+/// 4-core/8-thread laptop, 4 threads matched 7 at about half the CPU.
 fn inference_threads() -> i32 {
-    let cores = std::thread::available_parallelism().map_or(2, |n| n.get());
-    cores.saturating_sub(1).clamp(1, 8) as i32
+    let logical = std::thread::available_parallelism().map_or(4, |n| n.get());
+    (logical / 2).clamp(2, 8) as i32
 }
