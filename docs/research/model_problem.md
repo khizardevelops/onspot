@@ -99,6 +99,14 @@ downloads **~359 MB** (Whisper 299 + a ~40 MB voice + the 20 MB compressed dicti
 There is **no local LLM**. That is why `@wllama/wllama` (llama.cpp, GGUF LLMs only) does not
 apply: it cannot run Whisper or Piper.
 
+## Spike result: whisper.cpp + WebGPU (2026-10-04)
+
+On desktop it fixes the problem: **190 MB, +0.57 GB loaded / +1.0 GB peak, rtf ~0.2, 5.8% WER**
+against Transformers.js' 299 MB, +1.9 / +2.1 GB, rtf ~1.9, 5.5%. On the Android test phone
+(Samsung Xclipse GPU) Chrome blocklists WebGPU, so the browser path cannot serve Android. Full
+numbers: [`benchmarks/stt.md`](../benchmarks/stt.md). Ratchet (HF Rust/WebGPU) was rejected
+first: no code commits since 2024-11. Candle's official WASM build is CPU-only.
+
 ## Already tried and rejected
 
 Full evidence in [`benchmarks/stt.md`](../benchmarks/stt.md) and [`benchmarks/tts.md`](../benchmarks/tts.md).

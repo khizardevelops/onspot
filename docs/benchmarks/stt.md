@@ -104,3 +104,29 @@ Both threads were confirmed at ~100% CPU, so it was not a threading misconfigura
 needs `SharedArrayBuffer`, which the Android WebView never gets (not cross-origin isolated).
 The PSS figures are approximate (swap was in use, and PSS excludes swapped pages); the load-time
 whisper.cpp peak (~1.5 GB) is inflated by the harness holding the fetched blob.
+
+## whisper.cpp + ggml WebGPU vs Transformers.js (2026-10-04) — desktop pass, Android blocked
+
+Branch `spike/whisper-webgpu`. whisper.cpp (master `60c0be6`) built with Emscripten 6.0.11,
+`-DGGML_WEBGPU=ON` (Dawn `emdawnwebgpu`, JSPI) via `tools/whisper-webgpu/build.sh`; model
+`ggml-small-q5_1.bin` streamed tensor-by-tensor into WebGPU buffers. Measured in `/model-lab/`
+by a headless Chromium 1243 driver (Intel gen-12lp iGPU, Vulkan), one engine per fresh browser,
+2 CPU threads each. Memory = PSS + SwapPss of the whole browser tree **plus** i915 GPU memory
+(`drm-total-*`), relative to the idle page.
+
+| | Transformers.js whisper-small q4 | **whisper.cpp WebGPU small q5_1** |
+|---|---|---|
+| download | 299 MB | **190 MB** |
+| RAM, model loaded | +1.90 GB | **+0.57 GB** |
+| RAM, peak while transcribing | +2.12 GB | **+1.01 GB** |
+| rtf (eval2 / eval3 / set1) | 1.98 / 1.74 / 2.16 | **0.21 / 0.18 / 0.24** |
+| WER (eval2 / eval3 / set1) | 6.8 / 4.5 / 5.6% | 9.1 / 6.1 / 3.2% |
+| aggregate WER (345 words) | 5.5% (19 errors) | 5.8% (20 errors) |
+
+**Desktop verdict: passes every gate** (WER ≤ 6.5%, faster, less RAM, smaller download).
+**Android: not usable through the browser.** On a Galaxy S24 FE (Exynos 2400e, Samsung Xclipse
+940, Chrome 154 / WebView 153) Dawn lists both adapters as *"Blocklisted – crbug.com/40643150:
+Limited support / testing currently available on Android"*; `requestAdapter()` returns null, so
+it would fall back to the CPU path (rtf 15–22). The Android WebView is also not cross-origin
+isolated, which this pthreads build needs. Android needs a different path (native whisper.cpp in
+Tauri) or Transformers.js as the fallback.

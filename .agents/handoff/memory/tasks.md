@@ -43,6 +43,9 @@
   neo equivalents where they don't fight the conveyor/transcript layout.
 
 ## Resource usage
+- [ ] Decide the Android STT path before adopting the WebGPU engine: native whisper.cpp in Tauri
+  (whisper-rs) vs Transformers.js fallback. WebGPU spike passes on desktop (branch
+  `spike/whisper-webgpu`, docs/benchmarks/stt.md).
 - [x] whisper.cpp / wllama vs Transformers.js checked 2026-09-30 — rejected (8–12x slower).
 - [ ] **User-owned (manual research):** find an STT alternative using `docs/research/model_problem.md`
   (the problem, every model in use, specs, benchmarks, gates, research leads). The user is not

@@ -43,6 +43,9 @@ src-tauri/gen/android/keystore.properties
 # 18MB espeak-ng data for French G2P, restored via the copy step in commands.md
 static/piper-wasm/
 
+# Model-lab build output (tools/whisper-webgpu/build.sh), rebuilt locally
+src/routes/model-lab/vendor/
+
 # Local database dumps / exports
 *.sqlite
 *.sqlite3

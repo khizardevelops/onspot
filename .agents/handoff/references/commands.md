@@ -31,6 +31,9 @@
 - `/model-lab/` (dev route) — hands-on A/B: STT Transformers.js whisper-small q4 vs whisper.cpp
   small q5_1/q8_0 (`@transcribe/shout`, dev dependency, own worker + `onspot-model-lab` Cache
   API bucket) on a recording, upload or eval clip; TTS every voice of the selected language.
+- `tools/whisper-webgpu/build.sh` — builds whisper.cpp + ggml WebGPU for the model lab into
+  `src/routes/model-lab/vendor/whisper-webgpu/` (gitignored). Needs emsdk + whisper.cpp in
+  `/mnt/data/not_synced/dev-cache/` (override with EMSDK_DIR / WHISPER_DIR).
 - `npm run tauri dev` — run the desktop app (Tauri) against the dev server.
 - `npm run tauri build` — package the desktop app.
 

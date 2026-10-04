@@ -1,5 +1,13 @@
 # Decisions
 
+### STT on WebGPU: whisper.cpp + ggml WebGPU passes on desktop, blocked on Android (2026-10-04)
+Spike on branch `spike/whisper-webgpu`: 190 MB vs 299 MB, +0.57/+1.0 GB vs +1.9/+2.1 GB RAM,
+rtf ~0.2 vs ~1.9, WER 5.8% vs 5.5% (docs/benchmarks/stt.md). Not yet adopted: Chrome/WebView
+blocklist WebGPU on many Android GPUs (Samsung Xclipse confirmed), and the WebView lacks
+cross-origin isolation. Adopting it needs a fallback plan for Android (native whisper.cpp in
+Tauri, or Transformers.js). Ratchet rejected (dormant since 2024-11); Candle official WASM is
+CPU-only.
+
 ### SvelteKit 3 migration (2026-10-04, branch `migration`)
 Migrated with `npx sv migrate sveltekit-3 --tasks all`. Kit 3.0.0, adapter-static 4, Svelte
 5.57.1, Vite 8.3.2, vite-plugin-svelte 7.3.1. TypeScript stays 6.x: Kit 3 and svelte-check peer

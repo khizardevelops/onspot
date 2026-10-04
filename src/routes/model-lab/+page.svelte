@@ -20,6 +20,7 @@
 	import { WorkerPiperAdapter } from '#lib/adapters/tts/WorkerPiperAdapter.js';
 	import { pcmToWavUrl } from '#lib/adapters/tts/roundTrip.js';
 	import WhisperCppWorker from './whispercpp.worker?worker';
+	import WhisperGpuWorker from './whispergpu.worker?worker';
 
 	const GGML_BASE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
 	// The thread budget ORT gets in `adapters/stt/engine.ts`, so speeds compare fairly.
@@ -34,8 +35,14 @@
 
 	interface SttEngine {
 		id: string;
+		/** tjs = product engine; shout = whisper.cpp CPU (npm); webgpu = our ggml WebGPU build. */
+		runtime: 'tjs' | 'shout' | 'webgpu';
+		/** ggml quantization of `ggml-small-<model>.bin` (unused for tjs). */
+		model: string;
 		label: string;
 		detail: string;
+		/** Backend whisper.cpp reports after load (webgpu only), so a CPU fallback is visible. */
+		backend: string;
 		status: EngineStatus;
 		progress: number;
 		message: string;
@@ -45,6 +52,9 @@
 	let engines = $state<SttEngine[]>([
 		{
 			id: 'tjs',
+			runtime: 'tjs',
+			model: '',
+			backend: '',
 			label: 'Transformers.js · whisper-small q4',
 			detail: 'Current app engine · 299 MB · ~1.9 GB RAM loaded',
 			status: 'unloaded',
@@ -54,6 +64,9 @@
 		},
 		{
 			id: 'q5_1',
+			runtime: 'shout',
+			model: 'q5_1',
+			backend: '',
 			label: 'whisper.cpp · small q5_1',
 			detail: '190 MB · ~0.6 GB RAM · measured ~8× slower',
 			status: 'unloaded',
@@ -63,14 +76,36 @@
 		},
 		{
 			id: 'q8_0',
+			runtime: 'shout',
+			model: 'q8_0',
+			backend: '',
 			label: 'whisper.cpp · small q8_0',
 			detail: '264 MB · ~0.6 GB RAM · measured ~12× slower',
 			status: 'unloaded',
 			progress: 0,
 			message: '',
 			loadMs: 0
+		},
+		{
+			id: 'gpu_q5_1',
+			runtime: 'webgpu',
+			model: 'q5_1',
+			backend: '',
+			label: 'whisper.cpp · WebGPU · small q5_1',
+			detail: 'Spike: ggml WebGPU build · 190 MB · needs tools/whisper-webgpu/build.sh',
+			status: 'unloaded',
+			progress: 0,
+			message: '',
+			loadMs: 0
 		}
 	]);
+
+	let hasWebGpu = $state(true);
+	$effect(() => {
+		const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+		if (!gpu) hasWebGpu = false;
+		else void gpu.requestAdapter().then((adapter) => (hasWebGpu = !!adapter));
+	});
 
 	let tjs: WorkerWhisperAdapter | null = null;
 	const cppWorkers = new Map<string, { worker: Worker; nextId: number }>();
@@ -105,7 +140,7 @@
 		engine.progress = 0;
 		const started = performance.now();
 		try {
-			if (engine.id === 'tjs') {
+			if (engine.runtime === 'tjs') {
 				tjs = new WorkerWhisperAdapter({
 					id: 'lab-tjs',
 					name: 'whisper-small q4',
@@ -117,15 +152,24 @@
 					engine.message = progress.status;
 				});
 			} else {
-				cppWorkers.set(engine.id, { worker: new WhisperCppWorker(), nextId: 1 });
-				await cppRequest(
+				const worker = engine.runtime === 'webgpu' ? new WhisperGpuWorker() : new WhisperCppWorker();
+				cppWorkers.set(engine.id, { worker, nextId: 1 });
+				const ready = await cppRequest(
 					engine.id,
-					{ type: 'load', url: `${GGML_BASE}/ggml-small-${engine.id}.bin`, threads: THREADS },
+					{
+						type: 'load',
+						url: `${GGML_BASE}/ggml-small-${engine.model}.bin`,
+						threads: THREADS,
+						useGpu: true
+					},
 					(progress, status) => {
 						engine.progress = progress;
 						engine.message = status;
 					}
 				);
+				if (engine.runtime === 'webgpu') {
+					engine.backend = (ready.backend as string[] | undefined)?.join('\n') ?? '';
+				}
 			}
 			engine.loadMs = Math.round(performance.now() - started);
 			engine.status = 'ready';
@@ -139,7 +183,7 @@
 
 	/** Terminates the engine's worker, which is the only way to give WASM memory back. */
 	function unloadEngine(engine: SttEngine, reset = true) {
-		if (engine.id === 'tjs') {
+		if (engine.runtime === 'tjs') {
 			void tjs?.dispose();
 			tjs = null;
 		} else {
@@ -150,11 +194,12 @@
 			engine.status = 'unloaded';
 			engine.progress = 0;
 			engine.message = '';
+			engine.backend = '';
 		}
 	}
 
 	async function transcribeWith(engine: SttEngine, pcm: Float32Array): Promise<string> {
-		if (engine.id === 'tjs') {
+		if (engine.runtime === 'tjs') {
 			const result = await tjs!.transcribe(pcm, { language: language.stt.decoderLanguage });
 			return result.text;
 		}
@@ -383,6 +428,11 @@
 			time).
 		</p>
 
+		{#if !hasWebGpu}
+			<p class="muted">
+				This browser exposes no WebGPU adapter, so the WebGPU engine will fall back to the CPU.
+			</p>
+		{/if}
 		<div class="cards">
 			{#each engines as engine (engine.id)}
 				<div class="card">
@@ -393,6 +443,9 @@
 						{#if engine.status === 'ready' && engine.loadMs} · loaded in {(engine.loadMs / 1000).toFixed(1)} s{/if}
 					</span>
 					{#if engine.status === 'error'}<span class="error">{engine.message}</span>{/if}
+					{#if engine.backend}
+						<details><summary>Backend</summary><pre>{engine.backend}</pre></details>
+					{/if}
 					{#if engine.status === 'unloaded' || engine.status === 'error'}
 						<button onclick={() => loadEngine(engine)}>Load</button>
 					{:else}
@@ -596,6 +649,11 @@
 	}
 	.file input {
 		display: none;
+	}
+	pre {
+		white-space: pre-wrap;
+		font-size: 0.75rem;
+		margin: 4px 0 0;
 	}
 	audio {
 		width: 100%;

@@ -1,5 +1,20 @@
 # Last Session
 
+## 2026-10-04: whisper.cpp WebGPU spike (branch spike/whisper-webgpu)
+- `migration` snapshot committed (4b0c82a), spike branched from it.
+- Toolchain: emsdk 6.0.11 + whisper.cpp clone in /mnt/data/not_synced/dev-cache/.
+  `tools/whisper-webgpu/build.sh` + `binding.cpp` (C exports, JSPI, streaming model loader via
+  EM_ASYNC_JS so the 190 MB file never sits whole in JS or the WASM heap). Output goes to
+  `src/routes/model-lab/vendor/whisper-webgpu/` (gitignored) — NOT static/: Vite serves static
+  files without COOP/COEP, and the pthread workers then hang forever at module start.
+  Needs `-DGGML_OPENMP=OFF` (OpenMP symbols don't link in wasm).
+- `/model-lab/` gained a 4th card (whisper.cpp · WebGPU · small q5_1) with a backend readout;
+  `whispergpu.worker.ts`, shared `modelCache.ts` (fetchCached / streamCached).
+- Results in docs/benchmarks/stt.md; Android phone (S24 FE) check: WebGPU blocklisted by Dawn.
+- Headless Chromium needs `--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan`
+  for an adapter. GPU memory on the Intel iGPU is only visible via /proc/<gpu-pid>/fdinfo
+  `drm-total-*` (sample only the GPU process — scanning every fd starves the driver).
+
 ## 2026-10-04: model lab page
 - User wanted to try the STT variants themselves. Added `src/routes/model-lab/` (+page.svelte,
   whispercpp.worker.ts): language picker (OFFERED_LANGUAGES), load/unload per engine
