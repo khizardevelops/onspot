@@ -2797,6 +2797,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-speech",
  "tauri-plugin-sql",
+ "webkit2gtk",
 ]
 
 [[package]]

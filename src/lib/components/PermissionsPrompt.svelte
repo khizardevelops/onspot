@@ -28,6 +28,10 @@
 	const MIC_KEY = 'onspot.permissions.microphone';
 	const firefox = typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
 	const tauri = isTauri();
+	// The desktop and Android apps have no address bar; the OS owns the permission there.
+	const howToAllow = tauri
+		? 'Allow onspot to use it in your system settings, then restart the app.'
+		: 'Allow it from the site permissions (the icon in the address bar), then reload.';
 
 	let open = $state(false);
 	let asking = $state(false);
@@ -113,7 +117,7 @@
 		].filter(Boolean);
 		if (refused.length) {
 			toast(
-				`Not allowed: ${refused.join(' and ')}. You can change this in the site permissions (the icon in the address bar), then reload.`,
+				`Not allowed: ${refused.join(' and ')}. ${howToAllow}`,
 				10000
 			);
 		}
@@ -153,7 +157,7 @@
 				<p class="text-xs leading-relaxed text-muted-foreground">{detail}</p>
 				{#if state === 'denied'}
 					<p class="mt-1 text-xs text-[var(--error)]">
-						Blocked. Allow it from the site permissions in your browser's address bar, then reload.
+						Blocked. {howToAllow}
 					</p>
 				{/if}
 			</div>

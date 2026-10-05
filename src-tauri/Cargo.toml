@@ -30,6 +30,11 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-speech = { path = "plugins/speech" }
 
+# The Linux desktop webview, for its microphone permission (src/microphone.rs).
+# Same version Tauri's wry already uses.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+
 # Release builds (desktop and Android). The app's own Rust is thin, so it is
 # built for size; whisper.cpp's C++ is compiled by CMake with its own -O3.
 [profile.release]

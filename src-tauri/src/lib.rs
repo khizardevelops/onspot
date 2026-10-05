@@ -1,3 +1,6 @@
+#[cfg(target_os = "linux")]
+mod microphone;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -7,6 +10,8 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_speech::init())
     .setup(|app| {
+      #[cfg(target_os = "linux")]
+      microphone::allow_in_main_window(app)?;
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
