@@ -1,5 +1,11 @@
 # Decisions
 
+### Linux desktop microphone: the app grants WebKit's user-media requests (2026-10-06)
+WebKitGTK (the Linux Tauri webview) denies `getUserMedia` unless the app handles its
+`permission-request` signal; the desktop app showed "Not allowed: the microphone".
+`src-tauri/src/microphone.rs` (Linux only) enables media streams and allows only
+`UserMediaPermissionRequest`s. Windows/macOS/Android use the OS prompt. Verified via tauri-driver.
+
 ### bun is the package manager; Node stays the runtime (2026-10-06)
 `bun install` / `bun run` / `bunx` replace npm (lockfile migrated from package-lock.json with
 identical top-level versions). The benefit is install speed and one tool; it does not affect the
