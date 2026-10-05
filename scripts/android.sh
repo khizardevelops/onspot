@@ -60,9 +60,9 @@ case "$cmd" in
 		echo "ANDROID_HOME=$ANDROID_HOME"; echo "NDK_HOME=$NDK_HOME"; echo "JAVA_HOME=${JAVA_HOME:-<system>}"
 		echo "rustc=$(command -v rustc) ($(rustc --version))"; echo "CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-<default>}"
 		java -version 2>&1 | head -1 ;;
-	init)  check; npx tauri android init "$@" ;;
-	dev)   check; npx tauri android dev "$@" ;;
-	build) check; if [[ $# -eq 0 ]]; then set -- --apk --target aarch64; fi; npx tauri android build "$@" ;;
-	emulator-apk) check; npx tauri android build --apk --debug --target x86_64 "$@" ;;
+	init)  check; bunx tauri android init "$@" ;;
+	dev)   check; bunx tauri android dev "$@" ;;
+	build) check; if [[ $# -eq 0 ]]; then set -- --apk --target aarch64; fi; bunx tauri android build "$@" ;;
+	emulator-apk) check; bunx tauri android build --apk --debug --target x86_64 "$@" ;;
 	*) sed -n '2,11p' "$0"; exit 1 ;;
 esac

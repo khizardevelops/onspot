@@ -404,11 +404,11 @@ prototype's insight columns keep working without new categories.
 - `+page.svelte` holds a hardcoded four-attempt live session including a French proverb, with
   bindable active-attempt/correction state.
 - `AttemptStream.svelte`, `AttemptCard.svelte` and `stores/practice.ts` are **unmodified**; the
-  sandbox imports nothing from them. `npm run bundle:ui` (repomix) packs only
+  sandbox imports nothing from them. `bun run bundle:ui` (repomix) packs only
   `src/routes/ui-sandbox/**/*.svelte` to `repomix/ui-sandbox-bundle.xml`. The `repomix/` folder is
   tracked (kept by `repomix/.gitkeep`); only the generated `repomix/*-bundle.*` output is
   gitignored, so nothing lands in the repo root and the folder persists after a clone.
-- `npm run bundle -- <page|path|glob...>` (`repomix/bundle.mjs`) exports any page or section of
+- `bun run bundle -- <page|path|glob...>` (`repomix/bundle.mjs`) exports any page or section of
   the real app with repomix. Pages are discovered from `src/routes` (`home`, `history`,
   `insights`, `settings`, `ui-sandbox`; `--list`), so new routes need no setup. From the page's
   own route files it follows local imports (`#lib`, relative, `?worker`, `new URL(...,

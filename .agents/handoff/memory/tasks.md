@@ -91,9 +91,9 @@
 ## Completed agent tooling
 - [x] Isolated, interactive chat-history UI sandbox at `src/routes/ui-sandbox/` (Mock components,
   hardcoded live data, real progressive disclosure with simulated backends) plus
-  `npm run bundle:ui` (repomix, sandbox `.svelte` only). Production components and stores are
+  `bun run bundle:ui` (repomix, sandbox `.svelte` only). Production components and stores are
   deliberately untouched.
-- [x] `npm run bundle` (`repomix/bundle.mjs`): export any page (auto-discovered from
+- [x] `bun run bundle` (`repomix/bundle.mjs`): export any page (auto-discovered from
   `src/routes`), several pages combined or separately, or any folder/file/glob, with local
   imports traced. Real repomix runs verified (settings: 103 files; settings+history at depth 1
   as markdown).

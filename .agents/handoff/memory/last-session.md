@@ -1,5 +1,12 @@
 # Last Session
 
+## 2026-10-06: switched to bun (package manager only)
+- `bun.lock` replaces `package-lock.json` (migrated; all top-level versions identical). Scripts,
+  Tauri before*Commands, `scripts/android.sh`, `repomix/bundle.mjs` and CI now use bun/bunx.
+  Verified: `bun install --frozen-lockfile`, `bun run check` (0 errors), `bun run build`,
+  `bunx tauri --version`, `bun run bundle -- settings --dry-run`, `bun run android env`.
+  Not yet verified: `bun run tauri dev` window (port 5173 held by audionix) and the CI run.
+
 ## 2026-10-06: branches merged into main
 - `main` fast-forwarded to `feature/native-speech` (SvelteKit 3 migration → WebGPU spike →
   native speech). `main` is the working branch again; the feature branches are fully contained

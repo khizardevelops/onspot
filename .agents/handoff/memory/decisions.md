@@ -1,5 +1,14 @@
 # Decisions
 
+### bun is the package manager; Node stays the runtime (2026-10-06)
+`bun install` / `bun run` / `bunx` replace npm (lockfile migrated from package-lock.json with
+identical top-level versions). The benefit is install speed and one tool; it does not affect the
+app (WebView + Rust). Vite/SvelteKit are not run on the bun runtime (`--bun`): SvelteKit 3 / Vite 8
+were freshly migrated and the app leans on workers, WASM and Tauri, so that is risk without gain.
+The four packages with install scripts (sharp, onnxruntime-node, protobufjs, @parcel/watcher) were
+already blocked under npm 12 and are equally skipped by bun; the app needs none of them. CI uses
+oven-sh/setup-bun.
+
 ### STT: native whisper.cpp in the desktop and Android apps (2026-10-04)
 The apps run whisper.cpp natively through the in-repo Tauri plugin `src-tauri/plugins/speech`
 (whisper-rs 0.16, `ggml-small-q5_1.bin`, 190 MB). Measured: WER 5.8% on desktop and phone,
@@ -401,7 +410,7 @@ The standing rule is **clone and clean, keep it live**: copies live under
 `src/routes/ui-sandbox/components/` as `Mock*` components that share nothing with production
 (no stores, no adapters, no DB/LLM/TTS calls) but **keep** their Svelte state, `{#if}` blocks,
 click handlers, hover tooltips and tab/toggle behavior. External calls are replaced with local
-component state (simulated playback, simulated generation/spinners). `npm run bundle:ui` packs
+component state (simulated playback, simulated generation/spinners). `bun run bundle:ui` packs
 only `src/routes/ui-sandbox/**/*.svelte`, so the bundle can never leak product code or become a
 refactor target for files the product depends on. The sandbox is self-contained and can stay in
 the repo indefinitely.

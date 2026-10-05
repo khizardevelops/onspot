@@ -1,29 +1,34 @@
 # Commands
 
+**Package manager: bun** (`bun.lock`, `"packageManager": "bun@1.3.5"`). bun installs packages and
+runs scripts; Vite/SvelteKit still run on **Node** (their `node` shebang), so Node 22 must stay
+installed. After switching to a branch with different dependencies, run
+`bun install --frozen-lockfile`. Do not use npm: `package-lock.json` is gone.
+
 ## Development (web SPA)
-- `npm install` — install dependencies.
-- `npm run dev` — Vite dev server (SvelteKit). **Use one port consistently.** The browser Cache
+- `bun install` — install dependencies.
+- `bun run dev` — Vite dev server (SvelteKit). **Use one port consistently.** The browser Cache
   API is per-origin, so `:5173` and `:5174` keep separate model caches and switching re-downloads
   every model. Tailwind scans the project for class candidates and watches every scanned file;
   `src/app.css` excludes `docs/`, `.agents/`, `eval/` and `repomix/` with `@source not`, so
   writing notes in those folders does not reload the app. (Start a fresh dev server after changing
   the `@source` directives; stale watcher registrations persist until restart.)
-- `npm run build` — production SPA build to `build/` (single `index.html` + `_app/`).
-- `npm run preview` — serve the production build. COOP/COEP are applied by the Vite plugin.
-- `npm run check` — `svelte-kit sync` + `svelte-check`.
-- `npm run bundle:ui` — pack the isolated `src/routes/ui-sandbox/` UI with
-  `npx repomix --include "src/routes/ui-sandbox/**/*.svelte" --output "repomix/ui-sandbox-bundle.xml"`.
+- `bun run build` — production SPA build to `build/` (single `index.html` + `_app/`).
+- `bun run preview` — serve the production build. COOP/COEP are applied by the Vite plugin.
+- `bun run check` — `svelte-kit sync` + `svelte-check`.
+- `bun run bundle:ui` — pack the isolated `src/routes/ui-sandbox/` UI with
+  `bunx repomix --include "src/routes/ui-sandbox/**/*.svelte" --output "repomix/ui-sandbox-bundle.xml"`.
   Output stays in `repomix/` (never the repo root). The folder is tracked via `repomix/.gitkeep`;
   only the generated `repomix/*-bundle.*` file is gitignored. It includes no product code. The
-  first run needs network so npx can fetch repomix.
-- `npm run bundle -- <target...> [options]` — export pages or sections of the real app with
+  first run needs network so bunx can fetch repomix.
+- `bun run bundle -- <target...> [options]` — export pages or sections of the real app with
   repomix (`repomix/bundle.mjs`). Targets: a page name (`--list`: home, history, insights,
   settings, ui-sandbox), `--all`, any file/folder, or a quoted glob. Several targets go into one
   combined file; `--separate` writes one per target. Local imports are followed (`--depth <n>`,
   `--no-deps`); `--layout` adds the app shell; `--ui` keeps only `.svelte/.css/.html`;
   `--exclude <glob>` drops files (e.g. `"src/lib/components/ui/**"`); `--style markdown`;
   `--dry-run` lists files and size first. Extra repomix flags go after a second `--`
-  (`npm run bundle -- insights -- --compress --copy`). Output: `repomix/<targets>-bundle.<ext>`.
+  (`bun run bundle -- insights -- --compress --copy`). Output: `repomix/<targets>-bundle.<ext>`.
   Full unlimited-depth page bundles are ~60–130 files (settings ≈ 80k tokens); `--depth 1` is
   the page plus what it uses directly.
 - `/stt-bench/` (dev route) — STT benchmark of the product engine over every scored `eval/`
@@ -41,11 +46,11 @@
   `app.onspot.desktop.debug` beside the release app (`adb install -r …/universal/debug/…apk`).
 
 ## Desktop app (Tauri)
-- **Development, with hot reload: `npm run tauri dev`.** One command: it starts onspot's Vite dev
+- **Development, with hot reload: `bun run tauri dev`.** One command: it starts onspot's Vite dev
   server (`beforeDevCommand`), compiles the Rust side, and opens the desktop window on
   `http://localhost:5173`. Editing `.svelte`/`.ts` updates the window instantly (Vite HMR);
   editing Rust under `src-tauri/` makes it recompile and restart the window. Stop with Ctrl+C.
-  - Port 5173 must be free first: stop any other dev server (onspot's own `npm run dev`, or
+  - Port 5173 must be free first: stop any other dev server (onspot's own `bun run dev`, or
     another project's Vite). Vite is `strictPort`, so a taken port fails loudly instead of
     silently moving.
   - **Never point the window at "whatever is already on :5173".** Tried 2026-10-05 with a
@@ -53,9 +58,9 @@
     onspot window loaded that site. Removed.
   - The debug binary it builds is `src-tauri/target/debug/onspot`; it also only works while
     onspot's dev server runs, because debug builds load the frontend from `devUrl`.
-- **Release, standalone: `npx tauri build --no-bundle`**, then run
+- **Release, standalone: `bunx tauri build --no-bundle`**, then run
   `src-tauri/target/release/onspot`. The frontend is bundled into the binary; no dev server.
-  `--no-bundle` skips the `.deb`/`.rpm`/AppImage installers (`npm run tauri build` makes them;
+  `--no-bundle` skips the `.deb`/`.rpm`/AppImage installers (`bun run tauri build` makes them;
   AppImage packaging is unreliable on Arch). First build ~10 min.
   - Not for other machines yet: ggml compiles for the build machine's CPU (GGML_NATIVE); see the
     portable-build task in `memory/tasks.md`.
@@ -72,12 +77,12 @@
   Rust cannot add targets), NDK, SDK, and `CARGO_TARGET_DIR` outside the synced folder.
   This machine: everything in `/mnt/data/not_synced/dev-cache/` (jdk-21, rustup, cargo,
   onspot-target, onspot-release.jks). Logs: `build-emulator.log`, `build-release.log` there.
-- `npm run android:emulator-apk` — debug APK for x86_64 emulators (AVDs are x86_64, API 36);
+- `bun run android:emulator-apk` — debug APK for x86_64 emulators (AVDs are x86_64, API 36);
   `adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`.
-- `npm run android:build` — signed release APK for arm64 phones (`--apk --target aarch64`).
+- `bun run android:build` — signed release APK for arm64 phones (`--apk --target aarch64`).
   Signing: `src-tauri/gen/android/keystore.properties` (gitignored: keyAlias, password,
   storeFile) → `onspot-release.jks`. **Back up the keystore**; updates must be signed with it.
-- `npm run android:dev` — hot-reload on a device/emulator. `scripts/android.sh env` prints the
+- `bun run android:dev` — hot-reload on a device/emulator. `scripts/android.sh env` prints the
   resolved toolchain.
 - CI: `.github/workflows/android.yml` builds the arm64 release APK on push to main (not for
   md/docs/.agents-only changes), `workflow_dispatch`, and `v*` tags (tag → GitHub Release).
@@ -107,7 +112,7 @@ Cross-Origin-Embedder-Policy: credentialless
 - Desktop database path: the SQL plugin anchors `sqlite:` to the app config dir
   (`onspot.db`). Browser database: OPFS, pool `onspot-pool`, virtual file `/onspot.db`.
 
-## After a fresh clone or `npm ci`
+## After a fresh clone or `bun install --frozen-lockfile`
 The French phonemizer assets are gitignored (18 MB). Restore them into `static/` (not `public/`):
 
 ```sh
@@ -127,7 +132,7 @@ caches.keys().then(ks => ks.forEach(k => caches.delete(k)))
 
 ## Browser verification
 The project rule is "verify in a browser before believing it". Install a throwaway Playwright in
-a scratch dir outside the repo (`npm i playwright`) and point it at the cached Chromium
+a scratch dir outside the repo (`bun add playwright-core`) and point it at the cached Chromium
 (`~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome`). It is deliberately **not** a project
 dependency. The user usually has `vite dev` running on :5173 — **reuse it; never start a second
 instance**: it re-optimizes the shared `node_modules/.vite` cache and the running server then

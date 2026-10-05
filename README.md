@@ -182,14 +182,14 @@ evidence is in [`docs/benchmarks/`](docs/benchmarks/README.md).
 
 ```sh
 git clone <this-repo> onspot && cd onspot
-npm install
+bun install
 
 # Restore the French pronunciation data (18 MB, gitignored)
 mkdir -p static/piper-wasm
 cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/
 
-npm run dev          # web app at http://localhost:5173
-npm run tauri dev    # desktop app
+bun run dev          # web app at http://localhost:5173
+bun run tauri dev    # desktop app
 ```
 
 Then, in the app:
@@ -201,9 +201,9 @@ Then, in the app:
 ### Build
 
 ```sh
-npm run build        # static web build in build/
-npm run tauri build  # desktop installer
-npm run check        # type-check
+bun run build        # static web build in build/
+bun run tauri build  # desktop installer
+bun run check        # type-check
 ```
 
 **Android** (Tauri v2). Needs the Android SDK and NDK, a JDK 17 or 21, and Rust from rustup with
@@ -211,9 +211,9 @@ the Android targets. Copy `scripts/android.local.env.example` to `scripts/androi
 point it at your toolchain, then:
 
 ```sh
-npm run android:emulator-apk   # debug APK for an x86_64 emulator
-npm run android:build          # optimised, signed release APK for arm64 phones
-npm run android:dev            # live reload on a connected device
+bun run android:emulator-apk   # debug APK for an x86_64 emulator
+bun run android:build          # optimised, signed release APK for arm64 phones
+bun run android:dev            # live reload on a connected device
 ```
 
 Release signing reads `src-tauri/gen/android/keystore.properties` (gitignored).

@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "AGPL-3.0-or-later",
+  "packageManager": "bun@1.3.5",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -11,7 +12,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "bundle": "node repomix/bundle.mjs",
-    "bundle:ui": "npx repomix --include \"src/routes/ui-sandbox/**/*.svelte\" --output \"repomix/ui-sandbox-bundle.xml\"",
+    "bundle:ui": "bunx repomix --include \"src/routes/ui-sandbox/**/*.svelte\" --output \"repomix/ui-sandbox-bundle.xml\"",
     "tauri": "tauri",
     "android": "scripts/android.sh",
     "android:dev": "scripts/android.sh dev",
