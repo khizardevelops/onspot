@@ -1,5 +1,13 @@
 # Last Session
 
+## 2026-10-06: branches merged into main
+- `main` fast-forwarded to `feature/native-speech` (SvelteKit 3 migration → WebGPU spike →
+  native speech). `main` is the working branch again; the feature branches are fully contained
+  in it. Not pushed to GitHub (`main` is ahead of `origin/main`).
+- `npm run dev` on the old `main` failed with `config_file_unsupported` because node_modules held
+  SvelteKit 3 while `main` was still SvelteKit 2. After switching across the migration, run
+  `npm ci`.
+
 ## 2026-10-04: native speech plugin architecture (branch feature/native-speech)
 - Commits: speech code moved into `src/lib/speech/{stt,tts}` (−844 lines, dead lab code gone);
   `LocalSttEngine` interface + `localEngine.ts` + `platform/runtime.ts`; Rust workspace with
