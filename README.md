@@ -9,7 +9,7 @@ a minute, then marks your spoken French the way a good teacher would: every mist
 the exact words you said, explained in plain English, and read back to you the way a native
 speaker would say it.
 
-[Why onspot](#why-onspot) · [Features](#what-it-does) · [How it works](#how-a-session-works) ·
+[Why onspot](#why-onspot) · [Screenshots](#screenshots) · [Features](#what-it-does) · [How it works](#how-a-session-works) ·
 [Privacy](#private-by-design) · [Getting started](#getting-started) · [Languages](#languages) ·
 [Tech](#under-the-hood)
 
@@ -18,6 +18,15 @@ speaker would say it.
 ![SvelteKit](https://img.shields.io/badge/SvelteKit-SPA-ff3e00)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-24c8db)
 ![Status](https://img.shields.io/badge/status-early%20release-b7791f)
+
+<br>
+
+<!-- Follows the reader's GitHub theme. Both themes are under Screenshots below. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/fr-dark.png">
+  <img src="docs/screenshots/fr-light.png" width="100%"
+       alt="onspot's practice screen: a spoken French sentence with its mistakes marked, translations, and a teacher's feedback panel">
+</picture>
 
 </div>
 
@@ -37,6 +46,40 @@ which is talking, making mistakes and being corrected. onspot is built entirely 
 - **You hear it done right.** The corrected version is read aloud in a natural voice, so the fix
   goes in through your ears as well as your eyes.
 - **You do it again.** Retake the same prompt and watch your takes improve side by side.
+
+## Screenshots
+
+Click a theme to show or hide it.
+
+<details open>
+<summary><b>🌙 Dark mode</b></summary>
+<br>
+
+<p align="center"><img src="docs/screenshots/fr-dark.png" width="100%" alt="French practice, dark mode"></p>
+<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
+
+<p align="center"><img src="docs/screenshots/jap-dark.png" width="100%" alt="Japanese practice, dark mode"></p>
+<p align="center"><b>Japanese practice</b>: A word-by-word breakdown with readings, plus suggestions for more natural phrasing that you can hear read aloud.</p>
+
+<p align="center"><img src="docs/screenshots/history-dark.png" width="100%" alt="History, dark mode"></p>
+<p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
+
+</details>
+
+<details>
+<summary><b>☀️ Light mode</b></summary>
+<br>
+
+<p align="center"><img src="docs/screenshots/fr-light.png" width="100%" alt="French practice, light mode"></p>
+<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
+
+<p align="center"><img src="docs/screenshots/jap-light.png" width="100%" alt="Japanese practice, light mode"></p>
+<p align="center"><b>Japanese practice</b>: A word-by-word breakdown with readings, plus suggestions for more natural phrasing that you can hear read aloud.</p>
+
+<p align="center"><img src="docs/screenshots/history-light.png" width="100%" alt="History, light mode"></p>
+<p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
+
+</details>
 
 ## What it does
 
