@@ -23,9 +23,9 @@ speaker would say it.
 
 <!-- Follows the reader's GitHub theme. Both themes are under Screenshots below. -->
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/fr-dark.png">
-  <img src="docs/screenshots/fr-light.png" width="100%"
-       alt="onspot's practice screen: a spoken French sentence with its mistakes marked, translations, and a teacher's feedback panel">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/jap-dark.png">
+  <img src="docs/screenshots/jap-light.png" width="100%"
+       alt="onspot's practice screen: a spoken Japanese sentence with a word-by-word breakdown and a teacher's feedback panel">
 </picture>
 
 </div>
@@ -55,11 +55,11 @@ Click a theme to show or hide it.
 <summary><b>🌙 Dark mode</b></summary>
 <br>
 
-<p align="center"><img src="docs/screenshots/fr-dark.png" width="100%" alt="French practice, dark mode"></p>
-<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
-
 <p align="center"><img src="docs/screenshots/jap-dark.png" width="100%" alt="Japanese practice, dark mode"></p>
 <p align="center"><b>Japanese practice</b>: A word-by-word breakdown with readings, plus suggestions for more natural phrasing that you can hear read aloud.</p>
+
+<p align="center"><img src="docs/screenshots/fr-dark.png" width="100%" alt="French practice, dark mode"></p>
+<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
 
 <p align="center"><img src="docs/screenshots/history-dark.png" width="100%" alt="History, dark mode"></p>
 <p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
@@ -70,11 +70,11 @@ Click a theme to show or hide it.
 <summary><b>☀️ Light mode</b></summary>
 <br>
 
-<p align="center"><img src="docs/screenshots/fr-light.png" width="100%" alt="French practice, light mode"></p>
-<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
-
 <p align="center"><img src="docs/screenshots/jap-light.png" width="100%" alt="Japanese practice, light mode"></p>
 <p align="center"><b>Japanese practice</b>: A word-by-word breakdown with readings, plus suggestions for more natural phrasing that you can hear read aloud.</p>
+
+<p align="center"><img src="docs/screenshots/fr-light.png" width="100%" alt="French practice, light mode"></p>
+<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
 
 <p align="center"><img src="docs/screenshots/history-light.png" width="100%" alt="History, light mode"></p>
 <p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
