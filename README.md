@@ -21,12 +21,9 @@ speaker would say it.
 
 <br>
 
-<!-- Follows the reader's GitHub theme. Both themes are under Screenshots below. -->
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/jap-dark.png">
-  <img src="docs/screenshots/jap-light.png" width="100%"
-       alt="onspot's practice screen: a spoken Japanese sentence with a word-by-word breakdown and a teacher's feedback panel">
-</picture>
+<!-- Dark mode is shown first; the light versions are one click away under Screenshots. -->
+<img src="docs/screenshots/jap-dark.png" width="100%"
+     alt="onspot's practice screen: a spoken Japanese sentence with a word-by-word breakdown and a teacher's feedback panel">
 
 </div>
 
