@@ -5,7 +5,14 @@ Document coding, naming, file organization, tooling, and communication preferenc
 ## Code Style
 - **The repo must read as if a careful human wrote it.** The user rejects "AI spaghetti":
   no speculative abstractions, no layers without a second caller, no duplicated helpers, no
-  dead code left behind, no clever indirection. Prefer the obvious, boring implementation.
+  dead code left behind. Prefer the obvious, boring implementation.
+- **Use established, popular packages instead of hand-writing what they already do.** Writing
+  everything from first principles is itself a source of spaghetti. Check for a well-maintained
+  library (and the platform's own APIs) before writing parsing, networking, audio, validation,
+  date/format or UI-widget code; hand-write only the glue between them. "Readable" is about
+  code structure, not about avoiding dependencies. Rejecting a library is fine when it would
+  reshape the whole codebase's style (e.g. Effect, decided 2026-10-07) or pins conflicting
+  runtimes; say why when you do.
 - One responsibility per file; small, named functions; types next to the code that owns them.
 - Comments explain *why* (constraints, measured evidence, traps), never restate the code.
 - When replacing something, delete the old path in the same change. Grep for importers first.
