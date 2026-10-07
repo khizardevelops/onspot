@@ -3,6 +3,38 @@
 Document coding, naming, file organization, tooling, and communication preferences.
 
 ## Code Style
+
+### Semantic, robust, easy on the eyes (user, 2026-10-07)
+The user cares about three things together: **architecture**, **robustness**, and **code a human
+reads without effort**. Readable never means "the shortest thing that happens to work", and it
+never excuses fragile or gimmicky code. More lines are fine; dense lines are not.
+
+- **Names say what things are.** `activeUsers`, `basePrice`, `finalPricePerUser`; never `t`,
+  `u`, `x`, `s`, `isP`. Booleans read as questions (`isActive`, `hasModel`). Functions are verbs
+  that say the outcome (`calculateActiveTotal`, `downloadModel`).
+- **No magic values.** Numbers and strings with meaning become named constants next to the code
+  that uses them, with a comment when the value came from a measurement or a spec
+  (`PREMIUM_DISCOUNT_RATE = 0.8`, `IDLE_RELEASE_MS = 90_000`).
+- **One step per line, and name the steps.** Split chains and nested ternaries into named
+  intermediate variables (`const activeUsers = users.filter(...)`) so each line does one thing.
+- **Whitespace shows structure.** A blank line between the logical steps of a function (gather,
+  decide, act, return); a blank line around multi-line blocks. Align object literals in data
+  tables when it helps scanning. Never cram several statements or conditions onto one line.
+- **Every exported function has a doc comment** saying what it does, its inputs and its result
+  (`/** ... @param ... @returns ... */` in TS, `///` in Rust). Internal helpers get one when the
+  name is not enough.
+- **Robust by default.** Validate input at boundaries (IPC, network, files, LLM output); handle
+  each failure explicitly with an error message a learner can act on; no silent `catch {}`; no
+  "works on my machine" shortcuts. Prefer a well-tested library over clever code.
+- **Architecture first.** Code lives in the capability folder it belongs to, behind the
+  interface that capability exposes (see File Organization); a function that reaches across
+  layers is a design problem, not a formatting one.
+
+Reference: not `function t(u, p) { return u.filter(x => x.a === true).reduce((s, x) => s + (x.isP
+? p * 0.8 : p), 0); }` but a named constant, a doc comment, a named `activeUsers` step, a named
+`finalPricePerUser`, and blank lines between the steps.
+
+### General
 - **The repo must read as if a careful human wrote it.** The user rejects "AI spaghetti":
   no speculative abstractions, no layers without a second caller, no duplicated helpers, no
   dead code left behind. Prefer the obvious, boring implementation.
