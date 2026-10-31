@@ -70,6 +70,7 @@ jobs:
         run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
 
       - name: Set up release signing
+        id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -86,6 +87,7 @@ jobs:
             echo "password=$KEY_PASSWORD"
             echo "storeFile=$keystore"
           } > src-tauri/gen/android/keystore.properties
+          echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Build APK
         # versionCode rises with every run so each APK installs over the last.
@@ -111,8 +113,9 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      # Only a signed APK is published: an unsigned one cannot be installed.
       - name: Publish to a GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.apk.outputs.path }}

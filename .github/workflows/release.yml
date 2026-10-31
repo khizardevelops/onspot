@@ -1,0 +1,129 @@
+# Builds the desktop bundles: Windows (.exe/.msi), macOS (.dmg) and Linux
+# (.deb/.AppImage/.rpm). Push a v* tag to publish them on a GitHub Release, or
+# run the workflow manually from the Actions tab.
+name: Desktop release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun run check
+
+      - name: SPDX headers
+        run: bun run spdx:check
+
+  bundle:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
+          - name: linux
+            os: ubuntu-22.04
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      # A portable baseline for whisper.cpp's ggml (passed through by whisper-rs):
+      # without it ggml is tuned to the build machine's CPU and can crash on others.
+      GGML_NATIVE: 'OFF'
+      # Public OAuth client ids (repository variables, not secrets). Without
+      # them the build still works but Google Drive stays unconfigured.
+      VITE_GOOGLE_CLIENT_ID_DESKTOP: ${{ vars.VITE_GOOGLE_CLIENT_ID_DESKTOP }}
+      VITE_GOOGLE_CLIENT_ID_WEB: ${{ vars.VITE_GOOGLE_CLIENT_ID_WEB }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The French G2P assets are gitignored and needed by the web build.
+      - name: Copy the eSpeak phonemizer into static/
+        shell: bash
+        run: |
+          mkdir -p static/piper-wasm
+          cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: desktop-${{ matrix.name }}
+
+      - name: Install Linux system libraries
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # Tauri runs `beforeBuildCommand` (bun run build) itself.
+      - name: Build the desktop bundle
+        run: bunx tauri build
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find src-tauri/target/release/bundle -type f \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
+            -exec cp {} dist/ \;
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onspot-desktop-${{ matrix.name }}
+          path: dist/*
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish to a GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
