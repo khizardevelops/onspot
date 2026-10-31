@@ -299,3 +299,8 @@ JS floor-spacer measurement with CSS if a reliable dynamic-height solution emerg
 the 44px touch-target/contrast pass, #21 drop the redundant `attempt.translation` field, #23 add
 true list virtualization if `content-visibility` proves insufficient for very long histories,
 #25 container queries, #26 axe-core/Playwright a11y + visual-regression tests.
+- [ ] macOS bundle job fails in release.yml (v0.1.0); investigate when macOS matters.
+- [ ] Linux AppImage aborts with EGL_BAD_PARAMETER on Arch (bundled WebKit); consider dropping it or
+  building it on a newer base; .deb/.rpm work.
+- [ ] Optional: default the web build (GitHub Pages) to Cloud processing, so first visitors are not
+  pointed at the on-device data download.

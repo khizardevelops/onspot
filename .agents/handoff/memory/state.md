@@ -2,6 +2,15 @@
 
 ## Current State
 
+**Released v0.1.0 (2026-11-01):** https://github.com/khizardevelops/onspot/releases/tag/v0.1.0 —
+signed arm64 APK (built locally from the tag, uploaded with `gh release upload`), Linux .deb/.rpm/
+.AppImage and Windows .exe/.msi from release.yml; macOS bundle job failed (not investigated). The CI
+.deb binary runs on Arch with system WebKit; the AppImage aborts here with "Could not create default
+EGL display: EGL_BAD_PARAMETER" (bundled Ubuntu 22.04 WebKit; known Tauri AppImage issue on rolling
+distros), noted in the release. Pages live at https://khizardevelops.github.io/onspot/. Push over
+SSH (`git@github.com:khizardevelops/onspot.git`): the gh token lacks the `workflow` scope, so HTTPS
+pushes of workflow changes are refused. CI was broken by the gitignored model-lab vendor import
+(now an `import.meta.glob`).
 **Published (2026-11-01, user request):** the app builds for GitHub Pages at
 `https://khizardevelops.github.io/onspot/` (`.github/workflows/pages.yml`, on push to main):
 `BASE_PATH=/onspot` (vite.config.ts → SvelteKit `paths.base`, and `__BASE_PATH__` for the
