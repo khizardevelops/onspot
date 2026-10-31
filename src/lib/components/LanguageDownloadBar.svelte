@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { cancelLanguageDownload, languageData } from '#lib/stores/languageData.js';
@@ -12,7 +14,7 @@
 
 {#if show}
 	<div
-		class="download-dock pointer-events-none fixed inset-x-0 bottom-[68px] z-[110] flex justify-center px-3 sm:bottom-5 sm:px-6"
+		class="download-dock pointer-events-none fixed inset-x-0 bottom-[calc(100px+env(safe-area-inset-bottom))] z-[110] flex justify-center px-3 sm:bottom-5 sm:px-6"
 		in:fly={{ y: 12, duration: 160 }}
 		out:fade={{ duration: 100 }}
 	>
@@ -23,7 +25,9 @@
 			</div>
 			<div class="download-body">
 				<div class="flex items-baseline justify-between gap-3">
-					<span class="truncate text-sm font-medium" role="status">Downloading {language?.name ?? 'language'} data</span>
+					<span class="truncate text-sm font-medium" role="status">
+						Downloading {$languageData.downloading || `${language?.name ?? 'language'} data`}
+					</span>
 					<span class="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
 						{Math.round($languageData.progress)}%
 					</span>

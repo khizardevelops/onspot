@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { get, writable } from 'svelte/store';
 import {
 	defaultVoiceOf,
+	getExplanationVoice,
 	getVoice,
 	requireLanguage,
 	type LanguageDefinition,
@@ -18,40 +21,60 @@ import { appSettings } from './settings';
 
 export type LanguageDataStatus = 'checking' | 'missing' | 'downloading' | 'ready' | 'error';
 
+/** Which local engines the learner's current processing choices need. */
+export interface LanguageParts {
+	stt: boolean;
+	voice: boolean;
+	/**
+	 * The English voice that reads explanations on the device, once one is
+	 * chosen. Practice does not wait for it; only explanation audio does.
+	 */
+	explanationVoice: boolean;
+}
+
 export interface LanguageDataState {
 	languageId: string;
 	status: LanguageDataStatus;
-	/** Combined 0–100 progress across STT weights and the selected voice. */
+	/** What a running download is fetching, e.g. "French data and the Piper Ryan (M, US) voice". */
+	downloading: string;
+	/** Combined 0–100 progress across the required local parts. */
 	progress: number;
 	statusText: string;
 	error: string | null;
 	/**
-	 * Bytes still to download, per part, from the last cache check (`null`
-	 * until checked). Languages share assets — every language uses the same
-	 * Whisper weights — so this is usually far less than the full size.
+	 * Bytes still to download for the required parts (`null` until checked).
+	 * A part that is not required is zero, not missing.
 	 */
 	pending: PendingBytes | null;
+	/** What the current processing choices need from the device. */
+	required: LanguageParts;
+	/** Which required parts are already cached. */
+	installed: LanguageParts;
 }
 
 export interface PendingBytes {
-	/** Whisper weights; 0 when another language already downloaded them. */
+	/** Required Whisper weights; 0 when not required or already cached. */
 	stt: number;
-	/** The voice and, for Japanese, its dictionary (only the missing parts). */
+	/** Required voice assets; 0 when not required or already cached. */
 	voice: number;
+	/** The chosen explanation voice; 0 when not chosen or already cached. */
+	explanationVoice: number;
 	/** Extra storage the missing parts will take on this device. */
 	storage: number;
 	/** What downloading the missing parts costs over the network. */
 	transfer: number;
 }
 
-
 const initial: LanguageDataState = {
 	languageId: '',
 	status: 'checking',
+	downloading: '',
 	progress: 0,
 	statusText: '',
 	error: null,
-	pending: null
+	pending: null,
+	required: { stt: false, voice: false, explanationVoice: false },
+	installed: { stt: false, voice: false, explanationVoice: false }
 };
 
 const store = writable<LanguageDataState>({ ...initial });
@@ -63,12 +86,39 @@ let running: Promise<void> | null = null;
 /** Which part of the running download is in flight; Cancel tears down only that worker. */
 let phase: 'stt' | 'voice' | null = null;
 
+/** The local parts the current processing choices require. */
+function requiredParts(): LanguageParts {
+	const settings = get(appSettings);
+	return {
+		stt: settings.sttMode === 'local',
+		voice: settings.ttsMode === 'local',
+		explanationVoice: settings.ttsMode === 'local' && getExplanationVoice(settings.instructionLanguage, settings.explanationVoice) !== undefined
+	};
+}
+
 /**
  * Chosen voice for a language: the user's saved voice when it belongs to that
  * language, otherwise the registry default (which is the listening-test winner).
  */
 function preferredVoice(language: LanguageDefinition): LanguageVoice | undefined {
 	return getVoice(language.id, get(appSettings).ttsVoice) ?? defaultVoiceOf(language);
+}
+
+/** The voice the learner chose for explanations in their language of instruction, if any. */
+function chosenExplanationVoice(): LanguageVoice | undefined {
+	const settings = get(appSettings);
+	return getExplanationVoice(settings.instructionLanguage, settings.explanationVoice);
+}
+
+/** What a download fetches, in words: the language's own data, the explanation voice, or both. */
+function downloadContents(language: LanguageDefinition, languageParts: boolean, explanationVoice?: LanguageVoice): string {
+	const parts = [languageParts ? `${language.name} data` : '', explanationVoice ? `the ${explanationVoice.name} voice` : ''];
+	return parts.filter(Boolean).join(' and ') || `${language.name} data`;
+}
+
+/** True when every required part is cached. */
+function allInstalled(installed: LanguageParts): boolean {
+	return installed.stt && installed.voice && installed.explanationVoice;
 }
 
 /** The voice's downloads that are not cached yet (a Japanese voice also needs its dictionary). */
@@ -83,16 +133,44 @@ async function missingVoice(voice: LanguageVoice | undefined): Promise<{ bytes: 
 	);
 }
 
-/** What is still missing for a language, per part. */
-async function pendingBytes(language: LanguageDefinition): Promise<PendingBytes> {
-	const [stt, voice] = await Promise.all([
-		missingLocalSttBytes(language.id),
-		missingVoice(preferredVoice(language))
-	]);
-	return { stt, voice: voice.bytes, storage: stt + voice.bytes, transfer: stt + voice.transfer };
+interface LanguageCheck {
+	required: LanguageParts;
+	installed: LanguageParts;
+	pending: PendingBytes;
 }
 
-/** Re-reads the cache state for a language and updates the store. */
+/**
+ * Checks only the parts the current processing choices need. Cloud-only (or
+ * local-correction-only) setups therefore need no speech downloads at all.
+ */
+async function checkLanguage(language: LanguageDefinition): Promise<LanguageCheck> {
+	const required = requiredParts();
+	const nothing = { bytes: 0, transfer: 0 };
+
+	const [sttMissing, voiceMissing, explanationMissing] = await Promise.all([
+		required.stt ? missingLocalSttBytes(language.id) : Promise.resolve(0),
+		required.voice ? missingVoice(preferredVoice(language)) : Promise.resolve(nothing),
+		required.explanationVoice ? missingVoice(chosenExplanationVoice()) : Promise.resolve(nothing)
+	]);
+
+	return {
+		required,
+		installed: {
+			stt: !required.stt || sttMissing === 0,
+			voice: !required.voice || voiceMissing.bytes === 0,
+			explanationVoice: !required.explanationVoice || explanationMissing.bytes === 0
+		},
+		pending: {
+			stt: sttMissing,
+			voice: voiceMissing.bytes,
+			explanationVoice: explanationMissing.bytes,
+			storage: sttMissing + voiceMissing.bytes + explanationMissing.bytes,
+			transfer: sttMissing + voiceMissing.transfer + explanationMissing.transfer
+		}
+	};
+}
+
+/** Re-reads the required cache state for a language and updates the store. */
 export async function refreshLanguageData(
 	languageId: string = get(appSettings).targetLanguage
 ): Promise<void> {
@@ -101,7 +179,7 @@ export async function refreshLanguageData(
 	if (running) return;
 	const language = languageId ? requireLanguage(languageId) : undefined;
 	if (!language) {
-		store.set({ ...initial, status: 'missing' });
+		store.set({ ...initial, status: 'missing', required: requiredParts() });
 		return;
 	}
 
@@ -112,20 +190,30 @@ export async function refreshLanguageData(
 		status: 'checking',
 		progress: 0,
 		statusText: 'Checking installed language data…',
-		error: null
+		error: null,
+		required: requiredParts(),
+		installed: { stt: false, voice: false, explanationVoice: false }
 	}));
 
-	const pending = await pendingBytes(language);
+	const check = await checkLanguage(language);
 	if (token !== checkToken) return;
 
-	const ready = pending.stt === 0 && pending.voice === 0;
+	const ready = allInstalled(check.installed);
+	const nothingRequired = !check.required.stt && !check.required.voice;
+
 	store.update((state) => ({
 		...state,
 		status: ready ? 'ready' : 'missing',
 		progress: ready ? 100 : 0,
-		statusText: ready ? 'Language data installed.' : '',
+		statusText: ready
+			? nothingRequired
+				? 'No local speech data is needed for this setup.'
+				: 'Language data installed.'
+			: '',
 		error: null,
-		pending
+		pending: check.pending,
+		required: check.required,
+		installed: check.installed
 	}));
 }
 
@@ -134,16 +222,22 @@ export function isLanguageDataReady(): boolean {
 }
 
 /**
- * Downloads and initializes the approved STT weights and TTS voice for a
- * language, reporting one combined progress figure. In-flight work is shared:
- * a second call while downloading returns the same promise.
+ * Downloads and initializes only the local parts the current processing choices
+ * need, reporting one combined progress figure. In-flight work is shared.
  */
 export function downloadLanguageData(languageId?: string): Promise<void> {
 	if (running) return running;
 	const language = requireLanguage(languageId ?? get(appSettings).targetLanguage);
+	const required = requiredParts();
 	const voice = preferredVoice(language);
-	if (!voice) {
-		// Callers fire and forget (`void download…`); report in the store, never throw.
+	const explanationVoice = chosenExplanationVoice();
+
+	if (!required.stt && !required.voice) {
+		void refreshLanguageData(language.id);
+		return Promise.resolve();
+	}
+
+	if (required.voice && !voice) {
 		store.update((state) => ({
 			...state,
 			languageId: language.id,
@@ -158,41 +252,80 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 	store.set({
 		languageId: language.id,
 		status: 'downloading',
+		downloading: `${language.name} data`,
 		progress: 0,
 		statusText: `Preparing ${language.name} data…`,
 		error: null,
-		pending: known.languageId === language.id ? known.pending : null
+		pending: known.languageId === language.id ? known.pending : null,
+		required,
+		installed: { stt: !required.stt, voice: !required.voice, explanationVoice: !required.explanationVoice }
 	});
 
 	running = (async () => {
 		try {
-			// Weight the bar by what is actually missing: when the Whisper weights
-			// are already cached (another language uses the same ones), loading
-			// them takes seconds and the voice is nearly the whole download.
-			const pending = await pendingBytes(language);
+			const check = await checkLanguage(language);
 			if (token !== jobToken) return;
-			const missing = pending.stt + pending.voice;
-			const sttShare = missing > 0 ? (pending.stt / missing) * 100 : 50;
-			const voiceShare = 100 - sttShare;
-			phase = 'stt';
-			await prepareLocalStt(language.id, (progress) => {
-				if (token !== jobToken) return;
-				store.update((state) => ({
-					...state,
-					progress: (progress.progress / 100) * sttShare,
-					statusText: progress.status || `Downloading ${language.name} speech model…`
-				}));
-			});
+
+			if (allInstalled(check.installed)) {
+				running = null;
+				phase = null;
+				await refreshLanguageData(language.id);
+				return;
+			}
+
+			const missingStt = required.stt ? check.pending.stt : 0;
+			const missingVoice = required.voice ? check.pending.voice : 0;
+			const missingExplanation = required.explanationVoice ? check.pending.explanationVoice : 0;
+			const missing = missingStt + missingVoice + missingExplanation;
+			store.update((state) => ({
+				...state,
+				downloading: downloadContents(language, missingStt + missingVoice > 0, missingExplanation > 0 ? explanationVoice : undefined)
+			}));
+			const sttShare = missing > 0 ? (missingStt / missing) * 100 : 0;
+			const voiceShare = missing > 0 ? (missingVoice / missing) * 100 : 0;
+			const explanationShare = missing > 0 ? (missingExplanation / missing) * 100 : 0;
+
+			if (required.stt && missingStt > 0) {
+				phase = 'stt';
+				await prepareLocalStt(language.id, (progress) => {
+					if (token !== jobToken) return;
+					store.update((state) => ({
+						...state,
+						progress: (progress.progress / 100) * sttShare,
+						statusText: progress.status || `Downloading ${language.name} speech model…`
+					}));
+				});
+			}
+
 			if (token !== jobToken) return;
-			phase = 'voice';
-			await preloadLocalVoice(voice.id, (progress) => {
-				if (token !== jobToken) return;
-				store.update((state) => ({
-					...state,
-					progress: sttShare + (progress.progress / 100) * voiceShare,
-					statusText: progress.status || `Downloading ${language.name} voice…`
-				}));
-			});
+
+			// Only what is missing: loading an installed voice here would only cost time.
+			if (required.voice && voice && missingVoice > 0) {
+				phase = 'voice';
+				await preloadLocalVoice(voice.id, (progress) => {
+					if (token !== jobToken) return;
+					store.update((state) => ({
+						...state,
+						progress: sttShare + (progress.progress / 100) * voiceShare,
+						statusText: progress.status || `Downloading ${language.name} voice…`
+					}));
+				});
+			}
+
+			if (token !== jobToken) return;
+
+			if (required.explanationVoice && explanationVoice && missingExplanation > 0) {
+				phase = 'voice';
+				await preloadLocalVoice(explanationVoice.id, (progress) => {
+					if (token !== jobToken) return;
+					store.update((state) => ({
+						...state,
+						progress: sttShare + voiceShare + (progress.progress / 100) * explanationShare,
+						statusText: progress.status || `Downloading the ${explanationVoice.name} explanation voice…`
+					}));
+				});
+			}
+
 			if (token !== jobToken) return;
 			running = null;
 			phase = null;
@@ -240,12 +373,12 @@ export function cancelLanguageDownload(): void {
 }
 
 /**
- * Re-checks the cache whenever the studied language or chosen voice changes, so
- * the installed/missing status follows Settings from anywhere in the app.
+ * Re-checks the cache whenever the studied language, voice or processing choice
+ * changes, so the installed/missing status follows Settings from anywhere.
  */
 let knownSelection = '';
 appSettings.subscribe((settings) => {
-	const selection = `${settings.targetLanguage}:${settings.ttsVoice}`;
+	const selection = `${settings.targetLanguage}:${settings.instructionLanguage}:${settings.ttsVoice}:${settings.explanationVoice}:${settings.sttMode}:${settings.ttsMode}`;
 	if (selection === knownSelection) return;
 	knownSelection = selection;
 	if (settings.targetLanguage) void refreshLanguageData(settings.targetLanguage);

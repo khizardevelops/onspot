@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! The commands the webview calls as `plugin:speech|<name>`.
 //! The TypeScript side is `src/lib/speech/stt/native/nativeEngine.ts`.
 

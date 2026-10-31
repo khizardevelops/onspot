@@ -10,37 +10,54 @@ with the lab UI but its audio handling is reused in the STT adapter; its details
 prompt (seeded or generated)
       |
       v
-MediaRecorder → audio Blob (webm/opus)          workers/ (Phase 2)
+MediaRecorder → Opus 24 kbps mono (webm; ogg/mp4 fallback, speech/audioFormat.ts)
       |                  |
       |                  +--> decode → 16 kHz mono Float32Array
       v
 transcribe
   +-- local:  @huggingface/transformers whisper-small q4 (WASM)
   |           sequential 30s windows seeking to the last timestamp
-  +-- cloud:  Groq whisper-large-v3-turbo (BYOK)
+  +-- cloud:  Groq whisper-large-v3-turbo (BYOK); uploads the Opus recording itself
+  |           (~2.4 KB/s; WAV from the PCM only for a container Groq does not take)
       |
       v
 transcript ──────────────────────────────► Attempt row (DB)
       |
       v
 LLM evaluation (OpenAI-compatible, BYOK: Groq / DeepSeek)
-  system prompt → strict JSON:
-    { correctedText, translations: { idiomatic, idiomaticVariants[], literal, wordForWord },
+  system prompt = fixed schema + rules per language (prefix-cacheable: Groq bills cached input at half
+  price and leaves it out of rate limits; DeepSeek far lower); level, tone, prompt and transcript are
+  in the user message → strict JSON:
+    { spokenLanguage, correctedText (faithful "did you mean"),
+      explanation (instruction language, <wrong>/<right>/<key> tags),
+      followUp: { question (target language), translation (instruction language) },
+      translations: { idiomatic, idiomaticVariants[], literal, wordForWord }   ← only when Settings
+                     shows translations after every take; otherwise null, fetched on demand,
       corrections: [{ category, severity, label,
       original, replacement, explanation, speakText, examStatus,
-      formalAlternatives }] }
+      formalAlternatives }], vocabulary[], connectors[] }
       |
       v
-Correction rows (DB) + correctedText on the Attempt
+Correction rows (DB) + correctedText + explanation on the Attempt
       |
       v
-TTS feedback
-  +-- local: Piper worker (Tom / UPMC / Siwis) via onnxruntime-web + French G2P
+Attempt card: three tracks, each text + TTS
+  You said (transcript) · Did you mean to say? (correctedText) · Explanation (tags stripped)
+  +-- local: Piper worker (Tom / UPMC / Siwis / piper-plus JA) via onnxruntime-web + G2P
   |           one resident voice, transferred PCM, release after 90s idle
-  +-- cloud: OpenAI/Groq TTS (BYOK)
+  |           explanation: two voices (English voice + target voice), see explanationSpeech.ts;
+  |           every clip of a take is prepared ahead, in priority order (on-device only)
+  +-- cloud: ElevenLabs (opus_48000_32), or an OpenAI-compatible /audio/speech server (BYOK,
+  |           response_format opus; WAV fallback remembered per server)
+  |    tts/service.ts: one pending request per clip (concurrent callers share it), plays at once,
+  |    stores in the background as Opus (cloud as it arrives; Piper/WAV encoded with Mediabunny
+  |    over WebCodecs, lazily loaded; WAV kept where Opus encoding is unavailable)
       |
       v
-read corrected phrasing back (with EQ/loudness pass on Tom)
+explanation auto-plays after the take (correct version when it cannot be spoken)
+
+every cloud call ─► usage ledger (localStorage: tokens, audio s, characters,
+                    rate-limit headers when readable, refusal limits) ─► Settings → Usage
 
 audio blob ──────────────────────────────► AudioAsset row (DB, base64)
 

@@ -1,7 +1,11 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
+	import { pageHref } from '#lib/pages.js';
 	import { quickCollapse } from '#lib/neo.js';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import AppHeader from '#lib/components/AppHeader.svelte';
 	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
 	import { importLegacyJsonBackup } from '#lib/utils/export.js';
 	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
@@ -244,7 +248,7 @@
 	async function open(session: Session) {
 		try {
 			await openSession(session.id);
-			await goto('/');
+			await goto(pageHref('/'));
 		} catch (error) {
 			failed('Opening the session', error);
 		}
@@ -299,192 +303,192 @@
 
 <svelte:head><title>History · onspot</title></svelte:head>
 
-<div class="h-full overflow-y-auto">
-	<div class="mx-auto max-w-3xl px-4 py-10 sm:px-8">
-		<div class="mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-			<div>
-				<h1 class="font-serif text-2xl font-medium">History</h1>
-				<p class="text-sm text-muted-foreground">Your past practice sessions, by day.</p>
-			</div>
-			<div class="history-tools flex w-full items-center gap-2 sm:w-auto">
-				<NeoInput
-					class="history-search"
-					containerProps={{ class: 'history-search-field' }}
-					placeholder="Search title or transcript…"
-					aria-label="Search sessions"
-					bind:value={query}
-					rounded
-					elevation={-2}
-					clearable
-				>
-					{#snippet before()}<Search class="size-4 text-muted-foreground" />{/snippet}
-				</NeoInput>
-				<PopMenu items={sortItems} placement="bottom-end" onSelect={(item) => setSortOrder(String(item.value))} rounded>
+<div class="flex h-full flex-col">
+	<AppHeader title="History" />
+	<div class="min-h-0 flex-1 overflow-y-auto">
+		<div class="mx-auto max-w-3xl px-4 py-6 sm:px-8 sm:py-8">
+			<div class="mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+				<p class="self-center text-sm text-muted-foreground">Your past practice sessions, by day.</p>
+				<div class="history-tools flex w-full items-center gap-2 sm:w-auto">
+					<NeoInput
+						class="history-search"
+						containerProps={{ class: 'history-search-field' }}
+						placeholder="Search title or transcript…"
+						aria-label="Search sessions"
+						bind:value={query}
+						rounded
+						elevation={-2}
+						clearable
+					>
+						{#snippet before()}<Search class="size-4 text-muted-foreground" />{/snippet}
+					</NeoInput>
+					<PopMenu items={sortItems} placement="bottom-end" onSelect={(item) => setSortOrder(String(item.value))} rounded>
+						<NeoButton
+							class="history-tool"
+							rounded
+							elevation={2}
+							aria-label={`Sort by date, ${sortOrder === 'newest' ? 'newest' : 'oldest'} first`}
+						>
+							{#snippet icon()}
+								{#if sortOrder === 'newest'}<CalendarArrowDown class="size-4" />{:else}<CalendarArrowUp class="size-4" />{/if}
+							{/snippet}
+							<span class="hidden sm:inline">{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</span>
+						</NeoButton>
+					</PopMenu>
 					<NeoButton
-						class="history-tool"
+						class="history-tool options-toggle relative {optionsOpen ? 'is-selected' : ''}"
+						toggle
+						bind:checked={optionsOpen}
 						rounded
 						elevation={2}
-						aria-label={`Sort by date, ${sortOrder === 'newest' ? 'newest' : 'oldest'} first`}
+						aria-label="Search options"
+						aria-expanded={optionsOpen}
+						aria-controls="search-options"
+						title="Search options"
 					>
-						{#snippet icon()}
-							{#if sortOrder === 'newest'}<CalendarArrowDown class="size-4" />{:else}<CalendarArrowUp class="size-4" />{/if}
-						{/snippet}
-						<span class="hidden sm:inline">{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</span>
-					</NeoButton>
-				</PopMenu>
-				<NeoButton
-					class="history-tool options-toggle relative {optionsOpen ? 'is-selected' : ''}"
-					toggle
-					bind:checked={optionsOpen}
-					rounded
-					elevation={2}
-					aria-label="Search options"
-					aria-expanded={optionsOpen}
-					aria-controls="search-options"
-					title="Search options"
-				>
-					{#snippet icon()}<SlidersHorizontal class="size-4" />{/snippet}
-					{#if optionsActive && !optionsOpen}
-						<span class="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary" aria-hidden="true"></span>
-					{/if}
-				</NeoButton>
-			</div>
-		</div>
-
-		<NeoCollapse transition={quickCollapse} id="search-options" bind:open={optionsOpen}>
-			<div class="flex flex-wrap items-center justify-end gap-2 px-1 pt-1 pb-2">
-				<NeoButton class="search-option" toggle bind:checked={regex} aria-pressed={regex} rounded elevation={1}>
-					{#snippet icon()}<Regex class="size-4" />{/snippet}
-					Regex
-				</NeoButton>
-				<NeoButton class="search-option" toggle bind:checked={caseSensitive} aria-pressed={caseSensitive} rounded elevation={1}>
-					{#snippet icon()}<CaseSensitive class="size-4" />{/snippet}
-					Case sensitive
-				</NeoButton>
-			</div>
-		</NeoCollapse>
-
-		<p class="mt-1 mb-5 min-h-4 text-right text-xs {result.error ? 'text-[var(--error)]' : 'text-muted-foreground'}" aria-live="polite">
-			{#if query.trim()}
-				{result.error
-					? `Invalid regex — ${result.error}`
-					: `${result.sessions.length} of ${sessions.length} session${sessions.length === 1 ? '' : 's'} match`}
-			{/if}
-		</p>
-
-		{#if loading}
-			<p class="text-sm text-muted-foreground">Loading…</p>
-		{:else if loadError}
-			<div class="rounded-lg border border-[var(--error)]/35 bg-[var(--error-soft)] p-8 text-center">
-				<p class="font-serif text-lg text-[var(--error)]">History could not be loaded</p>
-				<p class="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">{loadError}</p>
-				<NeoButton class="mt-4" rounded elevation={2} onclick={() => void load()}>Try again</NeoButton>
-			</div>
-		{:else if sessions.length === 0}
-			<div class="rounded-lg border border-dashed p-10 text-center">
-				<p class="font-serif text-lg">No sessions in this device storage</p>
-				<p class="mt-1 text-sm text-muted-foreground">
-					Restore an existing onspot backup here, or start from <a class="text-[var(--brand)] underline" href="/">Practice</a>.
-				</p>
-				<div class="mt-4 flex flex-wrap items-center justify-center gap-2">
-					<RestoreDatabaseButton label="Restore .sqlite backup" onrestored={() => load()} />
-					<input bind:this={restoreInput} class="sr-only" type="file" accept="application/json,.json" onchange={restoreBackup} />
-					<NeoButton rounded elevation={2} onclick={() => restoreInput?.click()} disabled={restoring} loading={restoring}>
-						{#snippet icon()}<Upload class="size-4" />{/snippet}
-						{restoring ? 'Restoring…' : 'Restore .json backup'}
+						{#snippet icon()}<SlidersHorizontal class="size-4" />{/snippet}
+						{#if optionsActive && !optionsOpen}
+							<span class="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary" aria-hidden="true"></span>
+						{/if}
 					</NeoButton>
 				</div>
 			</div>
-		{:else if result.error}
-			<div class="rounded-lg border border-dashed p-10 text-center">
-				<p class="font-serif text-lg text-[var(--error)]">Invalid regular expression</p>
-				<p class="mt-1 text-sm text-muted-foreground">{result.error}</p>
-			</div>
-		{:else if result.sessions.length === 0}
-			<div class="rounded-lg border border-dashed p-10 text-center">
-				<p class="font-serif text-lg">No matches</p>
-				<p class="mt-1 text-sm text-muted-foreground">No session or transcript contains that.</p>
-			</div>
-		{:else}
-			<div class="flex flex-col gap-8 pb-8">
-				{#each groups as group (group.day)}
-					<section aria-labelledby={`day-${group.day}`}>
-						<h2 id={`day-${group.day}`} class="day-heading mb-3 flex items-center gap-3 px-1">
-							<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">{group.label}</span>
-							<NeoDivider flex="1" aria-hidden="true" />
-							<span class="text-xs text-faint tabular-nums">
-								{group.sessions.length} session{group.sessions.length === 1 ? '' : 's'}
-							</span>
-						</h2>
-						<div class="session-list flex flex-col gap-2.5">
-							{#each group.sessions as session (session.id)}
-								{@const attempts = attemptsFor(session)}
-								{@const snippet = snippetHtml(session)}
-								<NeoCard
-									class="session-card"
-									glass
-									rounded="1rem"
-									elevation={2}
-									hover={1}
-									spacing="1rem 1.25rem"
-								>
-									<button type="button" class="session-open min-w-0 flex-1 text-left" onclick={() => open(session)}>
-										<p class="w-full truncate font-serif text-base font-medium">{session.title}</p>
-										<p class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-											<span class="tabular-nums">{timeOfDay.format(new Date(session.createdAt))}</span>
-											<span class="text-faint">·</span>
-											<span>{attempts.length} take{attempts.length === 1 ? '' : 's'}</span>
-											<span class="text-faint">·</span>
-											<span class="tabular-nums">{fmtDuration(attempts.reduce((sum, attempt) => sum + attempt.durationSec, 0))}</span>
-											<NeoPill
-												class="mode-pill ml-1"
-												size="small"
-												elevation={0}
-												tinted
-												color={session.mode === 'exam' ? 'error' : 'primary'}
-											>
-												{session.mode === 'exam' ? 'Exam' : 'Casual'}
-											</NeoPill>
-										</p>
-										{#if snippet}
-											<p class="mt-1 truncate font-serif text-[0.8125rem] text-muted-foreground">
-												{@html snippet}
+
+			<NeoCollapse transition={quickCollapse} id="search-options" bind:open={optionsOpen}>
+				<div class="flex flex-wrap items-center justify-end gap-2 px-1 pt-1 pb-2">
+					<NeoButton class="search-option" toggle bind:checked={regex} aria-pressed={regex} rounded elevation={1}>
+						{#snippet icon()}<Regex class="size-4" />{/snippet}
+						Regex
+					</NeoButton>
+					<NeoButton class="search-option" toggle bind:checked={caseSensitive} aria-pressed={caseSensitive} rounded elevation={1}>
+						{#snippet icon()}<CaseSensitive class="size-4" />{/snippet}
+						Case sensitive
+					</NeoButton>
+				</div>
+			</NeoCollapse>
+
+			<p class="mt-1 mb-5 min-h-4 text-right text-xs {result.error ? 'text-[var(--error)]' : 'text-muted-foreground'}" aria-live="polite">
+				{#if query.trim()}
+					{result.error
+						? `Invalid regex — ${result.error}`
+						: `${result.sessions.length} of ${sessions.length} session${sessions.length === 1 ? '' : 's'} match`}
+				{/if}
+			</p>
+
+			{#if loading}
+				<p class="text-sm text-muted-foreground">Loading…</p>
+			{:else if loadError}
+				<div class="rounded-lg border border-[var(--error)]/35 bg-[var(--error-soft)] p-8 text-center">
+					<p class="font-serif text-lg text-[var(--error)]">History could not be loaded</p>
+					<p class="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">{loadError}</p>
+					<NeoButton class="mt-4" rounded elevation={2} onclick={() => void load()}>Try again</NeoButton>
+				</div>
+			{:else if sessions.length === 0}
+				<div class="rounded-lg border border-dashed p-10 text-center">
+					<p class="font-serif text-lg">No sessions in this device storage</p>
+					<p class="mt-1 text-sm text-muted-foreground">
+						Restore an existing onspot backup here, or start from <a class="text-[var(--brand)] underline" href={pageHref('/')}>Practice</a>.
+					</p>
+					<div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+						<RestoreDatabaseButton label="Restore .sqlite backup" onrestored={() => load()} />
+						<input bind:this={restoreInput} class="sr-only" type="file" accept="application/json,.json" onchange={restoreBackup} />
+						<NeoButton rounded elevation={2} onclick={() => restoreInput?.click()} disabled={restoring} loading={restoring}>
+							{#snippet icon()}<Upload class="size-4" />{/snippet}
+							{restoring ? 'Restoring…' : 'Restore .json backup'}
+						</NeoButton>
+					</div>
+				</div>
+			{:else if result.error}
+				<div class="rounded-lg border border-dashed p-10 text-center">
+					<p class="font-serif text-lg text-[var(--error)]">Invalid regular expression</p>
+					<p class="mt-1 text-sm text-muted-foreground">{result.error}</p>
+				</div>
+			{:else if result.sessions.length === 0}
+				<div class="rounded-lg border border-dashed p-10 text-center">
+					<p class="font-serif text-lg">No matches</p>
+					<p class="mt-1 text-sm text-muted-foreground">No session or transcript contains that.</p>
+				</div>
+			{:else}
+				<div class="flex flex-col gap-8 pb-8">
+					{#each groups as group (group.day)}
+						<section aria-labelledby={`day-${group.day}`}>
+							<h2 id={`day-${group.day}`} class="day-heading mb-3 flex items-center gap-3 px-1">
+								<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">{group.label}</span>
+								<NeoDivider flex="1" aria-hidden="true" />
+								<span class="text-xs text-faint tabular-nums">
+									{group.sessions.length} session{group.sessions.length === 1 ? '' : 's'}
+								</span>
+							</h2>
+							<div class="session-list flex flex-col gap-2.5">
+								{#each group.sessions as session (session.id)}
+									{@const attempts = attemptsFor(session)}
+									{@const snippet = snippetHtml(session)}
+									<NeoCard
+										class="session-card"
+										glass
+										rounded="1rem"
+										elevation={2}
+										hover={1}
+										spacing="1rem 1.25rem"
+									>
+										<button type="button" class="session-open min-w-0 flex-1 text-left" onclick={() => open(session)}>
+											<p class="w-full truncate font-serif text-base font-medium">{session.title}</p>
+											<p class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+												<span class="tabular-nums">{timeOfDay.format(new Date(session.createdAt))}</span>
+												<span class="text-faint">·</span>
+												<span>{attempts.length} take{attempts.length === 1 ? '' : 's'}</span>
+												<span class="text-faint">·</span>
+												<span class="tabular-nums">{fmtDuration(attempts.reduce((sum, attempt) => sum + attempt.durationSec, 0))}</span>
+												<NeoPill
+													class="mode-pill ml-1"
+													size="small"
+													elevation={0}
+													tinted
+													color={session.mode === 'exam' ? 'error' : 'primary'}
+												>
+													{session.mode === 'exam' ? 'Exam' : 'Casual'}
+												</NeoPill>
 											</p>
-										{/if}
-									</button>
-									<div class="flex shrink-0 items-center gap-0.5">
-										<NeoButton
-											class="session-action"
-											text
-											rounded
-											aria-label={`Replay last recording of ${session.title}`}
-											title="Replay last recording"
-											onclick={() => replay(session)}
-										>
-											{#snippet icon()}<Play class="size-3.5" />{/snippet}
-										</NeoButton>
-										<NeoButton class="session-action" text rounded aria-label={`Rename ${session.title}`} title="Rename" onclick={() => rename(session)}>
-											{#snippet icon()}<Pencil class="size-3.5" />{/snippet}
-										</NeoButton>
-										<NeoButton
-											class="session-action"
-											text
-											rounded
-											color="error"
-											aria-label={`Delete ${session.title}`}
-											title="Delete"
-											onclick={() => remove(session)}
-										>
-											{#snippet icon()}<Trash2 class="size-3.5" />{/snippet}
-										</NeoButton>
-									</div>
-								</NeoCard>
-							{/each}
-						</div>
-					</section>
-				{/each}
-			</div>
-		{/if}
+											{#if snippet}
+												<p class="mt-1 truncate font-serif text-[0.8125rem] text-muted-foreground">
+													{@html snippet}
+												</p>
+											{/if}
+										</button>
+										<div class="flex shrink-0 items-center gap-0.5">
+											<NeoButton
+												class="session-action"
+												text
+												rounded
+												aria-label={`Replay last recording of ${session.title}`}
+												title="Replay last recording"
+												onclick={() => replay(session)}
+											>
+												{#snippet icon()}<Play class="size-3.5" />{/snippet}
+											</NeoButton>
+											<NeoButton class="session-action" text rounded aria-label={`Rename ${session.title}`} title="Rename" onclick={() => rename(session)}>
+												{#snippet icon()}<Pencil class="size-3.5" />{/snippet}
+											</NeoButton>
+											<NeoButton
+												class="session-action"
+												text
+												rounded
+												color="error"
+												aria-label={`Delete ${session.title}`}
+												title="Delete"
+												onclick={() => remove(session)}
+											>
+												{#snippet icon()}<Trash2 class="size-3.5" />{/snippet}
+											</NeoButton>
+										</div>
+									</NeoCard>
+								{/each}
+							</div>
+						</section>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
 </div>
 

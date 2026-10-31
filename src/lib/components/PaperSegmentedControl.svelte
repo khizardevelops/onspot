@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
 
@@ -108,7 +110,7 @@
 		.segmented :global(.neo-tab .neo-button.segmented-option) { padding-inline: 9px; }
 	}
 	@media (pointer: coarse) {
-		/* A fingertip-sized key inside the track. */
-		.segmented { --segment-height: 44px; }
+		/* A fingertip-sized key inside the track (the app's touch floor, see app.css). */
+		.segmented { --segment-height: var(--touch-target, 36px); }
 	}
 </style>

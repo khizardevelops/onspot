@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Supported-language registry.
  *
@@ -141,6 +143,8 @@ export interface LanguageVoice {
 	espeakVoice: string;
 	/** piper-plus only: the `language_id_map` key the voice is driven with, e.g. `ja`. */
 	modelLanguage?: string;
+	/** Path inside `rhasspy/piper-voices` of a short recording, to audition the voice without downloading it. */
+	samplePath?: string;
 	/** `null` leaves the raw model output untouched. */
 	processing: AudioProcessingProfile | null;
 	approval: LanguageApproval;
@@ -169,8 +173,6 @@ export interface LanguageDefinition {
 	name: string;
 	/** Endonym shown under the English name, e.g. `Français`. */
 	nativeName: string;
-	/** Language the learner's translations are written in. */
-	translationTarget: string;
 	approval: LanguageApproval;
 	stt: LanguageStt;
 	voices: LanguageVoice[];
@@ -202,7 +204,6 @@ const FRENCH: LanguageDefinition = {
 	writing: 'spaced',
 	name: 'French',
 	nativeName: 'Français',
-	translationTarget: 'English',
 	approval: {
 		status: 'approved',
 		by: 'Human WER review + listening test (model lab)',
@@ -323,7 +324,6 @@ const JAPANESE: LanguageDefinition = {
 	writing: 'unspaced',
 	name: 'Japanese',
 	nativeName: '日本語',
-	translationTarget: 'English',
 	approval: JAPANESE_PENDING,
 	stt: {
 		models: WHISPER_SMALL,
@@ -392,6 +392,112 @@ const JAPANESE: LanguageDefinition = {
 
 /** Every language that has ever been declared, approved or not. */
 export const LANGUAGES: readonly LanguageDefinition[] = [FRENCH, JAPANESE];
+
+/**
+ * A language the app teaches in: the learner reads and hears explanations,
+ * translations and word meanings in it. The model writes it, so any language
+ * it writes well can be offered; the target language is never one of them for
+ * its own learners.
+ */
+export interface InstructionLanguage {
+	/** ISO 639-1 code, stored in settings. */
+	id: string;
+	/** English name, as the prompts name it, e.g. `Spanish`. */
+	name: string;
+	/** Endonym, e.g. `Español`. */
+	nativeName: string;
+}
+
+export const INSTRUCTION_LANGUAGES: readonly InstructionLanguage[] = [
+	{ id: 'en', name: 'English', nativeName: 'English' },
+	{ id: 'es', name: 'Spanish', nativeName: 'Español' },
+	{ id: 'fr', name: 'French', nativeName: 'Français' },
+	{ id: 'de', name: 'German', nativeName: 'Deutsch' },
+	{ id: 'it', name: 'Italian', nativeName: 'Italiano' },
+	{ id: 'pt', name: 'Portuguese', nativeName: 'Português' },
+	{ id: 'nl', name: 'Dutch', nativeName: 'Nederlands' },
+	{ id: 'pl', name: 'Polish', nativeName: 'Polski' },
+	{ id: 'ru', name: 'Russian', nativeName: 'Русский' },
+	{ id: 'uk', name: 'Ukrainian', nativeName: 'Українська' },
+	{ id: 'tr', name: 'Turkish', nativeName: 'Türkçe' },
+	{ id: 'ar', name: 'Arabic', nativeName: 'العربية' },
+	{ id: 'fa', name: 'Persian', nativeName: 'فارسی' },
+	{ id: 'ur', name: 'Urdu', nativeName: 'اردو' },
+	{ id: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
+	{ id: 'bn', name: 'Bengali', nativeName: 'বাংলা' },
+	{ id: 'zh', name: 'Chinese (Simplified)', nativeName: '简体中文' },
+	{ id: 'ja', name: 'Japanese', nativeName: '日本語' },
+	{ id: 'ko', name: 'Korean', nativeName: '한국어' },
+	{ id: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia' },
+	{ id: 'vi', name: 'Vietnamese', nativeName: 'Tiếng Việt' }
+];
+
+export const DEFAULT_INSTRUCTION_LANGUAGE_ID = 'en';
+
+/** An instruction language by id; English for an unknown one. */
+export function getInstructionLanguage(id: string | null | undefined): InstructionLanguage {
+	return INSTRUCTION_LANGUAGES.find((language) => language.id === id) ?? INSTRUCTION_LANGUAGES[0];
+}
+
+/** The languages a learner of `target` can be taught in: any but the one they study. */
+export function instructionLanguagesFor(target: LanguageDefinition): readonly InstructionLanguage[] {
+	return INSTRUCTION_LANGUAGES.filter((language) => language.id !== target.id);
+}
+
+/** Recorded for the English candidates until the learner picks one by listening. */
+const ENGLISH_PENDING: LanguageApproval = {
+	status: 'candidate',
+	by: 'Not yet tested — the learner auditions the samples in Settings and picks one',
+	at: '2026-11-01',
+	evidence: 'docs/benchmarks/tts.md (English explanation voice, to be added)'
+};
+
+/** A Piper English voice for explanations, with its hosted sample. */
+function englishVoice(id: string, name: string, folder: string, file: string): LanguageVoice {
+	return {
+		id,
+		name,
+		voicePath: `${folder}/${file}.onnx`,
+		samplePath: `${folder}/samples/speaker_0.mp3`,
+		downloadSize: '~63 MB · 22 kHz',
+		downloadBytes: 63_200_000,
+		espeakVoice: file.startsWith('en_GB') ? 'en-gb' : 'en-us',
+		processing: null,
+		approval: ENGLISH_PENDING
+	};
+}
+
+/**
+ * On-device voices for each language of instruction, by its id. An on-device
+ * voice speaks one language, so an explanation is read by two: its
+ * instruction-language text by one of these, its target-language words and
+ * phrases by the learner's chosen target voice. A language without voices
+ * here gets explanation audio from cloud speech only.
+ */
+const EXPLANATION_VOICES: Readonly<Record<string, readonly LanguageVoice[]>> = {
+	en: [
+		englishVoice('piper-en-ryan-medium', 'Piper Ryan (M, US)', 'en/en_US/ryan/medium', 'en_US-ryan-medium'),
+		englishVoice('piper-en-lessac-medium', 'Piper Lessac (F, US)', 'en/en_US/lessac/medium', 'en_US-lessac-medium'),
+		englishVoice('piper-en-alan-medium', 'Piper Alan (M, UK)', 'en/en_GB/alan/medium', 'en_GB-alan-medium'),
+		englishVoice('piper-en-alba-medium', 'Piper Alba (F, UK)', 'en/en_GB/alba/medium', 'en_GB-alba-medium')
+	]
+};
+
+/** Every explanation voice, for the voice worker. */
+export const ALL_EXPLANATION_VOICES: readonly LanguageVoice[] = Object.values(EXPLANATION_VOICES).flat();
+
+/** The on-device voices that speak a language of instruction (none yet for most). */
+export function explanationVoicesFor(instructionLanguageId: string): readonly LanguageVoice[] {
+	return EXPLANATION_VOICES[instructionLanguageId] ?? [];
+}
+
+/** One of an instruction language's voices, by id. */
+export function getExplanationVoice(
+	instructionLanguageId: string,
+	voiceId: string | null | undefined
+): LanguageVoice | undefined {
+	return explanationVoicesFor(instructionLanguageId).find((voice) => voice.id === voiceId);
+}
 
 /** Human-approved languages. */
 export const APPROVED_LANGUAGES: readonly LanguageDefinition[] = LANGUAGES.filter(

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import {
 		audioPlayer,
@@ -18,7 +20,10 @@
 	const rates = [0.75, 1, 1.25];
 
 	const KIND_LABEL: Record<string, string> = {
-		attempt: 'Corrected audio',
+		said: 'You said',
+		corrected: 'Correct version',
+		explanation: 'Explanation',
+		followUp: 'Follow-up question',
 		recording: 'Your recording',
 		correction: 'Correction audio',
 		segment: 'Sentence'

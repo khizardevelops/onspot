@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Splits transcript text into word / space / punctuation tokens with their
  * character offsets, so each word can be clicked and correction ranges can be
@@ -72,6 +74,56 @@ export function tokenizeWords(text: string): TextToken[] {
 		tokens.push({ text: match[0], word: Boolean(match[1]), start, end: start + match[0].length });
 	}
 	return tokens;
+}
+
+/**
+ * True when two texts say the same words, ignoring case, punctuation, spacing
+ * and apostrophe style. The recogniser and the LLM punctuate differently, so a
+ * correct take often comes back with only a full stop, a capital or a curly
+ * apostrophe (j'ai / j’ai) changed.
+ *
+ * @param first One text, e.g. the transcript.
+ * @param second The other, e.g. the correct version.
+ * @returns Whether the word sequences are identical.
+ */
+export function sameWords(first: string, second: string): boolean {
+	const firstWords = comparableWords(first);
+	const secondWords = comparableWords(second);
+
+	return (
+		firstWords.length === secondWords.length &&
+		firstWords.every((word, position) => word === secondWords[position])
+	);
+}
+
+/** The words of a text, lower-cased and with one apostrophe style, for comparisons. */
+function comparableWords(text: string): string[] {
+	return tokenizeWords(text)
+		.filter((token) => token.word)
+		.map((token) => token.text.toLocaleLowerCase().replaceAll('’', "'"));
+}
+
+/**
+ * True when one text's words run, in order and together, inside the other's,
+ * ignoring case, punctuation and apostrophe style: "en tarp" overlaps
+ * "détruit en tarp". Two empty texts do not overlap.
+ *
+ * @param first One text.
+ * @param second The other.
+ * @returns Whether the shorter word sequence is part of the longer one.
+ */
+export function overlappingWords(first: string, second: string): boolean {
+	const firstWords = comparableWords(first);
+	const secondWords = comparableWords(second);
+	const [shorter, longer] = firstWords.length <= secondWords.length ? [firstWords, secondWords] : [secondWords, firstWords];
+	if (shorter.length === 0) return false;
+
+	for (let start = 0; start + shorter.length <= longer.length; start++) {
+		const matchesHere = shorter.every((word, offset) => longer[start + offset] === word);
+		if (matchesHere) return true;
+	}
+
+	return false;
 }
 
 /**

@@ -3,7 +3,8 @@
 Ideas and planned work. Bugs live in [`bugs.md`](./bugs.md).
 
 ## New Ideas
-- Add a section in the app which will be a simple document laying out what onspot will help you improve (spontanious speaking, grammer, etc) and what onspot cannot help you improve (accent, etc) 
+- Add a section in the settings of the app which will be a simple document laying out what onspot will help you improve (spontanious speaking, grammer, etc) and what onspot cannot help you improve (accent, etc) 
+- ability to export a transciption of the a session
 
 ## Optimisation
 
@@ -28,6 +29,7 @@ Ideas and planned work. Bugs live in [`bugs.md`](./bugs.md).
     [`benchmarks/stt.md`](../benchmarks/stt.md). Piper has no GGUF path.
   - Follow-up is the "Find a lighter STT model/runtime" item above.
   - look into google's gemma models, find the smallest llm model that is good in multilingual stuff and being a language tutor
+- Find a better alternative than elevenlabs for tts, something with more credits. something that resets daily
 
 ## UI
 

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import type { Component, Snippet } from 'svelte';
 	import { NeoPassword, type NeoPasswordProps } from '@dvcol/neo-svelte/inputs';

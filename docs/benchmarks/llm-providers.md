@@ -72,8 +72,9 @@ A learner speaks for at most 60s. Conversational French runs ~120–150 wpm and 
 | `MAX_ATTEMPT_WORDS` | 240 | transcripts longer than this are truncated before evaluation |
 | `MAX_EVALUATION_TOKENS` | **3072** | output budget (~12–13 tokens per spoken word) |
 
-Every returned text field mirrors the transcript (`correctedText`, `naturalSpeech`, three
-translation styles), plus a short summary and a correction list. Requesting more than necessary
+Most returned text fields mirror the transcript (`correctedText`, three translation styles), plus
+a spoken explanation capped at 60 words and a correction list. (The separate `naturalSpeech`
+rewrite was dropped on 2026-10-30.) Requesting more than necessary
 is what tripped low output-tokens-per-minute provider limits in the first place.
 
 ## DeepSeek naming

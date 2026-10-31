@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { writable } from 'svelte/store';
 import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import type { RunMode } from '#lib/adapters/db/index.js';
@@ -5,12 +7,18 @@ import type { LlmModelId, LlmProviderId } from '#lib/adapters/llm/index.js';
 import { getProvider } from '#lib/adapters/llm/index.js';
 import {
 	OFFERED_LANGUAGES,
+	DEFAULT_INSTRUCTION_LANGUAGE_ID,
 	DEFAULT_LANGUAGE_ID,
+	INSTRUCTION_LANGUAGES,
 	NEUTRAL_TUNING,
 	getLanguage,
 	getVoice,
 	type VoiceTuning
 } from '#lib/languages/index.js';
+import {
+	DEFAULT_ELEVENLABS_VOICE_ID,
+	RETIRED_DEFAULT_ELEVENLABS_VOICE_ID
+} from '#lib/speech/tts/cloud/elevenLabsVoices.js';
 
 /** How much translation to show under an attempt. */
 export type TranslationMode = 'off' | 'idiomatic' | 'all';
@@ -26,10 +34,24 @@ export interface AppSettings {
 	mode: RunMode;
 	/** Local Whisper or BYOK cloud transcription. */
 	sttMode: 'local' | 'cloud';
-	/** Local Piper or BYOK cloud speech. */
+	/** Local Piper or an OpenAI-compatible speech API. */
 	ttsMode: 'local' | 'cloud';
 	/** Local TTS voice id from the registry. */
 	ttsVoice: string;
+	/** Correction endpoint: a cloud provider or a local OpenAI-compatible server. */
+	correctionMode: 'cloud' | 'local';
+	/** Local correction server, e.g. LM Studio, llama.cpp or Ollama. */
+	localLlmUrl: string;
+	localLlmModel: string;
+	/** Cloud read-back provider. Both stay fully supported. */
+	ttsCloudProvider: 'elevenlabs' | 'openai';
+	/** ElevenLabs model and voice, kept independently of the OpenAI settings. */
+	elevenLabsModel: string;
+	elevenLabsVoiceId: string;
+	/** OpenAI-compatible endpoint, model and voice (also used by local servers). */
+	ttsApiBaseUrl: string;
+	ttsApiModel: string;
+	ttsApiVoice: string;
 	llmProvider: LlmProviderId;
 	/** Selected model for the non-custom providers (enum-backed dropdown). */
 	llmModel: LlmModelId;
@@ -39,7 +61,24 @@ export interface AppSettings {
 	customModel: string;
 	/** How much translation to show under an attempt. */
 	translationMode: TranslationMode;
+	/**
+	 * The on-device voice for the English of explanations (see
+	 * `explanationVoicesFor`); its target-language words keep `ttsVoice`.
+	 * Empty until the learner picks one.
+	 */
+	explanationVoice: string;
 	targetLanguage: string;
+	/**
+	 * The language the learner is taught in (`INSTRUCTION_LANGUAGES`):
+	 * explanations, translations and word meanings are written in it.
+	 */
+	instructionLanguage: string;
+	/** Which BYOC destination the learner configured, if any. */
+	syncProvider: 'off' | 'google-drive' | 'webdav';
+	/** WebDAV collection URL, without the backup path. */
+	webdavUrl: string;
+	/** WebDAV path of the snapshot inside the collection. */
+	webdavPath: string;
 	/**
 	 * Advanced per-voice audio adjustments (volume/EQ) layered on top of each
 	 * voice's approved processing profile. Keyed by voice id; absent = neutral.
@@ -53,14 +92,28 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	sttMode: 'local',
 	ttsMode: 'local',
 	ttsVoice: 'piper-tom-medium',
+	correctionMode: 'cloud',
+	localLlmUrl: 'http://localhost:1234/v1',
+	localLlmModel: '',
+	ttsCloudProvider: 'elevenlabs',
+	elevenLabsModel: 'eleven_multilingual_v2',
+	elevenLabsVoiceId: DEFAULT_ELEVENLABS_VOICE_ID,
+	ttsApiBaseUrl: 'https://api.openai.com/v1',
+	ttsApiModel: 'gpt-4o-mini-tts',
+	ttsApiVoice: 'alloy',
 	llmProvider: 'groq',
 	llmModel: getProvider('groq').defaultModel,
 	customBaseUrl: '',
 	customModel: '',
 	translationMode: 'off',
+	explanationVoice: '',
 	// French is currently the only approved language. A usable default avoids an
 	// indeterminate first boot that otherwise stays at “Checking language data…”.
 	targetLanguage: DEFAULT_LANGUAGE_ID,
+	instructionLanguage: DEFAULT_INSTRUCTION_LANGUAGE_ID,
+	syncProvider: 'off',
+	webdavUrl: '',
+	webdavPath: '/onspot/onspot.sqlite',
 	voiceTunings: {}
 };
 
@@ -75,8 +128,11 @@ const CHOICES = {
 	mode: ['exam', 'casual'],
 	sttMode: ['local', 'cloud'],
 	ttsMode: ['local', 'cloud'],
+	ttsCloudProvider: ['elevenlabs', 'openai'],
+	correctionMode: ['cloud', 'local'],
 	translationMode: ['off', 'idiomatic', 'all'],
-	llmProvider: ['groq', 'deepseek', 'custom']
+	llmProvider: ['groq', 'deepseek', 'custom'],
+	syncProvider: ['off', 'google-drive', 'webdav']
 } as const satisfies Partial<Record<keyof AppSettings, readonly string[]>>;
 const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
 
@@ -84,9 +140,23 @@ const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
 export const settingsReady = writable(false);
 
 let hydrated = false;
+/** Set while hydration writes the loaded snapshot, so it is never persisted back. */
+let applying = false;
+/** Fields changed before hydration finished; they win over the stored values. */
+const pending = new Map<keyof AppSettings, AppSettings[keyof AppSettings]>();
+let known: AppSettings = { ...DEFAULT_SETTINGS };
 
 store.subscribe((value) => {
-	if (!hydrated) return;
+	// Hydration reads the database, which can take a moment on a cold start. A
+	// choice the learner makes before it finishes must not be reverted when the
+	// stored snapshot lands, so remember it and merge it in `initSettings`.
+	if (!hydrated && !applying) {
+		for (const field of Object.keys(value) as (keyof AppSettings)[]) {
+			if (value[field] !== known[field]) pending.set(field, value[field]);
+		}
+	}
+	known = value;
+	if (!hydrated || applying) return;
 	void persist(value);
 });
 
@@ -127,6 +197,12 @@ async function persist(value: AppSettings): Promise<void> {
 
 /** Loads persisted settings from the database. Safe to call once on startup. */
 export async function initSettings(): Promise<void> {
+	// Also runs after a database restore or a cloud download. Suspend
+	// persistence until the loaded values are in the store, so filling in
+	// defaults for fields the restored file lacks cannot write a change back
+	// into the database (and bump the sync revision) during rehydration.
+	hydrated = false;
+
 	const db = await getDatabaseAdapter();
 	const rows = await db.listSettings();
 	const loaded: AppSettings = { ...DEFAULT_SETTINGS };
@@ -155,10 +231,20 @@ export async function initSettings(): Promise<void> {
 	// null state that prevents the data gate from resolving.
 	loaded.targetLanguage = match?.id ?? DEFAULT_LANGUAGE_ID;
 	loaded.voiceTunings = sanitizeTunings(loaded.voiceTunings);
+	// An unknown instruction language, or the studied language itself, falls back to English.
+	const teachable = INSTRUCTION_LANGUAGES.some(
+		(language) => language.id === loaded.instructionLanguage && language.id !== loaded.targetLanguage
+	);
+	if (!teachable) loaded.instructionLanguage = DEFAULT_INSTRUCTION_LANGUAGE_ID;
 	// A voice saved for another language (or removed from the registry) would
 	// leave the Voice select blank and read-backs on an unknown voice.
 	if (!getVoice(loaded.targetLanguage, loaded.ttsVoice)) {
 		loaded.ttsVoice = getLanguage(loaded.targetLanguage)?.defaultVoice ?? DEFAULT_SETTINGS.ttsVoice;
+	}
+	// The old default ElevenLabs voice is now a paid Voice Library voice, so every
+	// take would fail with HTTP 402 on the free plan; it was never a learner's pick.
+	if (loaded.elevenLabsVoiceId === RETIRED_DEFAULT_ELEVENLABS_VOICE_ID) {
+		loaded.elevenLabsVoiceId = DEFAULT_ELEVENLABS_VOICE_ID;
 	}
 	// Choice fields: an unknown value falls back to the default rather than
 	// rendering an empty select.
@@ -167,11 +253,23 @@ export async function initSettings(): Promise<void> {
 			(loaded as unknown as Record<string, unknown>)[field] = DEFAULT_SETTINGS[field];
 		}
 	}
+	// A choice made while the database was being read wins over the stored value.
+	for (const [field, value] of pending) {
+		(loaded as unknown as Record<string, unknown>)[field] = value;
+	}
+	pending.clear();
 	// A settings row from before the model enum existed may name a model this
 	// build no longer ships. The Settings dropdown keeps the unknown id as an
 	// extra option rather than silently discarding the user's choice.
-	hydrated = true;
+	//
+	// Mark hydrated only after the first set. The persistence subscriber must
+	// not write defaults for fields a restored database lacks: that write would
+	// bump the content revision immediately after a cloud download, making the
+	// next sync upload the just-downloaded data again.
+	applying = true;
 	store.set(loaded);
+	applying = false;
+	hydrated = true;
 	settingsReady.set(true);
 }
 

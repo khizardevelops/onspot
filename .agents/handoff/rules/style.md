@@ -80,7 +80,7 @@ Reference: not `function t(u, p) { return u.filter(x => x.a === true).reduce((s,
   slower transitions to controls). A button with its own fill gets `.solid-action`.
 - Selected buttons/toggles/tabs: accent (`--primary`) border via real state — `aria-pressed`,
   `aria-checked`, `aria-current="page"`, or `.is-selected`; controls with their own selection
-  colours add `.custom-selection`. Selected rail key: accent icon + accent border; other rail icons stay neutral ink (never a
+  colours add `.custom-selection`. Current navigation key (top bar): accent icon + accent border; other nav icons stay neutral ink (never a
   teal-tinted colour, or the accent stops meaning "current").
 - Menus: `PopMenu` (not NeoMenu). Tooltips/collapses: spread `quickTooltip`/`quickCollapse`
   from `#lib/neo.js`. Interactions answer in ≤ ~180ms; no hover-delayed opens.
@@ -89,7 +89,7 @@ Reference: not `function t(u, p) { return u.filter(x => x.a === true).reduce((s,
 
 ### Colour hierarchy (tokens in `src/app.css`; one meaning per colour)
 - **Paper** `--background`: the crumpled-paper page (Paper Shaders texture), quietest layer.
-  **Deep paper** `--rail-bg`: the navigation rail.
+  (There is no navigation rail any more; navigation is in each page's `AppHeader`.)
 - **Sheet** `--card`: content cards and the raised pill/knob of segmented controls. Every card
   uses `.sheet`: frosted (`--sheet-frost` translucent colour + backdrop blur, so the crumpled
   paper shows through), `--sheet-line` hairline, top highlight, layered `--shadow-sheet`
@@ -98,15 +98,13 @@ Reference: not `function t(u, p) { return u.filter(x => x.a === true).reduce((s,
   `bg-card` + border box.
 - **Inset** `--surface-2`: panels inside sheets. Never interactive.
 - **Control** `--secondary` / `--control(-hover|-line)` / `--on-control`: every neutral button,
-  toggle, segment track and rail key (sea-glass). shadcn `outline`/`secondary`/`ghost` buttons
+  toggle, segment track and navigation key (sea-glass). shadcn `outline`/`secondary`/`ghost` buttons
   and `Toggle` are mapped to it — don't give a button the paper or sheet colour.
 - **Selected / primary** `--primary`: current page, pressed toggles, the one primary action.
 - **Semantic** `--error`/`--warn`/`--good` (brick, ochre, moss): status only, never decoration.
 - **Ink** `--foreground` > `--muted-foreground` > `--faint`.
-- Rail keys sit in debossed wells; the current page is the one raised (teal) key. The rail is
-  the desk and the page (`<main class="page-sheet paper-surface">`) is a sheet laid on it:
-  rounded left corners, 6px overlap, `--page-edge-shadow`. No stitches/rope on the seam (user
-  rejected them).
+- Navigation keys in the top bar are raised neo keys; the current page is pressed in and teal.
+  The page (`<main class="app-page paper-surface">`) fills the window.
 - Paper grain on a coloured surface: add `.paper-grain` (blend mode per theme); a surface cut
   from the page itself: `.paper-surface`. Relief is shadow only (`--paper-emboss/deboss`),
   never gradients. The texture is soft crumple/wrinkle facets — no heavy grain or dithering.

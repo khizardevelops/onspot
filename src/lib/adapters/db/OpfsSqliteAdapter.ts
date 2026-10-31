@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { SqlDatabaseAdapter } from './SqlDatabaseAdapter';
+import { markContentChanged } from './revision';
 import { DatabaseImportError, type SqlDriver, type SqlStatement, type SqlValue } from './types';
 import SqliteWorker from './sqlite.worker?worker';
 
@@ -114,6 +117,7 @@ export class OpfsSqliteAdapter extends SqlDatabaseAdapter {
 		// The imported schema may predate this build; migrate it before the next
 		// query reaches the restored database.
 		await this.init();
+		markContentChanged();
 	}
 
 	protected async openDriver(): Promise<SqlDriver> {

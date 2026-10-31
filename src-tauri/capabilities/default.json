@@ -9,6 +9,17 @@
     "sql:allow-execute",
     "dialog:allow-save",
     "speech:default",
+    "opener:default",
+    "opener:allow-open-url",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "https://*:*" },
+        { "url": "http://*" },
+        { "url": "http://*:*" }
+      ]
+    },
     {
       "identifier": "fs:allow-write-file",
       "allow": [

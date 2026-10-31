@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	/**
 	 * Model lab: hands-on comparison of model variants, rated by ear/eye.

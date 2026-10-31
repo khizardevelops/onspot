@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// <reference lib="webworker" />
 /**
  * whisper.cpp built with ggml's WebGPU backend (tools/whisper-webgpu), for the

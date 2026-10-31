@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Utility for handling audio playback, decoding, resampling to 16kHz,
  * microphone recording, and pre-set test audio clips.

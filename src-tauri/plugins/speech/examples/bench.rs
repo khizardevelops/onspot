@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Measures the native engine on audio files, outside the app.
 //!
 //!   cargo run --release -p tauri-plugin-speech --example bench -- \

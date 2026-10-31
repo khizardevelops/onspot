@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! whisper.cpp speech-to-text (through whisper-rs).
 //!
 //! One model is loaded at a time and kept until it has been idle for

@@ -60,11 +60,11 @@ them marked "candidate, not yet approved" so the listening test can be run in th
 | Long recordings | Sequential 30 s Whisper windows seeking to the last timestamp (not pipeline chunking) |
 | Text-to-speech runtime | `onnxruntime-web` (WASM), in the lazy TTS Web Worker (`src/lib/speech/tts/piper/tts.worker.ts`); one voice resident, released after 90 s idle |
 | Model storage | Browser Cache API: `transformers-cache` (STT), `onspot-tts-cache` (voices, phonemizers) |
-| Speech cache | Rendered read-backs stored in the local SQLite DB, keyed `tts:<mode>:<language>:<voice>:<tuning>:<hash>` |
+| Speech cache | Rendered read-backs stored in the local SQLite DB, keyed `tts:<mode>:<language>:<voice>:<tuning>:<hash>`; cloud keys also include the provider, endpoint, model and API voice |
 | Audio post-processing | Web Audio chain per voice: 4-band EQ, compressor/limiter, makeup gain, peak normalization (`src/lib/utils/audioEffects.ts`), plus the learner's Advanced EQ |
-| Evaluation & translation | Any OpenAI-compatible LLM the learner configures (BYOK: Groq, DeepSeek, …); prompts in `src/lib/adapters/llm/` |
+| Evaluation & translation | Any OpenAI-compatible LLM the learner configures (BYOK: Groq, DeepSeek, a local LM Studio / llama.cpp / Ollama server, …); prompts in `src/lib/adapters/llm/` |
 | Cloud STT (optional) | Groq `whisper-large-v3-turbo` (BYOK) |
-| Cloud TTS (optional) | OpenAI-compatible speech API (BYOK) |
+| Cloud TTS (optional) | ElevenLabs multilingual voices, or any OpenAI-compatible speech API (BYOK) |
 
 ## French (`fr`) — approved
 

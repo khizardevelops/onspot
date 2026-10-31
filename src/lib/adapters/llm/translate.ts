@@ -1,4 +1,6 @@
-import type { TranslationBreakdownItem, TranslationSet } from '../db/types';
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { TRANSLATION_SET_VERSION, type TranslationBreakdownItem, type TranslationSet } from '../db/types';
 import { chatCompletion } from './client';
 import { extractJson } from './evaluate';
 import {
@@ -11,7 +13,7 @@ import type { ChatMessage, LlmEndpoint } from './types';
 const MAX_TRANSLATION_TOKENS = 2048;
 
 function translationMessages(
-	transcript: string,
+	text: string,
 	translation: TranslationLanguage
 ): ChatMessage[] {
 	return [
@@ -31,9 +33,9 @@ For "wordBreakdown", map the source's primary tokens or morphemes in order to th
 		{
 			role: 'user',
 			content: [
-				`${translation.language} transcript:`,
+				`${translation.language} text:`,
 				'"""',
-				transcript.trim(),
+				text.trim(),
 				'"""'
 			].join('\n')
 		}
@@ -59,14 +61,19 @@ function breakdown(value: unknown): TranslationBreakdownItem[] {
 		.filter((item) => item.source && item.target);
 }
 
-/** Generates the three translation views without re-running attempt feedback. */
+/**
+ * Generates the three translation views without re-running attempt feedback.
+ *
+ * @param text What to translate: the take's correct version ("Did you mean to
+ *   say?"), which is the transcript itself when there was nothing to fix.
+ */
 export async function generateTranslations(
-	transcript: string,
+	text: string,
 	endpoint: LlmEndpoint,
 	translation: TranslationLanguage,
 	signal?: AbortSignal
 ): Promise<TranslationSet> {
-	const raw = await chatCompletion(endpoint, translationMessages(transcript, translation), {
+	const raw = await chatCompletion(endpoint, translationMessages(text, translation), {
 		json: true,
 		temperature: 0.1,
 		maxTokens: MAX_TRANSLATION_TOKENS,
@@ -81,7 +88,7 @@ export async function generateTranslations(
 			: root;
 	const idiomatic = stringField(source.idiomatic);
 	const translations: TranslationSet = {
-		version: 2,
+		version: TRANSLATION_SET_VERSION,
 		idiomatic,
 		idiomaticVariants: stringArray(source.idiomaticVariants, idiomatic),
 		literal: stringField(source.literal),

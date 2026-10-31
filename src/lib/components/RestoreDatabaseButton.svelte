@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { AlertTriangle, Loader2, Upload } from '@lucide/svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';

@@ -125,3 +125,28 @@ as a WER number rather than as a plausible-looking transcript.
   "onspot is already open in another tab or window…"; the layout toasts it and Practice keeps it
   in its error box. Firefox-verified with two tabs; closing the other tab + reload recovers.
 - A real fix is a takeover (BroadcastChannel asks the holder to `pauseVfs()`) — not built.
+
+## Dev server can serve stale modules on the synced mount
+- **Issue**: `.agents`/the project live under `/mnt/data/synced/...`. Vite's watcher can miss
+  writes there, so a long-running `bun run dev` keeps serving the **old** module after an edit.
+  Observed 2026-10-25: the `.svelte` file on disk had the new class, `svelte-check` passed, but the
+  served module still had the old markup — which produced a false failing browser assertion.
+- **Detection**: compare what the server has with the file, e.g.
+  `curl -s http://localhost:5173/src/lib/components/settings/VoicePicker.svelte | grep -c <new-symbol>`
+  against the file. Also check that port 5173 is not still held by an earlier instance
+  (`ss -ltnp 'sport = :5173'`) before starting another.
+- **Resolution**: restart the dev server after layout/markup edits and re-run the browser check
+  before believing a failure. Never diagnose a UI bug from a single dev-server run.
+
+## Browsers cannot read provider rate-limit headers
+- **Issue**: Groq and OpenAI send `x-ratelimit-*` on every response but do not list them in
+  `access-control-expose-headers` (checked 2026-10-30), so `fetch` in the browser build sees none of
+  them. Groq never sends tokens/day or audio limits in headers at all.
+- **Impact**: the web build's usage monitor counts this device's calls against Groq's published
+  limits (labelled as such) and cannot see use from other devices or apps. The Tauri apps read the
+  headers through the HTTP plugin.
+- **Resolution**: provider-side only (exposing the headers), or routing calls through Tauri/a proxy.
+
+- **Tauri plugin versions must match across npm and Rust (major.minor).** The Tauri CLI refuses to
+  build otherwise. `@tauri-apps/plugin-http` and `@tauri-apps/plugin-opener` are pinned to the
+  published Rust crates (2.7 / 2.5) in package.json (2026-10-31); bump both sides together.

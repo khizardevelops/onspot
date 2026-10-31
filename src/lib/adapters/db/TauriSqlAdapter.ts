@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import Database from '@tauri-apps/plugin-sql';
 import { SqlDatabaseAdapter } from './SqlDatabaseAdapter';
+import { markContentChanged } from './revision';
 import type { SqlDriver, SqlValue } from './types';
 
 /**
@@ -95,6 +98,7 @@ export class TauriSqlAdapter extends SqlDatabaseAdapter {
 		await remove(`${path}-shm`).catch(() => undefined);
 
 		await this.init();
+		markContentChanged();
 	}
 
 	protected async openDriver(): Promise<SqlDriver> {

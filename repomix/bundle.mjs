@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Packs one or more pages of the app (or any folder/file "section") into a repomix bundle.
 // Starting from the page's route files, it follows local imports (#lib, relative, ?worker,
 // new URL(..., import.meta.url), CSS @import) so the bundle carries everything the page uses.

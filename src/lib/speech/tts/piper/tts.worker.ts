@@ -1,10 +1,14 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// <reference lib="webworker" />
 
 /**
  * Local Piper host. Loading, phonemization and ONNX inference all happen here,
  * and requests are serialized because one ONNX session must not be run by two
- * word-clicks at once. Only one voice stays resident; it is released after an
- * idle period to return memory to the browser.
+ * word-clicks at once. At most two voices stay resident (an explanation
+ * alternates the English voice and the target-language voice, and reloading a
+ * voice at every switch would take seconds); they are released after an idle
+ * period to return memory to the browser.
  */
 import type { ModelProgress } from '#lib/types.js';
 
@@ -44,6 +48,16 @@ type Response =
 	| { id: number; type: 'error'; message: string };
 
 const IDLE_RELEASE_MS = 90_000;
+
+/** Voices kept loaded: the two most recently used. */
+const RESIDENT_VOICES = 2;
+let recentVoices: string[] = [];
+
+/** Marks a voice as just used; returns the voices to keep loaded. */
+function keepResident(voice: string): string[] {
+	recentVoices = [voice, ...recentVoices.filter((id) => id !== voice)].slice(0, RESIDENT_VOICES);
+	return recentVoices;
+}
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let queue = Promise.resolve();
 let registryPromise: Promise<typeof import('./registry').ttsRegistry> | null = null;
@@ -68,6 +82,7 @@ function scheduleIdleRelease(): void {
 		queue = queue.then(async () => {
 			const ttsRegistry = await getRegistry();
 			await ttsRegistry.disposeAll();
+			recentVoices = [];
 			post({ id: 0, type: 'released' });
 		});
 	}, IDLE_RELEASE_MS);
@@ -79,11 +94,12 @@ async function handle(request: Request): Promise<void> {
 		const ttsRegistry = await getRegistry();
 		if (request.type === 'release') {
 			await ttsRegistry.disposeAll();
+			recentVoices = [];
 			post({ id: request.id, type: 'released' });
 			return;
 		}
 
-		await ttsRegistry.disposeOthers(request.voice);
+		await ttsRegistry.disposeOthers(keepResident(request.voice));
 		const adapter = ttsRegistry.getAdapter(request.voice);
 		if (!adapter) throw new Error(`Unknown local voice "${request.voice}".`);
 		if (adapter.status !== 'ready') {

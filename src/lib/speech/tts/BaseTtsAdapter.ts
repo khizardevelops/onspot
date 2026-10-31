@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { ModelProgress, STTAdapterStatus, TtsModelConfig, TtsSynthesis } from '#lib/types.js';
 
 export interface ITTSAdapter {

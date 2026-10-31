@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { quickSelect } from '#lib/neo.js';
 	import { NeoSelect } from '@dvcol/neo-svelte/inputs';

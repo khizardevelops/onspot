@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Base64 <-> Blob helpers for storing recorded audio in the database. */
 export function blobToBase64(blob: Blob): Promise<string> {
 	return new Promise((resolve, reject) => {

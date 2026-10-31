@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { NeoMenu } from '@dvcol/neo-svelte/floating/menu';
 	import type { NeoMenuProps } from '@dvcol/neo-svelte/floating/menu';

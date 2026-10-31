@@ -1,0 +1,288 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { ReferenceElement, VirtualElement } from '@floating-ui/dom';
+import type { PhraseGloss, TextGlosses } from '#lib/adapters/db/index.js';
+import { hasWordMeanings } from '#lib/adapters/llm/glossary.js';
+import { rangeOfWords, selectedWordRange, snapSelectionToWords } from './wordSelection';
+
+/**
+ * What a transcript shows when the learner points at its words: the meaning of
+ * the word under the pointer (or the whole expression it belongs to, such as
+ * "pomme de terre"), or the meaning of any range of whole words they select
+ * (see `wordSelection.ts`: a mouse drag moves by words, and on a phone a
+ * long press and drag does).
+ *
+ * `Transcript.svelte` renders the words and forwards pointer, tap and
+ * selection events here; this class decides what the one label says, where it
+ * points and which words to highlight.
+ */
+
+/**
+ * How long the pointer must rest on a word before the text's meanings are
+ * fetched (a paid request, once per text). Passing over words on the way
+ * somewhere costs nothing; once fetched, meanings show at once.
+ */
+const HOVER_DWELL_MS = 300;
+/** How long a tapped word keeps its meaning on screen: touch has no hover to end it. */
+const TAP_MEANING_MS = 2_500;
+/** Selections change on every pixel of a drag; read them once the learner pauses. */
+const SELECTION_SETTLE_MS = 350;
+
+/** The transcript whose label is on screen: one at a time, across every card. */
+let activeOwner = $state<symbol | null>(null);
+
+type Status = 'idle' | 'loading' | 'failed';
+
+/** What the learner is pointing at: one word, or a selected range of words. */
+type Focus =
+	| { kind: 'word'; wordIndex: number; anchor: ReferenceElement }
+	| { kind: 'selection'; start: number; end: number; anchor: ReferenceElement };
+
+export interface MeaningLabel {
+	anchor: ReferenceElement;
+	text: string;
+	/** A second, quieter line: the hovered word's own meaning when the label shows its expression. */
+	detail?: string;
+	/** A status ("Translating…") rather than a meaning; shown quieter. */
+	isStatus: boolean;
+	/** Below a selection, so it does not cover the line above it; a word's meaning goes above. */
+	placement: 'top' | 'bottom';
+}
+
+export interface TranscriptMeaningsOptions {
+	/** The text's word meanings and phrases, or null until fetched. */
+	glosses: () => TextGlosses | null;
+	/** Fetches the word meanings and expressions of the whole take. */
+	requestGlosses: () => Promise<void>;
+	/** Translates a selected range; resolves with its meaning. */
+	requestPhrase: (start: number, end: number, phrase: string) => Promise<string>;
+	/** Words `start`..`end` (inclusive) exactly as they are written. */
+	phraseText: (start: number, end: number) => string;
+	/** True while a mouse drag is still choosing words; its in-between selections are not read. */
+	isSelecting: () => boolean;
+}
+
+export class TranscriptMeanings {
+	#options: TranscriptMeaningsOptions;
+	#owner = Symbol('transcript');
+	#focus = $state<Focus | null>(null);
+	#glossStatus = $state<Status>('idle');
+	#phrase = $state<{ key: string; status: Status; meaning: string }>({ key: '', status: 'idle', meaning: '' });
+	#tapTimer: ReturnType<typeof setTimeout> | null = null;
+	#hoverTimer: ReturnType<typeof setTimeout> | null = null;
+	#selectionTimer: ReturnType<typeof setTimeout> | null = null;
+
+	constructor(options: TranscriptMeaningsOptions) {
+		this.#options = options;
+	}
+
+	/** The expression the word under the pointer belongs to, if any. */
+	#expressionAt(wordIndex: number): PhraseGloss | undefined {
+		return this.#options
+			.glosses()
+			?.phrases.find((phrase) => phrase.origin === 'expression' && phrase.start <= wordIndex && wordIndex <= phrase.end);
+	}
+
+	/** Words to highlight while the pointer is on an expression; a selection highlights itself. */
+	readonly highlight = $derived.by((): { start: number; end: number } | null => {
+		const focus = this.#focus;
+		if (focus?.kind !== 'word' || activeOwner !== this.#owner) return null;
+
+		const expression = this.#expressionAt(focus.wordIndex);
+		return expression ? { start: expression.start, end: expression.end } : null;
+	});
+
+	/** What the label says right now, or null when nothing is shown. */
+	readonly label = $derived.by((): MeaningLabel | null => {
+		const focus = this.#focus;
+		if (!focus || activeOwner !== this.#owner) return null;
+
+		if (focus.kind === 'selection' && focus.end > focus.start) return this.#selectionLabel(focus);
+
+		const wordIndex = focus.kind === 'word' ? focus.wordIndex : focus.start;
+		return this.#wordLabel(wordIndex, focus.anchor, focus.kind === 'selection' ? 'bottom' : 'top');
+	});
+
+	#wordLabel(wordIndex: number, anchor: ReferenceElement, placement: MeaningLabel['placement']): MeaningLabel | null {
+		const glosses = this.#options.glosses();
+
+		const meaning = glosses?.words[wordIndex];
+
+		// The expression is what the words mean together; the word's own meaning
+		// stays on a second line, so grouping never hides what a word means.
+		const expression = this.#expressionAt(wordIndex);
+		if (expression) {
+			const phrase = this.#options.phraseText(expression.start, expression.end);
+			const word = this.#options.phraseText(wordIndex, wordIndex);
+			const detail = meaning ? `${word}: ${meaning}` : undefined;
+			return { anchor, text: `${phrase}: ${expression.meaning}`, detail, isStatus: false, placement };
+		}
+
+		if (meaning) return { anchor, text: meaning, isStatus: false, placement };
+
+		const status = this.#statusText(this.#glossStatus, hasWordMeanings(glosses) ? 'No translation for this word' : '');
+		return status ? { anchor, text: status, isStatus: true, placement } : null;
+	}
+
+	#selectionLabel(focus: Extract<Focus, { kind: 'selection' }>): MeaningLabel | null {
+		const saved = this.#options
+			.glosses()
+			?.phrases.find((phrase) => phrase.start === focus.start && phrase.end === focus.end);
+		const fetched = this.#phrase.key === `${focus.start}-${focus.end}` ? this.#phrase : null;
+		const meaning = saved?.meaning ?? (fetched?.status === 'idle' ? fetched.meaning : '');
+
+		if (meaning) return { anchor: focus.anchor, text: meaning, isStatus: false, placement: 'bottom' };
+
+		const status = this.#statusText(fetched?.status ?? 'loading', '');
+		return status ? { anchor: focus.anchor, text: status, isStatus: true, placement: 'bottom' } : null;
+	}
+
+	#statusText(status: Status, otherwise: string): string {
+		if (status === 'loading') return 'Translating…';
+		if (status === 'failed') return 'Could not translate. Try again.';
+		return otherwise;
+	}
+
+	// ------------------------------------------------------------ Events from Transcript
+
+	/**
+	 * The pointer reached a word. Ignored while a mouse button is held (a drag
+	 * is selecting) or a selection is shown. Until the text's meanings are
+	 * fetched, the pointer has to rest there first (`HOVER_DWELL_MS`).
+	 */
+	hoverWord(event: PointerEvent, wordIndex: number | undefined): void {
+		if (event.pointerType === 'touch' || event.buttons !== 0) return;
+		if (this.#focus?.kind === 'selection' && activeOwner === this.#owner) return;
+
+		this.#stopHoverTimer();
+		const element = event.currentTarget as HTMLElement;
+		if (hasWordMeanings(this.#options.glosses())) {
+			this.#showWord(element, wordIndex);
+			return;
+		}
+		this.#hoverTimer = setTimeout(() => this.#showWord(element, wordIndex), HOVER_DWELL_MS);
+	}
+
+	/** The pointer left a word. */
+	leaveWord(event: PointerEvent): void {
+		if (event.pointerType === 'touch') return;
+		this.#stopHoverTimer();
+		if (this.#focus?.kind === 'word') this.#focus = null;
+	}
+
+	#stopHoverTimer(): void {
+		if (this.#hoverTimer) clearTimeout(this.#hoverTimer);
+		this.#hoverTimer = null;
+	}
+
+	/** A word got keyboard focus (correction marks are buttons). */
+	focusWord(element: HTMLElement, wordIndex: number | undefined): void {
+		this.#showWord(element, wordIndex);
+	}
+
+	/** Keyboard focus left a word. */
+	blurWord(): void {
+		if (this.#focus?.kind === 'word') this.#focus = null;
+	}
+
+	/** On a touch screen the tap that plays a word also shows its meaning for a moment. */
+	tapWord(event: MouseEvent, wordIndex: number | undefined): void {
+		const isTouch = (event as PointerEvent).pointerType === 'touch' || matchMedia('(hover: none)').matches;
+		if (!isTouch) return;
+
+		this.#showWord(event.currentTarget as HTMLElement, wordIndex);
+		this.#tapTimer = setTimeout(() => this.blurWord(), TAP_MEANING_MS);
+	}
+
+	/** The document selection changed; read it once it settles (touch handles move continuously). */
+	selectionChanged(root: HTMLElement | null): void {
+		if (this.#options.isSelecting()) return;
+		if (this.#selectionTimer) clearTimeout(this.#selectionTimer);
+		this.#selectionTimer = setTimeout(() => this.#readSelection(root), SELECTION_SETTLE_MS);
+	}
+
+	/** A mouse selection is complete (drag released, double-click, Shift+click); read it now. */
+	selectionFinished(root: HTMLElement | null): void {
+		if (this.#selectionTimer) clearTimeout(this.#selectionTimer);
+		this.#readSelection(root);
+	}
+
+	/**
+	 * A finger finished selecting words `start`..`end`. That selection is the
+	 * app's own (see `TouchWordSelection`), so it is given here rather than read
+	 * from the document.
+	 */
+	showSelection(root: HTMLElement, start: number, end: number): void {
+		const words = rangeOfWords(root, start, end);
+		if (!words) return;
+
+		this.#selectWords(start, end, { getBoundingClientRect: () => words.getBoundingClientRect(), contextElement: root });
+	}
+
+	/** The selection was put away (or a new one is being chosen): its meaning goes too. */
+	clearSelection(): void {
+		if (this.#focus?.kind === 'selection') this.#focus = null;
+	}
+
+	#showWord(element: HTMLElement, wordIndex: number | undefined): void {
+		if (wordIndex === undefined) return;
+		if (this.#tapTimer) clearTimeout(this.#tapTimer);
+
+		this.#focus = { kind: 'word', wordIndex, anchor: element };
+		activeOwner = this.#owner;
+		void this.#loadGlosses();
+	}
+
+	/** Maps the selection to the words it touches; a selection outside this text clears the label. */
+	#readSelection(root: HTMLElement | null): void {
+		// Touch handles move by letters; a part of a word selects the whole word.
+		if (root) snapSelectionToWords(root);
+
+		const range = root ? selectedWordRange(root) : null;
+		if (!root || !range) {
+			this.clearSelection();
+			return;
+		}
+
+		// A copy, so the label stays put while the live selection keeps changing.
+		const selected = getSelection()!.getRangeAt(0).cloneRange();
+		this.#selectWords(range.start, range.end, { getBoundingClientRect: () => selected.getBoundingClientRect(), contextElement: root });
+	}
+
+	/** Shows the meaning of words `start`..`end`: one word's own, or the whole range translated. */
+	#selectWords(start: number, end: number, anchor: VirtualElement): void {
+		this.#focus = { kind: 'selection', start, end, anchor };
+		activeOwner = this.#owner;
+		if (start === end) void this.#loadGlosses();
+		else void this.#loadPhrase(start, end);
+	}
+
+	/** Fetches this text's word meanings once; a failure is retried on the next hover. */
+	async #loadGlosses(): Promise<void> {
+		if (hasWordMeanings(this.#options.glosses()) || this.#glossStatus === 'loading') return;
+
+		this.#glossStatus = 'loading';
+		try {
+			await this.#options.requestGlosses();
+			this.#glossStatus = 'idle';
+		} catch (error) {
+			console.warn('[transcript] word meanings could not be fetched', error);
+			this.#glossStatus = 'failed';
+		}
+	}
+
+	/** Translates a selected range; selecting it again after a failure retries. */
+	async #loadPhrase(start: number, end: number): Promise<void> {
+		const key = `${start}-${end}`;
+		if (this.#phrase.key === key && this.#phrase.status !== 'failed') return;
+
+		this.#phrase = { key, status: 'loading', meaning: '' };
+		try {
+			const meaning = await this.#options.requestPhrase(start, end, this.#options.phraseText(start, end));
+			if (this.#phrase.key === key) this.#phrase = { key, status: 'idle', meaning };
+		} catch (error) {
+			console.warn('[transcript] the selection could not be translated', error);
+			if (this.#phrase.key === key) this.#phrase = { key, status: 'failed', meaning: '' };
+		}
+	}
+}

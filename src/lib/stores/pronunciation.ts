@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { get } from 'svelte/store';
 import { appSettings } from './settings';
-import { openaiApiKey } from './secrets';
+import { ttsApiOptions } from './ttsConfig';
 import { synthesizeSpeech } from '#lib/speech/tts/service.js';
 
 /**
@@ -37,8 +39,9 @@ export function isPronounceable(word: string): boolean {
 async function synthesize(word: string): Promise<string> {
 	const text = normalizeWord(word);
 	const settings = get(appSettings);
-	// Changing voice or engine must not replay a word rendered with the old one.
-	const key = `${settings.ttsMode}:${settings.targetLanguage}:${settings.ttsVoice}:${text}`;
+	const api = ttsApiOptions(settings);
+	// Changing voice, engine or API endpoint must not replay a word rendered with the old one.
+	const key = `${settings.ttsMode}:${settings.targetLanguage}:${settings.ttsVoice}:${api.apiProvider}:${api.apiBaseUrl}:${api.apiModel}:${api.apiVoice}:${text}`;
 	const cached = cache.get(key);
 	if (cached) return cached;
 
@@ -50,7 +53,7 @@ async function synthesize(word: string): Promise<string> {
 		mode: settings.ttsMode,
 		languageId: settings.targetLanguage,
 		voice: settings.ttsVoice,
-		openaiApiKey: get(openaiApiKey) || undefined
+		...api
 	})
 		.then((speech) => {
 			if (cache.size >= MAX_WORD_CACHE) {
@@ -92,17 +95,4 @@ export function playWord(word: string): void {
 			});
 		})
 		.catch((error) => console.warn('[pronunciation] failed', error));
-}
-
-/** Pre-synthesizes words (e.g. for an attempt), sequentially and quietly. */
-export async function preloadWords(words: string[]): Promise<void> {
-	const unique = [...new Set(words.map(normalizeWord).filter(isPronounceable))];
-	for (const word of unique) {
-		try {
-			await synthesize(word);
-		} catch {
-			// Stop on the first failure (usually the voice is not loaded yet).
-			return;
-		}
-	}
 }

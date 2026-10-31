@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! onspot's on-device speech engines for the desktop and Android apps.
 //!
 //! Speech-to-text runs whisper.cpp natively: real CPU SIMD and threads, and

@@ -1,5 +1,375 @@
 # Decisions
 
+### Translate what the learner meant, not what was transcribed (2026-10-31)
+User: translations should be of "Did you mean to say?", not the attempt "which can contain utter
+nonsense"; with no errors, "You said" = "Did you mean to say?". Version 3 sets mark the change;
+old transcript translations are hidden and replaced lazily (active card or on request) to avoid a
+burst of LLM calls when an old session opens.
+
+### Phones get the bar at the bottom (2026-10-31)
+User, after the composer merged into the top bar: "the fix for mobile should be that the whole
+navbar should be at the bottom". On every page at <=640px the bar is a bottom bar (thumb reach
+for the mic and navigation); desktop and tablets keep it at the top.
+
+### The composer merged into the top bar (2026-10-31)
+User: merge the navbar and the bottom prompt bar to save room. The prompt became the page heading
+(the session title, which mostly repeated the prompt's topic, moved to the line under it). The
+prompt stays visible while recording, because the learner talks about it; the live level and
+progress go beside it (desktop) or in the bar's second row (phones). Navigation folds into ☰ under
+900px of bar width rather than only on phones. Trade-off noted: on phones the mic is now at the top
+of the screen instead of under the thumb.
+
+### The Feedback bookmark is a paper tab on the sidebar's edge (2026-10-31, replaces the ribbon below)
+User: the bookmark pokes out from the side, attached to the sidebar, tucked behind it while open and
+untucked with animation on collapse; it must be paper (not a satin ribbon) and poke out less. Hence a
+30px divider tab under the sidebar, riding its edge. The error filter keeps neo's round track and
+keys (the user asked to undo squaring them); the stats/close keys beside it stay 4px.
+
+### Collapsed Feedback is a bookmark, not a rail (2026-10-31)
+User: collapsing should hide the panel completely, leaving only a bookmark poking out with the error
+count. The 64px desktop rail and 36px tablet handle are gone; the takes get the full width. The
+ribbon hangs from under the top bar at the right gutter (above the paper timeline, right of the
+cards) and is teal at zero errors so a clean take does not look alarming.
+
+### Feedback panel follows the user's notebook mockup, adapted (2026-10-31)
+Kept from the mockup: notebook page, pinned header with paperclip, icon-only inset filter track with
+badges, taped white cards with one-line corrections, bottom-sheet stats in one row. Adapted: the
+by-type filter (no place in the mockup) lives behind the header's filter name; a close control was
+added (the panel collapses on desktop and is a sheet on phones); the panel's duplicate playback
+buttons were removed; app fonts and tokens replace Lora/Google Fonts; dark-mode variants added; the
+mockup's centred 420px demo container does not apply (the panel is already a 330–440px column).
+**Trap found:** the root layout styles `:global(.paper-key)` (the hidden paper-texture canvas) with
+`visibility: hidden; pointer-events: none`; any element given class `paper-key` vanishes and leaves
+the accessibility tree. Header keys use `header-key`.
+
+### Jumps and locks use the stack's timed scroll, never native smooth scrolling (2026-10-31)
+User: a timeline click took too long and the card crawled "at the speed of an ant" into place. That
+was `scrollTo({ behavior: 'smooth' })`: long distances and a long ease-out tail. Timeline jumps,
+clicks on the pile and the lock after a scroll now call `animateTo` (stack positions, easeInOutCubic)
+with `240ms + 45ms × cards`, capped at 650ms. Measured: neighbour 315ms, 19 cards 645ms, the last
+30px in under 20ms; a wheel notch is locked on the next card within ~465ms. The new-take drop keeps
+its deliberate 1050ms.
+
+### The pile scrolls like text: down digs into older takes (2026-10-31)
+User: inside a long card scrolling is "inverted" relative to the cards. With the demo's mapping,
+scrolling down moved the text up but dropped the next card down. Rather than change the look (cards
+still drop from the slot, newest on top), the mapping is reversed: scrolling down lifts the top card
+up and away (older takes beneath), scrolling up drops newer ones back. Both motions now follow the
+wheel and the finger, the newest take is at scroll 0 (no scrolling to the end on load), and the
+timeline lists newest first so its dot moves with the scroll. The demo's position math is otherwise
+unchanged (only `scrollProgress` is mirrored).
+
+### Translations sit on a yellow sticky note (2026-10-31, replaces the plain notes below)
+The plain margin-labelled lines were too subtle: on a ruled card they read as the take's own text
+(user, angrily: "no UI to indicate that these phrases are now translation"). The section is now a
+sticky note stuck on the card (own pale-yellow paper over the rules, bottom lift, folded corner,
+amber "Translation" header and labels; dark: muted olive paper). Note: the user's screenshot of the
+plain version also showed the *old* markup without its old CSS, a half-applied hot update in their
+tab; the dev server was serving the new component. A reload fixes that state.
+
+### Translations are notes on the card, not boxes (2026-10-31)
+User: the translation UI "is really bad and does not match". Teal-tinted rounded boxes and raised
+chips read as a different app on the paper cards. Variants are now margin-labelled lines in the
+explanation's ink, toggles are pencil-underlined text, the word breakdown is a notebook vocabulary
+list. The follow-up's Show English uses the same `.pencil-link`.
+
+### Phones: secondary panels open from the top bar; 36px touch floor (2026-10-31)
+User: the phone timeline strip and the Feedback handle took too much room, the prompt card was too
+big, the buttons were too big, the bar too tall. On phones the timeline and Feedback are top-bar
+buttons (the paper drops from the top of the stage; Feedback stays the existing bottom sheet), the
+composer is a single row with icon-only round actions (their labels become `aria-label`s), and
+Exam/Casual lives in the ⋯ menu. The touch floor is 36px, deliberately under the 44pt/48dp
+guidance, because the user asked for smaller buttons; it is one token (`--touch-target`) to raise
+again. The timeline toggle carries `data-timeline-toggle` so the paper's outside-tap close does not
+fight it.
+
+### Attempt cards are paper index cards (2026-10-31)
+User: "the cards need to look like they're made of paper; the theme is stationery, paper, DIY". The
+paper lives on AttemptCard (the card's own look) and the tape and shadow on the pile's shell
+(physical placement). Ruled lines are a body background so they scroll with the text; they are
+faint enough to read as texture, since text sizes do not line up with them.
+
+### Navigation moved from the rail into a per-page top bar (2026-10-31)
+User: remove the vertical navbar, move its buttons into the top bar (which had a lot of empty space),
+free the rail's width; and "the whole app needs to work on a phone". Only Practice had a top bar, so
+`AppHeader.svelte` is shared and **each page renders its own** rather than the layout owning one: a
+layout-wide bar would have pushed the Feedback panel down by its height, while a page-level bar sits
+above the attempt stack only. Navigation is on the bar's left so it stays in the same place on every
+page (a right-aligned cluster would jump between Practice's stage column and the full-width pages).
+Icon keys with tooltips, as on the rail; text labels did not fit Practice's 694px stage at 1024px.
+Phones keep the disclosed ☰ menu, now inline at the bar's end instead of a fixed overlay. Measured
+at 1280×900: the attempt stage grew from 833px to 883px wide and the bar is 67px (the old session
+header was 79px).
+
+### Timeline hover: hover the static sheet, move only its inner lift (2026-10-31)
+The hovered element itself slid 12px left and scaled, so a pointer near its right edge ended up
+outside it, the hover ended, it slid back under the pointer, and it looped. Hover now lives on an
+outer element that never transforms; the visual lift is a child (the hover still covers the moved
+paper, because hit-testing a transformed child counts for its ancestors). Touch gets an explicit
+tap-to-open state, and `:hover` expansion is limited to `(hover: hover)` so phones do not get sticky
+emulated hover.
+
+### Selections are drawn as a highlighter, per token (2026-10-31)
+User: "the selection highlight should be like an actual highlighter". `::selection` and the Custom
+Highlight API only allow colours, not shapes, so the native selection colour is made transparent and
+the selected words are inked with classes on their own elements. Wrapping the range in one `<mark>`
+was rejected: re-parenting the word nodes would destroy the live selection (it is anchored in them).
+So every token keeps its element (gaps became spans), the band is identical on each so it joins without
+seams, and only the first and last tokens get the pooled ink and the chisel `clip-path`. The ends
+overrun the words by 0.22em using a negative margin plus equal padding, so layout never shifts. A
+stroke that wraps keeps flat ends at the line break (detecting wraps was not worth it).
+
+### Attempts are a stack of index cards with a paper timeline (2026-10-31)
+User request, from their HTML demo (`~/Downloads/card-scroll+timeline-component.html`): takes drop
+from a slot under the header onto a pile; the card beneath blurs only after the drop is 35% along
+(not linear); a torn aged-paper timeline on the right is the mini-map. The demo's scroll math is kept
+as-is in `components/cardStack.ts` (`stackPosition`, `cardPose`, `scrollTopForCard`). Adapted to the
+app: the scroll container is the Practice stage, not the window (so no `--header-height`; the
+session header is already fixed above it); cards are capped to the stage and scroll inside
+themselves (takes run to 5 minutes; the demo's cards are short); the timeline sits on the stage's
+right edge with room reserved beside the cards, and is hidden under 560px of stage width.
+Additions the demo lacks, each for a reason:
+- **Locking onto a card when scrolling stops.** Free scrolling left half-dropped stacks, and a tall
+  card on top could capture the wheel mid-drop. CSS `scroll-snap-type: y mandatory` was tried first
+  and dropped: Chromium's precise wheel deltas snapped straight back (one 100px notch never moved a
+  410px card) and WebKit's behaviour differs again. A JS lock 120 ms after the last scroll event
+  (`lockedCard`: >10% of a card in a direction goes on, less falls back) works the same everywhere;
+  a held finger/button defers it.
+- **The card on top is the selected take** (supersedes "scrolling never selects an attempt", which
+  made sense for a list with several visible cards).
+- **Buried cards fade out past depth 3** and stop being painted, so a long session does not composite
+  dozens of 8px-blurred layers; tall deep cards would otherwise also stick out of the pile.
+- **The timeline's drop shadow is a `filter: drop-shadow` on a wrapper:** the demo's `box-shadow` sits
+  under a `clip-path` and is clipped away, so it never showed.
+- Arrival animates in stack positions, not pixels: the composer changes height as the take lands,
+  and the stage's resize otherwise derailed the drop (seen as a stutter in testing).
+- Fonts are self-hosted (`@fontsource/caveat`, `@fontsource/courier-prime`, OFL); Linux has no
+  Courier New or Caveat, and no font CDN is allowed.
+
+### Selection snaps to whole words; touch keeps native handles (2026-10-31)
+A word is the atomic unit (user request: like double-click-and-drag). With a mouse the app owns the
+drag (preventDefault on mousedown, word under the pointer via `elementFromPoint`, native selection
+set to word boundaries), so the selection is word-granular while dragging, still a real selection
+(copy works), and a press under 4 px of movement stays a click that plays the word. On touch, taking
+over the gesture would break scrolling, so the long-press handles stay and the selection is snapped
+to whole words after a 350 ms pause. The "skip the next click" flag expires after the current input
+event, because a drag that ends on another word sends its click to their parent, not to a word.
+
+### Phrases: model-found expressions plus any range the learner selects (2026-10-30)
+Word-by-word glosses mislead on multi-word units ("il y a" = "he there has", "pommes de terre" =
+"apples of earth"). The gloss call returns expressions with the words; a first prompt over-grouped
+ordinary phrases ("avec ma sœur", "nous avons acheté"), so the rule now says an expression is only one
+whose word-by-word reading is wrong, with counter-examples, and the label always keeps the hovered
+word's own meaning on a second line, so grouping never hides a word. Custom ranges use the native
+Selection API (mouse drag, double-click, phone long-press handles all work) mapped to word indexes
+via `data-word-index` + `range.intersectsNode`, read after a 350 ms settle; the label goes below a
+selection, clear of the phone's selection menu. A drag-select inside a card no longer selects/lifts
+the card (`AttemptStream.selectCard` ignores clicks with a non-collapsed selection in the card).
+Stored format changed to `{ words, phrases }` per text; the first word-only format is treated as not
+fetched, so those takes are glossed again once.
+
+### Word meanings come from the learner's LLM, once per take (2026-10-30)
+Hover translations must be in-context ("allé" → "went") and text may leave the device only through
+the learner's configured endpoint, so a dictionary API is out. The first hover glosses every word of
+the take's texts in one call (numbered words in, `{ texts: [{ glosses }] }` out, padded/cut to the
+word count so indexes always align) and stores them on the attempt. Lazy, not per take: a gloss call
+right after each evaluation would compete for Groq's per-minute budget and cost tokens for takes
+nobody hovers. Mistaken words get the likely meaning in brackets ("[went?]"). Only one label shows at
+a time (a module-level owner in `Transcript.svelte`), and it is portalled to `<body>` because cards
+sit in a scrolling, 3D-transformed list.
+
+### The explanation speaks like a teacher; the app checks each line (2026-10-30, revised)
+Composing every sentence from a template ("You said X. Say Y: Incorrect article usage …") read like
+a report (user feedback). Now the model writes the words: `explanation: { note, mistakes: [{ said,
+say, line }] }`, where `line` is one natural spoken sentence (≤25 words) and `note` an opening
+reaction (≤15 words, never previewing a mistake). The app still validates `said`/`say` (identical,
+overlapping, more than three → dropped), keeps a line only if it names the fix and stays under 40
+words, adds missing `<wrong>`/`<right>` highlights, and otherwise falls back to a plain sentence
+("You said …; say … instead."). Prompt examples must not match a real learner sentence: the model
+copied an example's wording verbatim when the input was the example's own scenario.
+
+### The explanation is composed by the app from the model's mistake data (2026-10-30)
+Free-text explanations produced, in testing and for the user: "You said X. Say X" (an unclear
+phrase reported as a mistake), "Say  (remove it)" (empty fix), invented fixes, and the same mistake
+twice. Prose cannot be validated, so the model now returns `explanation: { mistakes: [{ said, say,
+why }], note }` and `composeExplanation` (`adapters/llm/explanation.ts`) drops fixes with the same
+words (`sameWords`), mistakes overlapping one already named (`overlappingWords`), keeps three, and
+writes "You said <wrong>…</wrong>. Say <right>…</right>: why." / "Leave out <wrong>…</wrong>: why." /
+the note / "That was all correct." The fixed English phrases are the language of instruction's;
+another instruction language means translating them. Corrections with the same words as their
+original are dropped too. A model that still returns prose is accepted as markup. Stored format is
+unchanged. Remaining variance is judgment (whether an odd phrase is a mistake), not broken output.
+
+### Replies auto-play reliably: prime the player in the tap, never fail silently (2026-10-30)
+WebKit (Safari, the Tauri desktop webviews) lets an element play sound on its own only after it
+played inside a user gesture; the app's `play().catch(() => {})` hid refusals. Start and Stop now
+call `primeAudioPlayback()` synchronously (0.1 s of silence on the shared element, once, ignored by
+the player state), and a `NotAllowedError` shows "Tap ▶ to listen". Verified: real take under
+Chromium's normal policy auto-plays; the refusal notice with a stubbed `play()`. Playwright's
+scripted calls count as user activation, so a real WebKit refusal was not reproducible here.
+
+### An attempt has three spoken tracks; the explanation is tagged text (2026-10-30)
+- **You said** speaks the transcript verbatim (mistakes included) with the target voice.
+- **Did you mean to say?** is `correctedText`: the learner's sentence with every error and warning
+  fixed, natural but faithful (no added/dropped content, no optional suggestions); identical to the
+  transcript when nothing needs fixing, in which case the row is replaced by a "Correct" pill. It
+  replaced the free `naturalSpeech` rewrite, which could differ even for a correct take.
+- **Explanation** is in the language of instruction (`translationTarget`), ≤60 words, the three most
+  important mistakes, and always ends with a target-language follow-up question. Every
+  target-language span is wrapped in `<wrong>`, `<right>`, `<key>` or `<ask>`: the tags drive the
+  highlights and mark language, so a future local voice can route tagged spans to the target voice.
+  Inline tags were chosen over a JSON segment array: fewer tokens, natural for LLMs, and a tolerant
+  regex parser (unknown/unclosed/nested tags dropped) keeps malformed replies readable.
+- Storage: migration 7 **adds** `explanation` and copies `summary`; `summary`/`natural_speech` stay
+  as unused columns so an older app version can still open a synced database (renaming would break
+  it). The explanation auto-plays after a take; without cloud TTS the correct version plays.
+- The follow-up question is its own field, `followUp: { question, translation }` (migration 8), not an
+  `<ask>` tag: the translation (language of instruction) is hidden until the learner reveals it, so
+  they try the target language first. The spoken explanation ends with the question; the translation
+  is never spoken. Old `<ask>` markup is still parsed and lifted into the same block.
+- Explanation audio is **cloud-only** for now (user decision, 2026-10-30): Piper voices only speak
+  the target language, and the user will decide the local approach.
+
+### ElevenLabs: free plans cannot use Voice Library voices; no hard-coded voice ids (2026-10-30)
+Free accounts get HTTP 402 `paid_plan_required` for library voices. `/v2/voices` gives no plan
+requirement (`available_for_tiers: []`), but library copies carry `sharing.status: "copied"`. The
+picker therefore reads the plan from `/v1/user/subscription` and hides those on `free`. The old
+"built-in" ids were wrong by now: `21m00Tcm4TlvDq8ikWAM` (Rachel) resolves to "Janet",
+`AZnzlk…` to "Elara", `MF3mGy…` to "Peter", `TxGEqn…` to "Craig" (all paid library voices). Premade
+voices (category `premade`) work on every plan; the default is Alice `Xb7hH8MSUJpSbSDYk0k2`.
+Because a key restricted to text-to-speech cannot read its plan, library voices are listed only when
+the plan is **known** paid, and a 402 at speech time self-heals (remember the key, switch to Alice,
+retry, toast) rather than surfacing an error after the learner has spoken.
+
+### Usage monitor: provider granularity, labelled sources, counted where unreadable (2026-10-30)
+Limits are shown the way providers enforce them (Groq/OpenAI per model per organization,
+ElevenLabs/DeepSeek per account). Browsers cannot read `x-ratelimit-*` (not CORS-exposed), and even
+the headers never carry tokens/day or audio limits, so a device-local ledger counts usage against
+Groq's dated published limits; live headers (Tauri), refusal bodies and account APIs override counts
+where available, and every figure says which source it is. Linear refill (measured) ages readings.
+Groq is shown **per model** with a picker defaulting to the model in use (user request), because
+each model has its own budget and ceilings; Groq's Free and Developer tables are both kept and the
+plan is inferred from live headers. The ledger lives in `localStorage` keyed by a key hash, never the
+synced DB. Estimates convert
+limits into takes/read-alouds/minutes because that is the decision a learner makes. A rejected
+alternative was a "Check now" probe call: in the browser it cannot read the headers either, and on
+desktop every real call already refreshes them.
+
+### A voice list is a modal, not a dropdown (2026-10-25)
+An ElevenLabs account can hold 100 voices and every option needs a metadata line, so a popover grew
+taller than the section it belonged to and covered the API key, model and preview. Voices therefore
+use `components/settings/VoicePicker.svelte`: a compact row trigger (selected name + one detail line)
+that opens a dialog with a search field, a scrolling list and a pinned footer for the section's own
+actions plus Done. Rules that come with it:
+- Only the list scrolls; the dialog caps at `min(38rem, calc(100dvh - 4rem))` so a short phone
+  viewport still reaches Done.
+- Arrow keys/Home/End walk options; Home/End stay with the text field while searching.
+- The search field auto-focuses **only on `pointer: fine`**. Auto-focus on touch opens the keyboard
+  over a list the learner is usually just scanning. neo's dialog focuses its first control after a
+  100 ms debounce, so the focus call waits ~130 ms and backs off if focus already moved inside.
+- The 12px detail line cannot use `--muted-foreground`: it measured 3.91:1 on the tinted selected
+  row in light mode. It uses `color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground))`
+  (7.65–9.93:1). Any future small secondary text on a tinted surface needs the same check.
+
+A plain `SettingSelect` is still correct for short, label-only lists (provider, model, level).
+
+### Settings hydration never reverts a choice the learner just made (2026-10-25)
+`initSettings()` reads the database on startup and after a restore, then assigned the whole snapshot
+with `store.set(loaded)`. On a cold start the read takes long enough that a click on a Local/Cloud
+switch could land first and be silently undone, which is a real data-loss-shaped bug (the learner
+sees the toggle move back, and the next render disagrees with what they chose). Settings now:
+- records any field that changed while `hydrated` is false (`pending`),
+- re-applies those fields over the loaded snapshot,
+- sets `applying` around the hydration write so it is never persisted back (which would bump the
+  sync revision right after a download).
+
+Every write to settings in the app is user-initiated (`setSetting` from a control, or the first-run
+picker), so nothing in the background can sneak into `pending`. The `hydrated` gate still keeps
+defaults for fields a restored database lacks from being written.
+
+### Each step is Local or Cloud; no global preset (2026-10-25)
+The app names the three steps **Speech-to-text**, **LLM** and **Text-to-speech** (the internal
+`sttMode`/`correctionMode`/`ttsMode` names are unchanged). They are independent choices:
+- **Speech-to-text:** Local Whisper, or Cloud Groq `whisper-large-v3-turbo`.
+- **LLM:** a cloud LLM (Groq/DeepSeek/custom), or a **local OpenAI-compatible server**
+  (LM Studio, llama.cpp, Ollama, vLLM, …). The local option is an endpoint, not an embedded model;
+  its key is optional. `chatCompletion`/`listModels` do not require a key, and the LLM client
+  uses the Tauri HTTP plugin on desktop so a local server does not need CORS.
+- **Text-to-speech:** Local Piper, **ElevenLabs**, or an OpenAI-compatible speech API (OpenAI
+  official or a local server). Both cloud providers remain first-class. Their keys, models and
+  voices are stored in separate fields (`elevenLabsModel`/`elevenLabsVoiceId` vs
+  `ttsApiBaseUrl`/`ttsApiModel`/`ttsApiVoice`) so switching never destroys the other setup.
+  ElevenLabs uses `POST /v1/text-to-speech/{voice_id}` with `xi-api-key`, `eleven_multilingual_v2`
+  (or turbo v2.5), and `output_format=mp3_44100_128`; voices come from `GET /v2/voices`. The MP3 is
+  decoded with `AudioContext` and cached like every other spoken reply.
+
+`stores/processing.ts` derives the requirements; the Settings rows, download footer and Practice gate
+all consume it, so they cannot disagree. `stores/languageData.ts` checks/downloads **only the local
+parts the current choices need**; cloud-only setups need no speech downloads.
+
+**No global preset.** The earlier Balanced/Cloud/Private shortcuts were removed: a preset hid the
+per-step choice the learner is actually making. Settings has two tabs, **Learning** and **Data**;
+Learning contains the language card and one row per step. Each row has a Local/Cloud segmented
+control and an inline disclosure; the rows are independent, only one detail is open at a time, and
+changing a row's mode opens that row. The disclosure uses a `0fr`/`1fr` grid transition so the
+detail components stay mounted, and the inactive detail is `inert`. The first-run picker asks for
+the three Local/Cloud choices after the language. Practice links to `#speech-to-text`, `#llm` or
+`#text-to-speech`; the older `#transcription`, `#ai-provider` and `#voice` anchors still focus the
+same rows.
+
+**neo-svelte 1.2.0 trap:** a `NeoSelect` (our `SettingSelect`) sets `indeterminate`/`focused` in its
+cleanup, which Svelte rejects as `state_unsafe_mutation` if it unmounts during a tab/mode switch.
+Keep tab content and the correction/read-back branches mounted and hide inactive ones with CSS.
+Transient **model** lists use a text input plus clickable fetched options instead of swapping in
+a select (voices use the `VoicePicker` modal, see above). This is why the Settings page uses
+`class:hidden` rather than `{#if}` for those regions.
+
+### Cloud sync is a whole-database snapshot with a content revision (2026-10-25)
+Sync moves the same `.sqlite` image as Export/Import. Both sides are compared before anything is
+written; upload is safe, and a download (which replaces local data) needs an explicit choice.
+Change detection uses a **device-local monotonic revision** in `localStorage`
+(`src/lib/adapters/db/revision.ts`), bumped by every `SqlDatabaseAdapter` write that changes learner
+data; `setSyncMetadata` does not bump it. `sync_metadata` still stores the remote id/etag and a
+readable copy of the revision.
+
+Byte hashing was tried and rejected: three consecutive exports of an unchanged database differed in
+the header change counter (offset 24) and free-page contents (~90 bytes), so a raw-image hash always
+looked like a local edit. A logical fingerprint would work but costs a full dump on every sync; the
+counter is exact and O(1). The synced revision is captured **before** an upload so a write during
+the transfer is caught by the next sync. A download goes through `importSqliteBytes()`, which
+reuses the restore header/schema checks, storage pre-check, rollback and rehydration; the native
+path additionally scans the schema text (`isOnspotDatabase`) because only the web worker validates
+with SQLite itself.
+
+### Google Drive sync: appDataFolder, desktop loopback PKCE, web Google Identity Services (2026-10-25)
+The backup lives in `appDataFolder` with the `drive.appdata` scope, so it is app-private and does
+not appear in the learner's normal Drive listing. Upload is resumable because the database carries
+base64 audio.
+
+Desktop uses the installed-app authorization-code flow with PKCE and a loopback redirect:
+`src-tauri/src/oauth.rs` binds `127.0.0.1:0`, the system browser handles consent, and the webview
+exchanges the code and keeps a refresh token in `localStorage`. The **web build uses Google
+Identity Services' token client** instead: Google's public web clients cannot exchange an
+authorization code without a client secret, so PKCE is not available there. That is the one
+deliberate deviation from the inception's "PKCE" wording; the web token lasts about an hour and the
+learner reconnects. Client ids are build-time (`VITE_GOOGLE_CLIENT_ID_DESKTOP/_WEB`), not secrets.
+Mobile Drive sync is deferred; the UI hides it on Android/iOS.
+
+### WebDAV: `webdav` in the browser, Tauri HTTP transport elsewhere (2026-10-25)
+The browser uses the `webdav` package and therefore needs the server to allow the app origin via
+CORS. `webdav@5.10` imports `@buttercup/fetch` directly and exposes no transport hook; a Tauri
+webview `fetch` is subject to the origin policy, so the desktop/mobile path implements only
+PROPFIND/MKCOL/PUT/GET over the Tauri HTTP plugin. Basic auth credentials live in `localStorage`,
+never in the synced database. The HTTP capability is broad (`https://*`, `http://*`) because the
+learner supplies the server URL; keep it in mind when reviewing permissions.
+
+### iOS is deferred, not partially built (2026-10-25)
+The inception lists mobile as a later iteration. Android is built and verified; iOS needs macOS +
+Xcode, `tauri ios init`, microphone usage descriptions, code signing and a whisper.cpp CMake build
+for iOS. This Linux machine cannot produce or test any of that, so there is no iOS project and no
+claim that it works. `currentRuntime()` reports `ios` and Google Drive is hidden there so the shared
+code is ready. See `docs/architecture/platforms.md`.
+
 ### Linux desktop microphone: the app grants WebKit's user-media requests (2026-10-06)
 WebKitGTK (the Linux Tauri webview) denies `getUserMedia` unless the app handles its
 `permission-request` signal; the desktop app showed "Not allowed: the microphone".
@@ -352,7 +722,7 @@ Scrolling/wheel/↑↓/chevrons/drag move the belt; changing attempts runs a `la
 the newly active card. Cards use the full parent width (the earlier `max-w-2xl` centering is
 gone). The wheel only rolls once the active card has hit its own scroll edge.
 
-### Attempt list is a free-scrolling chat with a conveyor exit
+### Attempt list is a free-scrolling chat with a conveyor exit (superseded 2026-10-31 by the card stack)
 The current design (`components/AttemptStream.svelte`,
 replacing `AttemptWheel.svelte`):
 - A normal `overflow-y-auto` **flat chat list**, oldest → newest, no fixed grid.
@@ -530,7 +900,7 @@ the redundant `attempt.translation` field (#21), list virtualization (#23), cont
   trapped the learner with no result when the import failed) and the Voice preview regenerate
   dialog; the Practice delete dialog already closed explicitly in `deleteCurrent()`.
 
-### Long cards are flat; the conveyor is for short cards only (2026-09-15)
+### Long cards are flat; the conveyor is for short cards only (2026-09-15; superseded 2026-10-31: tall cards scroll inside the stack)
 - onspot takes run 60s–5min, so an attempt card can be several viewport-heights once translations
   and a word breakdown are open. The scroll-driven exit animation is meaningless for those cards
   and actively hostile to reading, so cards over `max(480px, 75% viewport)` get a JS `tall` class
@@ -647,3 +1017,34 @@ The worker exports the current DB to memory before replacing it and writes it ba
 write fails (Firefox quota). `navigator.storage.persist()` is requested from the restore click —
 Firefox ignores it without user activation — and never awaited unless room is short (it resolves
 only when the user answers the prompt).
+
+- **2026-10-31: no platform text selection on touch screens.** The learner long-presses words to
+  translate them; Android's selection handles and Cut/Copy menu got in the way. Transcripts select
+  whole words with their own long-press-and-drag (`TouchWordSelection`), kept as app state so the
+  platform never sees a selection. Trade-off: text cannot be copied on phones (text fields excepted).
+
+- **2026-10-31: Opus for all stored and uploaded speech.** Smallest codec the platform records and
+  plays; Whisper hears 16 kHz, which 24 kbps Opus keeps. Read-back at 32 kbps (listened to closely).
+- **2026-10-31: translations are not part of the evaluation unless shown after every take.** With the
+  default (off) they were 4–5 renderings per take nobody read; fetched on demand instead.
+- **2026-10-31: evaluation prompt order = fixed rules first, take details last**, for provider
+  prefix caching.
+
+- **2026-10-31: stream read-back through MSE, not WebCodecs/Web Audio.** Keeps the one `<audio>`
+  player (speed, loop, seek, pause) and needs no decoder; Ogg is repackaged to WebM because MSE has
+  no Ogg. A stopped stream is still downloaded and stored (cancelling refunds nothing).
+- **2026-10-31: hover meanings per text, after a 300 ms rest.** Both texts at once nearly doubled the
+  output; an accidental mouse pass used to trigger the paid request.
+
+- **2026-11-01: on-device explanations use two voices.** The English with an English Piper voice the
+  learner picks by listening (four candidates, hosted samples), the target-language spans and the
+  follow-up question with their selected target voice. Supersedes "explanation audio is
+  cloud-only" (2026-10-30).
+- **2026-11-01: on-device clips are made ahead of time.** No credits to save, so every clip of a take
+  is prepared in priority order (explanation, follow-up, correct version, what was said,
+  corrections), one at a time; cloud clips are never prepared.
+
+- **2026-11-01: the language of instruction is the learner's setting, not the target language's.**
+  Default English; any of `INSTRUCTION_LANGUAGES` except the studied language. On-device explanation
+  voices exist per instruction language (English only so far; others use cloud speech until the user
+  picks voices by listening).

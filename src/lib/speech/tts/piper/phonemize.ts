@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * French grapheme-to-phoneme via piper_phonemize (eSpeak NG compiled to WASM).
  *
@@ -13,7 +15,8 @@
  * It returns `phoneme_ids` already mapped through the voice's vocabulary, so
  * the `phoneme_id_map` in each Piper config does not need to be applied by hand.
  */
-const WASM_BASE = '/piper-wasm/';
+/** The eSpeak files in static/piper-wasm/, under the app's base path (set at build time). */
+const WASM_BASE = `${__BASE_PATH__}/piper-wasm/`;
 
 type PiperFactory = (options: {
   print: (line: string) => void;

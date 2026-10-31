@@ -2,6 +2,414 @@
 
 ## Current State
 
+**Published (2026-11-01, user request):** the app builds for GitHub Pages at
+`https://khizardevelops.github.io/onspot/` (`.github/workflows/pages.yml`, on push to main):
+`BASE_PATH=/onspot` (vite.config.ts → SvelteKit `paths.base`, and `__BASE_PATH__` for the
+phonemizer in the worker); links/`goto` use `pageHref()` (`src/lib/pages.ts`: base + trailing slash,
+`trailingSlash: 'always'`); 404.html = index.html for deep links. Pages cannot send COOP/COEP, so it
+is not cross-origin isolated (cloud mode unaffected; on-device models single-threaded). Verified
+locally with a Pages-like server: first visit, deep link, cloud setup, a real take. Releases: tag
+`v*` → release.yml (Linux .deb/.AppImage/.rpm on ubuntu-22.04, `GGML_NATIVE=OFF`; also Windows,
+macOS) and android.yml (publishes only when signing secrets exist; none are set, so the signed APK
+is built locally and uploaded with `gh release upload`).
+
+**Language of instruction (2026-11-01, user request):** Settings → Language → "Language of
+instruction" (`settings.instructionLanguage`, default `en`; `INSTRUCTION_LANGUAGES` in
+`languages/index.ts`, 21 languages, never the studied one). It replaced the per-target
+`translationTarget` field: every LLM prompt gets the name via `teachingLanguages(settings)` in
+practice.ts; the prompts' English worked examples get a note to answer in the chosen language.
+Translation sets carry `instructionLanguage` (missing = English; `translationsCurrent` regenerates
+on a change); hover meanings are keyed per language (`glossKey`: English keeps the plain hash, so
+saved meanings stay). Explanation voices are keyed by instruction language (only `en` has voices);
+other languages get "No on-device <X> voice yet" and cloud explanation audio. Instruction-language
+text uses `dir="auto"` (Arabic/Persian/Urdu). Verified with Spanish: explanation, follow-up
+translation, correction explanation, translation and hover meaning all in Spanish.
+**Install fixes:** the explanation-voice row has its own Install button (the footer one only showed
+while practice was blocked), the download bar names what it installs, Install skips parts already
+installed, and `cachedFetch` now awaits the cache write and stores from memory when Chromium refuses
+the streamed `Cache.put` ("encountered a network error", seen for Lessac every time).
+
+**On-device explanation audio, two voices (2026-11-01, user decision):** explanations are spoken on
+the device by the English voice the learner picks (Settings → Text-to-speech → "English voice";
+candidates Ryan/Lessac US, Alan/Alba UK, `approval: candidate`, auditioned from hosted
+`samples/speaker_0.mp3`, nothing downloaded to compare) for the English, and the selected target
+voice (`settings.ttsVoice`, or the attempt's) for every tagged target-language span and the
+follow-up question. `explanationSpeech.ts` splits (`parseExplanation` highlights → target voice),
+runs each piece through its voice (English through the target voice's loudness chain without EQ),
+trims edge silence, resamples to 48 kHz, pauses by the punctuation at each join, and feeds pieces
+to `playPcmStream` (WebCodecs Opus → WebM appendOnly → MSE) as they finish; stored whole as Opus.
+The worker keeps two voices resident (LRU). The English voice is its own language-data part
+(`installed.explanationVoice`); practice does not wait for it. Measured in Chromium: first sound
+4.5 s with both voices cold, 1.0 s warm; 15 s explanation stored as 60 KB.
+**Prepared clips (on-device only):** after a take, when a card becomes active, and for the opened
+session (newest first), every clip is made ahead: explanation → follow-up → correct version → what
+was said → each correction's read-back; one at a time; never while the voice is not installed
+(it would start a download). Play and prepare share option builders, so they hit the same stored
+clip. Follow-up section centred.
+A tap on an explanation that is being prepared joins it live (`LivePieces`; a tap that lands
+while the preparation is still checking storage waits for it to start, `liveExplanation`). Voices are
+warmed while the learner records (`warmLocalVoices`, installed voices only). During the start-up voice
+check the explanation is not reported unavailable (it flickered "not installed").
+Built apps, end to end (seeded take via `plugin:sql`, the app's own Install, the Explanation button):
+Linux release (WebKitGTK, single-threaded WASM: Tom loads in 8.4 s, Ryan 4.6 s, Tom rtf ~0.8)
+streamed, first sound 12 s cold, 0.8 s when already prepared; Android emulator streamed, first sound
+13.6 s cold, Install 127 MB (64 + 63). Warm voices: 1.0 s (Chromium).
+**Pending:** the learner picks the English voice by listening; then mark it `approved` in
+`languages/index.ts` and record it in `docs/benchmarks/tts.md`.
+
+**Streamed read-back + cheaper hover meanings (2026-10-31, user request):**
+- Attempt tracks (`playAttemptText`, `stream: true`) stream from ElevenLabs `/stream` (opus_48000_32):
+  `streamingPlayback.ts` tees the body; one copy is repackaged Ogg→WebM (Mediabunny,
+  ReadableStreamSource → EncodedPacketSink → EncodedAudioPacketSource → WebM appendOnly,
+  0.25 s clusters, no re-encode) into a MediaSource on the shared `<audio>` (speed/loop/seek kept;
+  `durationchange` updates the length when the stream ends); the other copy is collected whole and
+  stored even if playback stops or switches (credits are spent at request time). Pending entry stays
+  until stored, so a second request waits for the file. Falls back to whole-file where MSE lacks
+  WebM Opus. Measured: first sound 365 ms vs 1.7 s for the whole clip (stand-in server); the real
+  `/stream` sent its first Ogg chunk at 1.1 s.
+- Hover meanings: fetched only after the pointer rests 300 ms (a sweep costs nothing); per text
+  (`ensureWordGlosses(attemptId, text)`), not both texts at once; a selection is translated
+  directly (waits only for a word-meaning request already in flight), and selections survive the
+  later word-meaning save (`hasWordMeanings` = words fetched, not just selections). Verified with
+  mocked LLM replies.
+- Tested in the built apps: Linux release (WebKitGTK 2.54: MSE WebM Opus yes, records WebM Opus,
+  stand-in first sound 0.3–0.9 s, real ElevenLabs 1.1 s, stopped stream still stored) and the
+  Android 16 emulator debug APK (WebView Chrome 133: same support; stand-in 0.9 s, real 1.8 s;
+  the first run after install took 12.8 s, first-launch work). Not tested on a physical phone.
+
+**Cost and speed pass (2026-10-31, user request; verified with real Groq calls):**
+- Audio is Opus everywhere: recordings (24 kbps; an 11 s take = 26 KB, was ~350 KB as WAV upload),
+  ElevenLabs `opus_48000_32` stored as it arrives ("Bonjour." 3.2 KB vs 16.8 KB MP3 vs ~90 KB WAV
+  as stored before), OpenAI-compatible `opus` (WAV fallback per server), Piper/WAV clips encoded to
+  Opus before storage (3 s: 129 KB → 12 KB). Playback no longer waits for the DB write.
+- `synthesizeSpeech` registers each clip as pending before awaiting, so concurrent requests pay once.
+- Evaluation: fixed system prompt first (cache hit of 256 tokens seen on Groq on a different take);
+  translations only requested when `translationMode` ≠ off (default off), else null + on demand.
+  Measured: 2,485 → 2,079 prompt tokens; visible output ~25% smaller on a short take; 7.4 s → 2.2 s.
+- `preloadWords` (unused, one paid request per word with cloud TTS) deleted.
+- Settings shows ElevenLabs credit cost per model (Multilingual v2 = 1/char, Turbo v2.5 = ½).
+- Not done (offered): converting already-stored WAV clips; an explanation auto-play toggle;
+  streaming TTS. Groq free tier is 8,000 TPM (~2–3 takes a minute).
+- New dep: `mediabunny` 1.61.6 (MPL-2.0, exact pin; 96 KB lazy chunk).
+
+**Touch screens: own word selection, no platform selection; no scrollbars on phones (2026-10-31,
+user request):** Android's handles and Cut/Copy menu came up on every long-press meant to translate
+words. On `(hover: none) and (pointer: coarse)` app.css sets `user-select: none` +
+`-webkit-touch-callout: none` on html (inputs/textareas/contenteditable stay selectable).
+`TouchWordSelection` (wordSelection.ts) replaces it in transcripts: long-press a word (400ms; >10px
+movement first = scroll), drag to grow by words (touchmove non-passive, preventDefault while
+selecting), lift → `meanings.showSelection` translates; touchend preventDefault stops the lift
+playing the word; a tap anywhere (`click` capture) clears it; one finger selection across all
+transcripts. The selection is app state (`marked` + `markedByTouch` in Transcript.svelte), never the
+document selection. Correction buttons opt into `user-select: text` only off touch screens; a double
+tap no longer selects on touch screens. Mouse selection unchanged (still the document's, copies).
+Scrollbars: the global `::-webkit-scrollbar` styling made Chrome/WebView draw a solid 10px strip;
+on touch screens and ≤640px every element gets `scrollbar-width: none !important` + hidden webkit
+scrollbar. Desktop keeps its scrollbars. Verified with CDP touch events (long-press/drag/lift/tap/
+swipe) in phone emulation; real-device check pending (needs a new APK).
+
+**Edge-to-edge cards on phones (2026-10-31, user request):** at ≤640px the stack cards have no side
+inset (only `env(safe-area-inset-*)`), square corners (`--attempt-radius: 0`) and no tilt
+(`--card-tilt: 0`; `cardPose` now writes `rotate(calc(<tilt>deg * var(--card-tilt, 1)))`, so the
+stage decides). The card's own 16px padding keeps the text off the edge; the tape, the drop and the
+shrunken buried card tell the cards apart. Desktop unchanged (inset, ±0.4° tilt, 6px corners).
+
+**Two-row Feedback header on phones (2026-10-31, user choice):** at ≤640px the header wraps: the
+filter name (on its tape), stats and close on row one; the severity filter spans row two with four
+equal segments (83px each at 390px). Every label fits ("All feedback", "Suggestions", …) at 390 and
+360px. Desktop keeps one row; the icon-only name below a 340px panel now applies only above 640px.
+Options considered: filters down the hole margin (rejected: re-widens the margin), name above the
+cards.
+
+**Narrower Feedback margin (2026-10-31, user request):** binder holes 7px at 4px from the edge, red
+margin line at 20px, content from 28px (was 10px/12px holes, line at 32px, content at 44px), giving
+the correction cards and header 16px more width.
+
+**Phone bar without the session line (2026-10-31, user request):** the phone's second bar row no
+longer shows "session · language · level · mode" (user: useless, takes space); it keeps the small
+buttons on the right, and the level/progress while recording or processing. Desktop keeps the line.
+
+**Android release APK built (2026-10-31):** `bun run android:build` → signed (CN=onspot, v2),
+arm64-v8a, `app.onspot.desktop` 0.1.0 (versionCode 1000), 44.8 MB, at
+`src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`. It first
+failed in the Tauri CLI's version check: `@tauri-apps/plugin-http` 2.8.3 / `plugin-opener` 2.7.2 (npm)
+vs the Rust crates 2.7.0 / 2.5.5 (crates.io had nothing newer). The npm packages are pinned to
+`~2.7.0` / `~2.5.5` in package.json; the app's `@tauri-apps/api` stays 2.11.1 (matches `tauri`
+2.11), the plugins carry their own nested 2.12.4. Unpin when newer Rust crates are published.
+
+**Rejected JSON replies are repaired or retried (2026-10-31, user bug report):** Groq answered HTTP
+400 `json_validate_failed` for a complete translation reply with one stray quote (`…}]"}}`) and the
+raw error reached the user. `chatCompletion` (json mode) now reads `failed_generation`, repairs it
+with `adapters/llm/jsonRepair.ts` (stray quote between closing brackets, trailing commas; only when
+plain parsing fails, and only kept if the result parses) and returns it; if it cannot be repaired it
+retries the request once, then throws "…'s reply wasn't valid JSON. Please try again.".
+`extractJson` uses the same repair as its last resort (local servers do not validate).
+`jsonrepair` (npm) was tried first and cannot fix this slip (it reads the quote as a new key).
+The translation heading is just "Translation" (the "of what you meant to say" note was removed on request).
+
+**Compact display type on phones (2026-10-31):** "You said" / "Did you mean to say?" use
+`COMPACT_TRANSCRIPT_FIT` (max 19px, 120px fill target, line-height 1.45) when the text column is
+under 480px, instead of 24px / 190px / 1.6, so one sentence takes ~140px instead of ~230px and a
+typical take fits a phone screen without scrolling inside the card. Reading text (explanation,
+translations, 15px) is deliberately not reduced: below that it gets harder to read for little gain.
+
+**Translations are of the correct version (2026-10-31, user request):** idiomatic, literal,
+word-for-word and the word breakdown translate `correctedText` ("Did you mean to say?"), never the raw
+transcript (which can be nonsense); for an error-free take the two are the same text. The evaluation
+prompt says so; `generateTranslations(text)` is given `correctedText || transcript`;
+`TRANSLATION_SET_VERSION = 3` (db/types). Older (v2, transcript) sets are not shown: choosing a view
+regenerates, and with translations on by default only the active card refreshes itself (one call,
+not one per card).
+Speak button: 34px round on phones, 32px on desktop.
+
+**Phones: the bar is at the bottom (2026-10-31, user request):** at <=640px `AppHeader` takes
+`order: 99` (every page is a flex column), with a top edge and upward shadow and
+`env(safe-area-inset-bottom)` padding; `viewport-fit=cover` is set and `main.app-page` pads
+`env(safe-area-inset-top)` on phones. Menus flip upward on their own (`onScreen`). Practice's notice
+strip sits just above the bar; the phone timeline rises from just above it; toasts and the
+language-download card are raised to clear it. Round icon buttons: neo gives `.neo-icon` a
+`margin: 0 5px 0 -5px` and packs it left whenever the button has a children snippet (even an
+empty one), so icon-only round buttons reset both (measured centred to 0px).
+
+**One bar on Practice: the composer is gone (2026-10-31, user request):** the prompt and its
+controls live in the top bar. The heading is the prompt (serif, up to two lines) with a session line
+under it (session title · language · level · mode). Actions: idle → New prompt (icon) + Start
+speaking (or the setup button); recording → live level + timer, Discard, Stop & analyze; processing
+→ status + progress, Cancel. The prompt stays visible while recording. Then a divider, Exam/Casual
+(hidden while recording/processing) and the session menu. `AppHeader` folds the navigation into ☰
+whenever the bar is under 900px wide (`@container app-header`), so a window shared with the Feedback
+panel gives the prompt room; it also takes a `below` snippet for a second row inside the bar, which
+Practice uses on phones (row 1: prompt + round mic/stop + ☰; row 2: session line, or level/progress,
+then New prompt, timeline, Feedback, menu). Setup, usage and error notices are a slim strip under
+the bar (`.bar-notices`). Measured: bar 49px (one-line prompt) / 67px (two lines) on desktop, 85px
+on phones (was header + composer ≈ 158px desktop, 108px phone); takes run to the bottom edge.
+
+**Feedback header, stats, bookmark polish (2026-10-31, user critique):** the header is one toolbar:
+filter name (serif, opens the by-type menu; becomes a filter icon below 340px of header width), a
+neo `NeoTabs` segmented control with equal 34px segments of icon + inline count (no floating
+badges; empty counts faded; active segment raised in its severity colour), a divider, then stats and
+close as identical flat `NeoButton`s. All controls share `--toolbar-height` (32px, or the 36px touch
+floor) and one centre line; nothing overflows at 1024px, 1280px or 390px. The session-stats sheet
+is the darker notebook paper and its cards are white card stock with an edge, a lit top and a
+layered shadow. The bookmark tab is manila card stock (SVG grain and fibres, crumple shading, a
+crease, deckled outer edge, fold shade, paper drop shadow) with the error count in Caveat "red
+pencil". The follow-up is framed by four teal corner marks (⛶) joined by a faint dotted line (1px, lighter teal, stopping short of the corners); all background gradients in `ExplanationText.svelte` (user request).
+The filter name sits on a strip of light crepe masking tape (`.filter-name::before`: SVG crepe
+creases across it + grain + sheen; the user found the first, flat version too dark and textureless; torn ends,
+-1° tilt, overhanging into the gaps so it costs no width) so its text is not crossed by the ruled
+lines. The paper timeline uses its own `--timeline-margin` (14px, or the page gutter if smaller)
+instead of the 28px page gutter; cards keep 16px from it.
+
+**Feedback panel follow-up (2026-10-31, superseding the first bookmark):** the bookmark is a **paper
+index tab** (construction paper with `--paper-key` grain, cut outer corners, typewriter error count;
+blush with errors, sage when clean) attached to the sidebar's left edge (`right: var(--feedback-width)`,
+`z-index` under the sidebar). Open, it is tucked behind the sidebar (`translateX(105%)`, inert);
+collapsed, it pokes out 30px. Desktop: the sidebar keeps its width and its grid column animates to
+0, so it slides out whole (inert, shadow off) and the tab rides the edge then pops out (200ms delay,
+slight overshoot); tucking is a quick 240ms. Tablets: the panel is hidden when closed and the tab
+tucks off the right edge. Phones: no tab (top-bar button). The panel casts a shadow onto the takes
+(left on desktop, upwards on tablets). The paperclip is gone. The severity filter is neo-svelte
+`NeoTabs`/`NeoTab` (inset track, neo's raised active tab, 32px round keys) with `NeoBadge` counts
+in the corners. neo puts `tabProps.class` on the tab wrapper and other props on the inner button;
+passing `class` to `NeoBadge` replaces its positioning class (`neo-badge-pill`), so the badge is
+styled through `.neo-badge-pill`; `slide`+`pill` drew no indicator at this size, so plain tabs.
+
+**Feedback panel as a notebook page (2026-10-31, from the user's `feedback-bar.html` mockup + guide):**
+`FeedbackPanel.svelte` rewritten (markup and styles; filtering, transcript linking, details, stats
+logic kept). Notebook paper with grain, a red margin line at 32px and binder holes; content from
+44px. A pinned card-stock header (blue rules, margin line, deep shadow, CSS paperclip) holds the
+current filter's name (fades on change; it opens the by-type menu: All / Grammar / Register /
+Fillers / Style), an inset icon-only filter track (All, Errors, Warnings, Suggestions; count badges;
+`role="radio"`, aria-labels with counts), the stats toggle and close (rail icon on desktop, chevron
+below 1024px). Corrections are white 4px cards with masking tape, one-line "wrong → right", gloss,
+and an expandable details strip (explanation highlights rendered via `parseExplanation`, never raw
+tags). Session stats are a bottom sheet inside the panel (`translateY(100%)` closed, zero layout
+space) with one row of four white cards, Courier Prime values. Closed panel: a handle (rail on
+desktop, 36px bar on tablets). The panel's own playback buttons were dropped (the take card has
+them). Also fixed: the composer's prompt could not shrink at tablet widths (Start speaking ran off
+the edge at 820px).
+
+**Scroll direction, translations, tilt (2026-10-31, user requests):**
+- *The pile scrolls the way text does.* Scroll top = newest take on top; scrolling down lifts the
+  top card up into the slot and uncovers older takes, scrolling up drops newer ones back
+  (`stackPosition` uses `1 - scrollTop/range`; `scrollTopForCard` mirrors it). Inside a long card
+  the wheel first scrolls its text the same way, so one direction everywhere. The paper timeline is
+  newest first (`rows`, `rowOf`), so its ink dot also moves down. A new take: the stage is put back
+  on the previous newest card, then the new one drops onto it at scroll 0.
+- *Translations* are a yellow sticky note on the card (`.card-translation`, see decisions.md), with a "Translation" label row like the other tracks, a
+  definition grid with margin labels (stacked on phones), the idiomatic alternative as an "or …"
+  line, `.pencil-link` text toggles (app.css; also the follow-up's Show English), and "Each word" as
+  a dotted-leader vocabulary list in CSS columns. `.translation-surface` and `.inline-chip` are gone.
+- *Tilt* within ±0.4° (`CARD_TILTS_DEG = [-0.3, 0.35, -0.2, 0.4]`).
+- *Translation note rows (user follow-up):* each variant is a ruled row on the note (`ul.translation-rows`,
+  CSS subgrid: tag | text | toggle), the label a solid amber tag, its toggle on the row's first line
+  at the right ("+1 alternative", "Each word"), rows underlined so a toggle reads as its row's. Phones:
+  tag and toggle share the first line, text below. The word list spans the note in up to 4 columns
+  and skips punctuation-only entries. Follow-up: a dashed rule separates it from the explanation and
+  "Show English" sits right after the "Follow-up" label.
+- *Card gap* under the header: `clamp(24px, 5vh, 44px)` on desktop (was up to 80px), 16px on phones;
+  the tape still has room above the card.
+
+**Paper cards, page gutter, compact bar and the phone layout (2026-10-31, user requests):**
+- *Index cards:* `AttemptCard` is paper (`elevation 0`, no glass): warm card stock + `--paper-key` grain,
+  6px corners, aged inset edges, a red rule under the header (`.index-card-header`) and faint blue
+  rules on the body (`.index-card-lines`, they scroll with a long take). `AttemptStream` splits each
+  pile card into a shell (pose, shadow, tape) and `.stack-card-body` (clip + inner scroll), so the
+  masking tape (`.card-tape`, torn `clip-path`, leans alternately) sits outside the clip.
+- *Gutter:* `--page-gutter` (28px, 12px at <=640px, app.css) is the edge margin for the top bar, the
+  cards, the timeline and the composer; their edges line up.
+- *Compact bar:* AppHeader 48px desktop / 46px phone, 32px nav keys, 15–16px titles; Exam/Casual
+  uses `size="sm"`.
+- *Phones (<=640px):* top-bar buttons for the timeline (`Layers`, `data-timeline-toggle`, opens the
+  paper hanging from the stage top, current take scrolled into view) and Feedback (count badge; the
+  closed panel is `display: none`, no 36px handle); Exam/Casual moved into the ⋯ menu while the
+  session can still change mode, and the subtitle always shows the mode; the composer is one row
+  (prompt + round New-prompt and mic buttons, no eyebrow), recording is one row too. Measured: bar
+  46px, composer 62px (was 158px), cards 368px wide, stage the full 844px.
+- *Touch floor:* `--touch-target` 36px (was 44px) and 34px plain buttons, by user request ("buttons
+  too big"); segmented controls follow it.
+- *Feedback tabs:* labels had `line-height: 1` + `overflow: hidden`, cutting off descenders; now 1.35.
+
+**Top bar instead of the navigation rail (2026-10-31, user request):** the 56px vertical rail is gone;
+`components/AppHeader.svelte` is one bar each page renders at its top: logo, New session, Practice /
+History / Insights / Settings keys and the light/dark toggle on the left, then the page's heading
+(`title`, or a `heading` snippet) and its own controls (`actions` snippet). Practice renders it above
+the attempt stack only (replacing the session header), so the Feedback panel keeps its full height;
+History, Insights and Settings moved their h1 into it. At <=640px the keys fold into the ☰ menu at the
+end of the bar (no floating overlay any more). The theme moved to `stores/theme.svelte.ts`
+(`theme.current`, `applyTheme`, `toggleTheme`); the rail's paper texture, `--rail-bg` and
+`--page-edge-shadow` are gone. Dev pages (model lab, STT bench, UI sandbox) have no bar.
+**Timeline hover fixed + phones:** the hover area (`.timeline-sheet`) never moves, only
+`.timeline-lift` inside it slides and scales, so the pointer can no longer fall off the moved
+element and loop. Hover expansion only under `@media (hover: hover)`; touch opens it with a tap
+(`open` state), a tap on a take jumps and closes, a tap outside closes. Phones show a 26px strip and
+cards leave 38px for it.
+
+**Attempt card stack + paper timeline (2026-10-31, user request from a stationery HTML demo):**
+`AttemptStream.svelte` is no longer a scrolling list. The stage scrolls through a track one
+stage-height per take while a sticky deck holds absolutely-positioned cards; `cardStack.ts` turns
+the scroll offset into a stack position (`scrollProgress → position S → activeIndex + fraction F`,
+the demo's math) and poses each card: the next take drops in from behind the header
+(`translateY(-150%) → 0`, always sharp), the card it lands on stays crisp until F > 0.35, then sinks
+to the buried pose (20% down, 0.92 scale, 8px blur, 0.8 brightness, 0.5 opacity). Cards tilt
+-0.5/0.8/-0.3/1deg. Only the top card and three buried ones are painted. When scrolling stops (120 ms),
+the stack **locks onto a card** in the direction of travel (a move over 10% of a card goes on, a
+nudge falls back), so it never rests half-dropped and one wheel notch = one card; **the card on top
+is the selected take** (Feedback follows it). A take taller than the stage is capped and scrolls
+inside itself, only while resting on top. `PaperTimeline.svelte`: aged-paper strip (torn edge,
+tape, red margin line, Caveat + Courier Prime via @fontsource) at the stage's right edge; ticks + a
+red ink playhead that follows S; hover/keyboard expands it to take numbers and transcripts; click
+jumps (`scrollTo smooth`). Hidden when the stage is under 560px wide (phones). Arrival drops the new
+take over 1050 ms, animated in stack positions so a composer resize mid-drop cannot derail it.
+
+**Spoken explanation + three-track attempt card (2026-10-30, branch `feature/language-delivery-mode`):**
+each card has three tracks, each with a play button and its text: **You said** (the transcript,
+spoken by the target voice), **Did you mean to say?** (`correctedText`: the learner's own sentence
+with mistakes fixed, natural but faithful; the row is hidden and a "Correct" pill shown when it has
+the same words) and **Explanation** (new `attempts.explanation`, migration 7: compact coaching in the
+language of instruction with `<wrong>/<right>/<key>/<ask>` highlight tags, see
+`adapters/llm/explanation.ts`). The explanation auto-plays after a take. The separate `naturalSpeech`
+rewrite and the `summary` are retired (columns kept for older app versions; summaries copied into
+`explanation`). **Explanation audio is cloud-only for now** (user decision: cloud-first; local voices
+only speak the target language) — with Local TTS the button is dimmed and explains why. The Feedback
+panel no longer shows the summary; its header plays the correct version.
+
+**ElevenLabs voices (2026-10-30):** free plans cannot use Voice Library voices via the API (402). The
+picker lists library-copied voices only when the plan is known to be paid (restricted keys cannot
+read it); a 402 at speech time is remembered per key, the voice switches to premade Alice
+`Xb7hH8MSUJpSbSDYk0k2` with a toast and the reply is retried; the stale hard-coded ids are gone.
+
+**Word-granular selection (2026-10-31):** in "You said"/"Did you mean", a word is the smallest
+selectable unit (`components/wordSelection.ts`). Mouse: press-and-drag selects whole words (the
+browser's letter selection is prevented on mousedown; the native selection is set with
+`setBaseAndExtent` on word boundaries, so it draws and copies normally), double-click selects one
+word, Shift+click extends; the click that ends a selection doesn't play the word. Touch keeps the
+platform long-press handles and snaps them out to whole words once dragging pauses.
+The selection is drawn as a **highlighter stroke** (2026-10-31): `Transcript.svelte` tracks the selected
+word range live on `selectionchange` (`selectedWordRange`), puts `marked`/`mark-start`/`mark-end` on
+the word and gap tokens (gaps are now `<span>`s, always, so the DOM under a live selection never
+changes), and hides the native `::selection` colour while marks show. Translucent yellow band with soft
+edges and a faint streak, pooled ink at the start, chisel-slanted ends via `clip-path` inside a
+margin/padding overrun that cancels out (no text moves); muted amber in dark theme.
+
+**Phrases (2026-10-30):** the gloss call also returns *expressions* (words that only make sense
+together: "pommes de terre", "tout à fait", "il y a"), validated (2–6 words, in range, no overlaps).
+Hovering a word in one highlights the whole expression; the label shows the expression's meaning and
+the word's own meaning on a second line. Any range can be selected with the browser's own selection
+(drag, double-click, long-press handles) and is translated in context (`translatePhrase`), saved with
+the take (`TextGlosses.phrases`, origin `selection`). Logic in `components/transcriptMeanings.svelte.ts`.
+
+**Hover translations and follow-up audio (2026-10-30):** hovering (or tapping, on touch) a word in
+"You said" / "Did you mean to say?" shows its in-context meaning. The first hover fetches meanings for
+all of the take's words in one LLM call (`adapters/llm/glossary.ts`, aligned to `glossWords()` =
+the transcript's word tokens), saved as `attempts.word_glosses` (migration 9, keyed by text hash),
+so later hovers are instant and offline. One floating label app-wide (`WordGloss.svelte`, on
+`<body>`, `@floating-ui/dom`). The follow-up question has its own play button (track `followUp`),
+which also works with Local TTS since it is in the target language.
+
+**Follow-up question (2026-10-30):** the LLM returns `followUp: { question, translation }` (migration 8,
+`attempts.follow_up` JSON) instead of an `<ask>` tag in the explanation. The card shows a Follow-up
+block under the explanation; the translation (language of instruction) is hidden behind a
+"Show English" chip. The explanation audio ends with the question; the translation is not spoken.
+Older takes' `<ask>` question is lifted into the same block (no translation).
+
+**Usage monitor (2026-10-30):** Settings → **Usage** tab (`#usage`) shows, per step, what is left:
+Groq per model (tokens/day, requests/day, tokens/minute; Whisper audio/day, /hour, requests/day),
+ElevenLabs per account (characters, refill date), DeepSeek balance, OpenAI live headers, local =
+no limits. Each meter names its source (account API / live headers / refusal / counted on this
+device vs Groq's published limits) and turns into "≈ N takes / read-alouds / minutes left". Practice
+shows one notice line when something is low or used up. Code: `src/lib/usage/`; design in
+`docs/architecture/usage.md`. Browsers cannot read Groq/OpenAI rate-limit headers (CORS), so the web
+build counts; Tauri reads them live (unverified at runtime).
+
+**Per-step processing + ElevenLabs (2026-10-25, branch `feature/language-delivery-mode`):**
+Settings has two tabs — **Learning** (language, level, mode and the three processing rows) and
+**Data** (storage, export/restore, cloud sync). Speech-to-text, the LLM and text-to-speech each have
+their own **Local / Cloud** switch and inline disclosure; there is no global preset:
+- Speech-to-text: Local Whisper or Cloud Groq Whisper.
+- LLM: a cloud LLM or a local OpenAI-compatible server (LM Studio/llama.cpp/Ollama); key optional;
+  Tauri uses the HTTP plugin so local servers need no CORS.
+- Text-to-speech: Local Piper, Cloud ElevenLabs, or an OpenAI-compatible speech API (OpenAI/local).
+  Both cloud providers keep separate keys/models/voices.
+`stores/processing.ts` is the single requirement model for the three row statuses, the footer and the
+Practice gate; `languageData.ts` downloads only the required local parts (cloud-only = no speech
+download). The first-run picker asks for the three Local/Cloud choices after the language; the old
+Balanced/Cloud/Private presets are removed. Settings keeps tabs/details mounted (`class:hidden` or a
+`0fr` grid) because neo 1.2.0's `NeoSelect` throws `state_unsafe_mutation` when it unmounts;
+transient **model** lists use a text input + fetched chips, and voices use the `VoicePicker` modal.
+Browser-verified: independent rows,
+all-cloud vs all-local/mixed downloads, gate routing, ElevenLabs/OpenAI switching and persistence,
+keyless local LLM (mock server), 390px layout. Not verified: a live ElevenLabs key, a real local LLM
+server, and the Tauri desktop runtime for the local-server path.
+
+**Voice pickers and row layout (2026-10-25 bug pass):** the three voice pickers open a dedicated
+modal (`components/settings/VoicePicker.svelte`): compact trigger with the selected name and one
+detail line, then a searchable, scrollable list with a pinned footer (Preview, Refresh, Done) that
+fits a 390×600 viewport. Options carry a detail line (Piper size/rate, ElevenLabs
+language/accent/gender/age/use case, OpenAI voice character); built-in ElevenLabs ids are named and
+account voices load automatically when a key exists. Arrow keys/Home/End walk the list; the search
+field focuses only on a fine pointer so phones do not open the keyboard unasked. Detail text uses a
+foreground/muted mix so the 12px line clears AA on the tinted selected row (7.65–9.93:1).
+`CapabilityRow` pins its controls (`flex: 0 0 auto`) and lets the text column shrink
+(`min-width: 0`), so the chevron stays inside the card at every width from 320 to 1440.
+`initSettings()` no longer reverts a choice made while the database was still loading.
+
+**BYOC sync (2026-10-25, branch `feature/byoc-sync`):** Phase 3 is implemented. Settings →
+Cloud sync supports **Google Drive** (app-private `appDataFolder`; desktop loopback PKCE, web
+Google Identity Services) and **WebDAV** (browser `webdav` package with server CORS, native
+Tauri HTTP otherwise). Sync is manual and whole-database: both sides are compared first, upload is
+safe, and using the cloud copy always asks because it replaces local data. Change detection uses a
+device-local monotonic revision (`src/lib/adapters/db/revision.ts`) bumped by every adapter write,
+not file hashing — SQLite images are not byte-stable. Downloads go through
+`importSqliteBytes()`, so the existing header/schema checks, quota pre-check and rollback apply;
+Tauri additionally gets a schema-text check. Desktop OAuth callback parsing has Rust tests.
+Web-verified against a local WebDAV server: upload, no-op, remote conflict, cloud restore,
+keep-device upload, corrupt-remote rejection. A live Google account was not available, so Drive is
+code-complete but runtime-unverified. iOS is still deferred (`docs/architecture/platforms.md`);
+Windows `.exe`/`.msi` and macOS/Linux bundles are produced by
+`.github/workflows/release.yml`. Source files now carry AGPL SPDX headers
+(`bun run spdx` / `spdx:check`).
+
 **SvelteKit 3 (2026-10-04, branch `migration`):** Kit 3 / adapter-static 4 / Vite 8.3; config is
 in `vite.config.ts`; imports are `#lib/...` with extensions. See decisions.md.
 
@@ -19,11 +427,11 @@ layout, token bridge in `app.css`); shadcn-svelte, bits-ui and `src/lib/componen
 Older notes below that name shadcn primitives describe the pre-migration implementation.
 
 The **onspot** product UI and core practice pipeline are implemented. The current Practice view
-uses an Apple-inspired glass-and-gradient shell, a free-scrolling 3D attempt conveyor, explicit
-card selection, compact severity filters, and progressively disclosed feedback/translation detail.
+uses an Apple-inspired glass-and-gradient shell, a scroll-driven stack of attempt cards with a paper
+timeline (the card on top is the selected take), compact severity filters, and progressively disclosed feedback/translation detail.
 Local Whisper, SQLite, and now Piper TTS all run in workers; the UI thread is kept for interaction.
-Phase 3 BYOC sync is the next product phase; a real local Whisper + LLM end-to-end proof and the
-Piper Tom EQ/loudness pass remain verification/polish work.
+All four inception phases are implemented; a real local Whisper + LLM end-to-end proof, a live
+Google Drive run, and the Piper Tom EQ/loudness pass remain verification/polish work.
 
 **Persistence boundary (diagnosed 2026-09-20; SQLite restore added 2026-09-24):** the web build
 persists only to OPFS for its exact browser profile and origin. It neither discovers data from
@@ -57,7 +465,7 @@ four sides. Its board is inset/folded; the key's lower/right contours stay outwa
 top-left highlight is used in light mode. Settings links to `/ui-sandbox/`, an isolated dummy-data
 interactive UI lab that imports no product stores or services.
 
-**Mobile shell (2026-09-20):** at <=640px the desktop rail is fully hidden and no bottom
+**Mobile shell (2026-09-20; superseded 2026-10-31: the ☰ menu is now inside AppHeader):** at <=640px the desktop rail is fully hidden and no bottom
 navigation row exists. `+layout.svelte` provides one fixed 44px hamburger overlay in the existing
 top chrome; its disclosed shadcn menu contains New session, all routes, and theme. It does not
 participate in the grid, so `<main>` gets the full viewport height (browser-verified: 844px of an
@@ -149,7 +557,7 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
 - **Paper surfaces & relief (no plastic gradients).** The page texture is published as
   `--paper-page` on `<html>`; `.paper-surface` (app.css) paints it with `background-attachment:
   fixed`, so any surface is cut from the same sheet and lines up with the page. Used by the
-  Practice header, the conveyor lip and composer fade (masked), History session cards, the
+  Practice header, the composer fade (masked), History session cards, the
   Exam/Casual knob and the rail keys. Relief tokens: `--paper-emboss(-hover)`, `--paper-deboss`,
   `--paper-press-tint` (plus `--neu-raised*`/`--neu-pressed*` for larger cards). Rail keys are
   page-paper tiles on the ribbed rail, embossed; the current page is debossed and shaded. The
@@ -208,28 +616,28 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   evaluation, TTS read-back and the record→transcribe→evaluate→persist orchestration.
   STT and Piper worker plumbing are browser-verified; a full local transcription + evaluation
   still needs the 299 MB download and an LLM key.
-- [ ] Phase 3 — BYOC sync
+- [x] Phase 3 — BYOC sync. Google Drive (app-private folder; desktop loopback PKCE, web Google
+  Identity Services) and WebDAV, as whole-database snapshots with explicit conflict prompts.
+  Local export/import already existed; sync reuses its restore safety path. Browser-verified
+  against a local WebDAV server; a live Google account still needs a run.
 - [x] Phase 4 — product UI. Practice, Settings, History (search + regex/case, replay, rename,
   delete), Insights, toasts, click-to-pronounce, session-locked mode, per-attempt translation
-  variants, clickable transcript↔feedback correction marks, and the attempt conveyor are done.
-  Phase 3 is next.
+  variants, clickable transcript↔feedback correction marks, and the attempt stack are done.
 
 ### Current attempt-card UX
-- `AttemptStream.svelte` is a flat oldest→newest scroll list. Cards roll over the top edge with a
-  pronounced CSS scroll-driven 3D conveyor transform; scrolling back to older attempts reverses
-  the motion. Unsupported webviews get a requestAnimationFrame fallback and reduced-motion gets
-  neither implementation.
-- **Tall cards scroll flat.** The exit timeline is degenerate for a card taller than the viewport
-  (it starts part-way through), so anything over `max(480px, 75% viewport)` gets a JS-applied
-  `tall` class that disables the conveyor. `ResizeObserver` watches every slot and toggles only
-  the card whose size changed. This is what lets a 5-minute take with translations and a word
-  breakdown be read all the way down without flipping away.
-- New attempts rise to the top over 1050ms with deterministic eased scrolling plus a light card
-  arrival transform. The component stays mounted when the list is empty so the first attempt also
-  animates. Wheel, touch, or pointer input cancels programmatic motion immediately.
+- `AttemptStream.svelte` is a stack of index cards (see the 2026-10-31 note at the top and
+  `components/cardStack.ts`). The old scroll-driven 3D conveyor, its rAF fallback, the floor spacer
+  and the `tall` class are gone. Reduced motion: cards swap places at the halfway point (no sliding
+  or blur) and programmatic scrolls jump.
+- **Tall cards scroll inside themselves.** A card is capped to the stage
+  (`max-height: 100% - --card-gap - --card-floor`) and gets `overflow-y: auto` only while the stack
+  rests on it (`restsOn`), so the wheel never scrolls a card that is still moving; at its end the
+  wheel chains to the stage and the next card drops.
+- New attempts drop onto the pile over 1050ms (eased, in stack positions). From an older card the
+  stage first jumps back to the previous newest card, then drops the new one. The component stays
+  mounted when the list is empty. Wheel, touch, or pointer input cancels programmatic motion.
 - Every attempt with translation data has a labelled **Translate** menu. It explains and selects
-  Idiomatic, Literal, Word-for-word, or all three views. A `ResizeObserver` keeps the floor spacer
-  correct when translation content changes a card's height.
+  Idiomatic, Literal, Word-for-word, or all three views.
 - **Compare all three stacks the three variants vertically**, full card width, each with its
   label. This is deliberate: takes run 60s–5min, and vertical scrolling is the abundant axis.
 - Translation output is the translation text alone; variant explanations live only in the menu.
@@ -239,10 +647,10 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   save 0–2 idiomatic alternatives and an ordered word/morpheme breakdown. Alternatives and the
   breakdown stay collapsed beneath the primary translation until the learner requests them;
   regeneration is a secondary action inside the Translate menu.
-- Scrolling the conveyor does not change `activeAttemptId`; selection is explicit via card click,
-  or adding a new attempt. There are no previous/next buttons or floating attempt counter.
-- Historical cards use `content-visibility: auto`; only the stream container and newest card are
-  observed for floor-space sizing.
+- **The card on top is the selected take** (`activeAttemptId` follows the stack when it locks). This
+  replaced "scrolling never selects": in a stack only one card is readable. Buried cards are `inert`
+  inside; clicking one that peeks out (or a timeline entry) brings it to the top. A
+  `ResizeObserver` on the stage keeps the same card on top across resizes.
 
 ### Current feedback and shell UX
 - `FeedbackPanel.svelte` uses shadcn Tabs for **All / Errors / Warnings / Suggestions**, with the
@@ -267,8 +675,7 @@ The earlier model-selection lab is complete. Its approved STT/TTS choices and ev
   is a single row: `Take n · duration · words` left, actions right.
 - Settings uses shadcn Select for all choices; the native `<select>` controls are gone and each
   trigger has a programmatic accessible name.
-- The app rail is 56px on desktop and becomes a full-width bottom navigation bar at 640px and
-  below.
+- (Historical) the app rail was 56px on desktop; removed 2026-10-31 for the top bar.
 
 ### Visual cleanup (2026-09-15)
 - The purple accent is gone: `--brand-2`/`--brand-3` are cyan/sky in both themes, so gradients run
@@ -371,8 +778,8 @@ prototype's insight columns keep working without new categories.
 
 ### Phase 4 started: product UI
 
-- `src/routes/+layout.svelte` — rail nav (Practice / History / Settings) + theme toggle,
-  calls `initSettings()`.
+- `src/routes/+layout.svelte` — paper textures, theme provider, `initSettings()`; navigation is
+  in `AppHeader.svelte` (rail removed 2026-10-31).
 - `src/routes/+page.svelte` — Practice: prompt composer, live waveform + 1:00 timer, STT
   progress, transcript with correction highlights, feedback panel and session stats.
 - `src/routes/settings/+page.svelte` — level/mode, BYOK provider + keys, an **enum-backed model

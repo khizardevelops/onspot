@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 declare module '@diffusionstudio/piper-wasm' {
 	type PiperModule = {
 		callMain(args: string[]): number;

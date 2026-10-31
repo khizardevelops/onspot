@@ -1,27 +1,60 @@
-import { get, writable } from 'svelte/store';
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { derived, get, writable } from 'svelte/store';
 import {
 	getDatabaseAdapter,
 	type Attempt,
 	type Correction,
 	type Prompt,
 	type RunMode,
+	type FollowUp,
 	type Session,
+	type TextGlosses,
 	type TranslationSet,
-	type IDatabaseAdapter
+	type WordGlosses,
+	type IDatabaseAdapter,
+	TRANSLATION_SET_VERSION
 } from '#lib/adapters/db/index.js';
-import { appSettings, setSetting } from './settings';
-import { groqApiKey, openaiApiKey } from './secrets';
-import { llmConfigured, resolveLlmEndpoint } from './llm';
-import { playTrack, setAudioLoading, stopAudio } from './audio';
-import { refreshLanguageData } from './languageData';
+import { appSettings, setSetting, type AppSettings } from './settings';
+import { groqApiKey } from './secrets';
+import { ttsApiOptions } from './ttsConfig';
+import { resolveLlmEndpoint } from './llm';
+import { firstMissingRequirement, processingReady } from './processing';
+import { playTrack, primeAudioPlayback, setAudioLoading, stopAudio, type AudioKind } from './audio';
+import { languageData, refreshLanguageData } from './languageData';
 import { VoiceRecorder, type Recording } from '#lib/utils/recorder.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
-import { evaluateAttempt, generateTranslations, type EvaluationResult } from '#lib/adapters/llm/index.js';
-import { synthesizeSpeech } from '#lib/speech/tts/service.js';
+import {
+	evaluateAttempt,
+	generateTranslations,
+	generateWordGlosses,
+	hasWordMeanings,
+	translatePhrase,
+	separateFollowUp,
+	speakableExplanation,
+	type EvaluationResult
+} from '#lib/adapters/llm/index.js';
+import {
+	preloadLocalVoice,
+	synthesizeExplanation,
+	synthesizeSpeech,
+	type ExplanationSpeechOptions,
+	type SpeechResult,
+	type SynthesizeOptions
+} from '#lib/speech/tts/service.js';
 import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
 import { ensurePromptsSeeded, pickRandomPrompt } from '#lib/practice/prompts.js';
-import { requireLanguage, getVoice } from '#lib/languages/index.js';
+import {
+	DEFAULT_INSTRUCTION_LANGUAGE_ID,
+	explanationVoicesFor,
+	getExplanationVoice,
+	getInstructionLanguage,
+	getVoice,
+	instructionLanguagesFor,
+	requireLanguage
+} from '#lib/languages/index.js';
 import { MAX_RECORDING_SEC, capWords, countWords } from '#lib/config.js';
+import { hashText } from '#lib/utils/hash.js';
 import { toast } from './toast';
 import type { ModelProgress } from '#lib/types.js';
 
@@ -29,12 +62,18 @@ export type PracticePhase = 'idle' | 'recording' | 'transcribing' | 'evaluating'
 
 export interface AttemptView {
 	id: string;
+	/** What the learner said, verbatim from speech-to-text. */
 	transcript: string;
+	/** The correct version ("Did you mean to say…?"). */
 	correctedText: string;
-	naturalSpeech: string;
 	translation: string;
 	translations: TranslationSet | null;
-	summary: string;
+	/** Spoken coaching markup in the language of instruction (see `adapters/llm/explanation.ts`). */
+	explanation: string;
+	/** The follow-up question and its translation; older takes keep the question in `explanation`. */
+	followUp: FollowUp | null;
+	/** Hover translations per text, fetched on the first hover (see `ensureWordGlosses`). */
+	wordGlosses: WordGlosses;
 	corrections: Correction[];
 	durationSec: number;
 	wordCount: number;
@@ -83,6 +122,8 @@ let prompts: Prompt[] = [];
 let recorder: VoiceRecorder | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 const translationJobs = new Map<string, Promise<TranslationSet>>();
+const glossJobs = new Map<string, Promise<void>>();
+const phraseJobs = new Map<string, Promise<string>>();
 let initialization: Promise<void> | null = null;
 /** True while the microphone permission prompt / device start is pending. */
 let starting = false;
@@ -95,6 +136,61 @@ let run = 0;
 let analysis: AbortController | null = null;
 /** Latest read-back request; an older synthesis that finishes later must not play over it. */
 let speechRequest = 0;
+
+/** The spoken tracks of an attempt card; the follow-up question can also be replayed on its own. */
+export type AttemptTrackKind = Extract<AudioKind, 'said' | 'corrected' | 'explanation' | 'followUp'>;
+
+const TRACK_LABEL: Record<AttemptTrackKind, string> = {
+	said: 'You said',
+	corrected: 'Correct version',
+	explanation: 'Explanation',
+	followUp: 'Follow-up question'
+};
+
+/**
+ * Why the explanation cannot be spoken right now, or null when it can. It is
+ * in the language of instruction with target-language words in it: a cloud
+ * voice speaks both; on the device it takes two voices (see
+ * `synthesizeExplanation`), so the English voice must be chosen and downloaded.
+ */
+export const explanationAudioUnavailable = derived([appSettings, languageData], ([settings, data]) => {
+	if (settings.ttsMode === 'cloud') return null;
+	// While the device's voices are being checked (a moment at start-up) nothing is known yet:
+	// the button stays as it was meant to be; a press waits for the check (`playAttemptTrack`).
+	if (data.status === 'checking') return null;
+
+	const instruction = getInstructionLanguage(settings.instructionLanguage).name;
+	if (explanationVoicesFor(settings.instructionLanguage).length === 0) {
+		return `There is no on-device ${instruction} voice yet: explanation audio needs Cloud text-to-speech.`;
+	}
+	if (!getExplanationVoice(settings.instructionLanguage, settings.explanationVoice)) {
+		return `Explanation audio on this device needs a ${instruction} voice. Choose one in Settings → Text-to-speech.`;
+	}
+	if (!data.installed.explanationVoice) {
+		return `Install the ${instruction} voice for explanations: Settings → Text-to-speech → Install.`;
+	}
+	return null;
+});
+
+/** Whether the explanation can be spoken (see `explanationAudioUnavailable`). */
+export const explanationAudioAvailable = derived(explanationAudioUnavailable, (reason) => reason === null);
+
+/** The languages a take is worked in: the one studied, and the one it is taught in. */
+function teachingLanguages(settings: AppSettings): { language: string; translationTarget: string } {
+	return {
+		language: requireLanguage(settings.targetLanguage).name,
+		translationTarget: getInstructionLanguage(settings.instructionLanguage).name
+	};
+}
+
+/**
+ * True when a take's translations are current: the latest format, and in the
+ * language of instruction now chosen (older sets carry no language: English).
+ */
+export function translationsCurrent(translations: TranslationSet | null | undefined, instructionLanguage: string): boolean {
+	const language = translations?.instructionLanguage ?? DEFAULT_INSTRUCTION_LANGUAGE_ID;
+	return translations?.version === TRANSLATION_SET_VERSION && language === instructionLanguage;
+}
 
 function newId(prefix: string): string {
 	return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -175,6 +271,11 @@ function abandonTake(): void {
 export async function setTargetLanguage(languageId: string): Promise<void> {
 	const language = requireLanguage(languageId);
 	setSetting('targetLanguage', language.id);
+	// Nobody is taught a language in that same language: back to the default (or the first other).
+	if (get(appSettings).instructionLanguage === language.id) {
+		const fallback = instructionLanguagesFor(language).find((entry) => entry.id === DEFAULT_INSTRUCTION_LANGUAGE_ID);
+		setSetting('instructionLanguage', (fallback ?? instructionLanguagesFor(language)[0]).id);
+	}
 	// A voice saved for another language does not exist here; fall back to the
 	// listening-test default for this language.
 	if (!getVoice(language.id, get(appSettings).ttsVoice)) {
@@ -229,22 +330,33 @@ export function nextPrompt(): void {
 	update({ prompt: { id: prompt.id, title: prompt.title, text: prompt.text } });
 }
 
+/** API read-back options shared by every synthesis call (ElevenLabs or OpenAI-compatible). */
+function speechApiOptions(settings: AppSettings) {
+	return ttsApiOptions(settings);
+}
+
 export async function startRecording(): Promise<void> {
 	const state = get(store);
 	// `starting` covers the permission prompt, during which the phase is still idle
 	// and a second click would open a second microphone stream.
 	if (starting || (state.phase !== 'idle' && state.phase !== 'error')) return;
-	// Every take is evaluated by the learner's LLM. Without one the take could
-	// only fail after they have spoken, so refuse before the microphone opens.
-	if (!get(llmConfigured)) {
+	// Every take needs transcription, correction and read-back. If any chosen
+	// path is missing, the take could only fail after they have spoken, so
+	// refuse before the microphone opens.
+	if (!get(processingReady)) {
+		const missing = get(firstMissingRequirement);
 		update({
 			phase: 'error',
-			error: 'Set up your AI provider (API key, or URL and model for a custom one) in Settings → AI provider before you start speaking.'
+			error: missing
+				? `${missing.detail} Finish setup in Settings before you start speaking.`
+				: 'Finish setup in Settings before you start speaking.'
 		});
 		return;
 	}
 	starting = true;
 	const token = run;
+	// Inside the learner's tap: lets the explanation play by itself after this take.
+	primeAudioPlayback();
 
 	const next = new VoiceRecorder();
 	next.onLevel = (level) => update({ level });
@@ -271,6 +383,7 @@ export async function startRecording(): Promise<void> {
 	recorder = next;
 	// The read-back would otherwise play into the microphone.
 	stopAudio();
+	warmLocalVoices();
 
 	update({ phase: 'recording', elapsed: 0, level: 0, error: null, statusText: 'Recording…' });
 	const startedAt = performance.now();
@@ -279,6 +392,22 @@ export async function startRecording(): Promise<void> {
 		update({ elapsed });
 		if (elapsed >= MAX_RECORDING_SEC) void stopAndAnalyze();
 	}, 250);
+}
+
+/**
+ * Loads the on-device voices while the learner speaks, so the reply does not
+ * wait for them: loading one takes seconds, and idle voices are released
+ * after a while. Only voices already on the device (never a download).
+ */
+function warmLocalVoices(): void {
+	const settings = get(appSettings);
+	const data = get(languageData);
+	if (settings.ttsMode !== 'local' || !data.installed.voice) return;
+
+	void preloadLocalVoice(settings.ttsVoice).catch(() => {});
+	if (getExplanationVoice(settings.instructionLanguage, settings.explanationVoice) && data.installed.explanationVoice) {
+		void preloadLocalVoice(settings.explanationVoice).catch(() => {});
+	}
 }
 
 /** Discards the take in progress: stops the microphone, or abandons its analysis. */
@@ -310,6 +439,8 @@ export async function stopAndAnalyze(): Promise<void> {
 	// Claimed synchronously: a double-click (or the 60s timer firing during a
 	// click) must not stop the same recorder twice.
 	recorder = null;
+	// Still inside the Stop tap (the 60s timer has none, but Start already primed).
+	primeAudioPlayback();
 	if (timer) clearInterval(timer);
 	timer = null;
 	const token = run;
@@ -348,6 +479,7 @@ export async function stopAndAnalyze(): Promise<void> {
 	try {
 		const heard = await transcribeSpeech({
 			audio16kMono: recording.pcm,
+			recording: recording.blob,
 			mode: settings.sttMode,
 			languageId: language.id,
 			groqApiKey: get(groqApiKey) || undefined,
@@ -371,8 +503,9 @@ export async function stopAndAnalyze(): Promise<void> {
 			prompt: prompt.text,
 			mode,
 			level: settings.level,
-			language: language.name,
-			translationTarget: language.translationTarget,
+			...teachingLanguages(settings),
+			// Translations shown under every take come with the evaluation; otherwise only when asked for.
+			includeTranslations: settings.translationMode !== 'off',
 			endpoint: resolveLlmEndpoint(settings),
 			signal: controller.signal
 		});
@@ -388,7 +521,10 @@ export async function stopAndAnalyze(): Promise<void> {
 			activeAttemptId: view.id
 		});
 
-		void playAttempt(view.id);
+		// The coach answers first; without explanation audio, the correct version plays instead.
+		const canExplain = get(explanationAudioAvailable) && Boolean(view.explanation);
+		void playAttemptTrack(view.id, canExplain ? 'explanation' : 'corrected');
+		prepareTakeAudio(view.id, { first: true });
 	} catch (error) {
 		if (token !== run) return;
 		update({
@@ -432,6 +568,10 @@ async function persistAttempt(
 
 	const attemptId = newId('attempt');
 	const audioKey = `attempt:${attemptId}`;
+	const translations = evaluation.translations && {
+		...evaluation.translations,
+		instructionLanguage: get(appSettings).instructionLanguage
+	};
 	const attempt: Attempt = {
 		id: attemptId,
 		sessionId,
@@ -439,11 +579,12 @@ async function persistAttempt(
 		promptText: prompt.text,
 		transcript,
 		correctedText: evaluation.correctedText,
-		naturalSpeech: evaluation.naturalSpeech,
-		translation: evaluation.translations.idiomatic || null,
-		translations: evaluation.translations,
+		translation: evaluation.translations?.idiomatic || null,
+		translations,
 		ttsVoice: get(appSettings).ttsVoice,
-		summary: evaluation.summary,
+		explanation: evaluation.explanation,
+		followUp: evaluation.followUp,
+		wordGlosses: null,
 		durationSec: Math.round(recording.durationSec * 100) / 100,
 		wordCount: countWords(transcript),
 		audioKey,
@@ -472,10 +613,11 @@ async function persistAttempt(
 		id: attemptId,
 		transcript,
 		correctedText: evaluation.correctedText,
-		naturalSpeech: evaluation.naturalSpeech,
-		translation: evaluation.translations.idiomatic,
-		translations: evaluation.translations,
-		summary: evaluation.summary,
+		translation: evaluation.translations?.idiomatic ?? '',
+		translations,
+		explanation: evaluation.explanation,
+		followUp: evaluation.followUp,
+		wordGlosses: {},
 		corrections,
 		durationSec: attempt.durationSec,
 		wordCount: attempt.wordCount,
@@ -596,6 +738,8 @@ function buildCorrections(
 
 export function setActiveAttempt(id: string | null): void {
 	update({ activeAttemptId: id });
+	// The take being read is prepared before the rest.
+	if (id) prepareTakeAudio(id, { first: true });
 }
 
 export function clearError(): void {
@@ -616,7 +760,7 @@ export function ensureAttemptTranslations(
 	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
 	if (
 		!force &&
-		attempt.translations?.version === 2 &&
+		translationsCurrent(attempt.translations, get(appSettings).instructionLanguage) &&
 		attempt.translations?.idiomatic &&
 		attempt.translations.literal &&
 		attempt.translations.wordForWord
@@ -629,12 +773,14 @@ export function ensureAttemptTranslations(
 
 	const job = (async () => {
 		if (!db) db = await getDatabaseAdapter();
-		const language = requireLanguage(get(appSettings).targetLanguage);
-		const translations = await generateTranslations(
-			attempt.transcript,
-			resolveLlmEndpoint(get(appSettings)),
-			{ language: language.name, translationTarget: language.translationTarget }
+		// The correct version, not the transcript: what the learner meant, which is the transcript when it had no mistakes.
+		const settings = get(appSettings);
+		const generated = await generateTranslations(
+			attempt.correctedText?.trim() || attempt.transcript,
+			resolveLlmEndpoint(settings),
+			teachingLanguages(settings)
 		);
+		const translations = { ...generated, instructionLanguage: settings.instructionLanguage };
 		const row = await db.getAttempt(attemptId);
 		if (!row) throw new Error('Attempt not found.');
 		await db.putAttempt({
@@ -657,11 +803,339 @@ export function ensureAttemptTranslations(
 	return job;
 }
 
-/** Speaks an attempt's natural rewrite (falls back to the corrected text). */
-export async function playAttempt(id: string): Promise<void> {
+/**
+ * The hover translations of one of an attempt's texts: one meaning per word
+ * token (`glossWords`) and its phrases, or null until any have been fetched.
+ * A text can hold translated selections before its word meanings
+ * (`hasWordMeanings`).
+ *
+ * @param attempt The attempt the text belongs to.
+ * @param text The transcript or the correct version.
+ */
+export function wordGlossesFor(
+	attempt: AttemptView,
+	text: string,
+	instructionLanguage = get(appSettings).instructionLanguage
+): TextGlosses | null {
+	return attempt.wordGlosses[glossKey(text, instructionLanguage)] ?? null;
+}
+
+/**
+ * Where a text's hover meanings are kept on its attempt: per language of
+ * instruction, so a change of language fetches new ones. English keeps the
+ * plain text hash, which is what meanings saved before this choice use.
+ */
+function glossKey(text: string, instructionLanguage = get(appSettings).instructionLanguage): string {
+	return instructionLanguage === DEFAULT_INSTRUCTION_LANGUAGE_ID ? hashText(text) : `${instructionLanguage}:${hashText(text)}`;
+}
+
+/** Saves an attempt's hover translations in the view and the database. */
+async function saveWordGlosses(attemptId: string, wordGlosses: WordGlosses): Promise<void> {
+	update({
+		attempts: get(store).attempts.map((item) => (item.id === attemptId ? { ...item, wordGlosses } : item))
+	});
+
+	if (!db) db = await getDatabaseAdapter();
+	const row = await db.getAttempt(attemptId);
+	if (row) await db.putAttempt({ ...row, wordGlosses, updatedAt: new Date().toISOString() });
+}
+
+/** Word-meaning requests in flight, one per text of an attempt. */
+function glossJobKey(attemptId: string, text: string): string {
+	return `${attemptId}:${glossKey(text)}`;
+}
+
+/**
+ * The meaning of a range of words the learner selected. A range selected
+ * before, or an expression the word meanings already found, answers at once;
+ * anything else is one small LLM call, saved for next time. It never waits
+ * for the whole text's word meanings, unless they are already on their way
+ * (then they may hold the answer, and are paid for anyway).
+ *
+ * @param attemptId The attempt the text belongs to.
+ * @param text The transcript or the correct version.
+ * @param start First selected word token (`glossWords` index).
+ * @param end Last selected word token, inclusive.
+ * @param phrase The selected words exactly as they appear in the text.
+ * @returns The meaning in the language of instruction.
+ * @throws With a readable message when the LLM call fails.
+ */
+export function ensurePhraseMeaning(
+	attemptId: string,
+	text: string,
+	start: number,
+	end: number,
+	phrase: string
+): Promise<string> {
+	const jobKey = `${attemptId}:${glossKey(text)}:${start}-${end}`;
+	const running = phraseJobs.get(jobKey);
+	if (running) return running;
+
+	const job = (async () => {
+		await glossJobs.get(glossJobKey(attemptId, text))?.catch(() => {});
+
+		const findSaved = () => {
+			const attempt = get(store).attempts.find((item) => item.id === attemptId);
+			const glosses = attempt ? wordGlossesFor(attempt, text) : null;
+			return glosses?.phrases.find((saved) => saved.start === start && saved.end === end)?.meaning;
+		};
+		const saved = findSaved();
+		if (saved) return saved;
+
+		const settings = get(appSettings);
+		const meaning = await translatePhrase(phrase, text, resolveLlmEndpoint(settings), teachingLanguages(settings));
+
+		const attempt = get(store).attempts.find((item) => item.id === attemptId);
+		if (attempt) {
+			const key = glossKey(text);
+			const current = attempt.wordGlosses[key] ?? { words: [], phrases: [] };
+			const phrases = [...current.phrases, { start, end, meaning, origin: 'selection' as const }];
+			await saveWordGlosses(attemptId, { ...attempt.wordGlosses, [key]: { ...current, phrases } });
+		}
+		return meaning;
+	})().finally(() => phraseJobs.delete(jobKey));
+
+	phraseJobs.set(jobKey, job);
+	return job;
+}
+
+/**
+ * Fetches the hover translations of one of an attempt's texts, the one the
+ * learner is pointing at, in one LLM call, and saves them on the attempt so
+ * later hovers are instant and work offline. The other text is fetched only
+ * if the learner points at it too: the two are mostly the same words, so
+ * fetching both at once nearly doubled the cost. Concurrent hovers share one
+ * request.
+ *
+ * @param attemptId The attempt whose words were hovered.
+ * @param text The transcript or the correct version.
+ * @throws With a readable message when the LLM call fails.
+ */
+export function ensureWordGlosses(attemptId: string, text: string): Promise<void> {
+	const jobKey = glossJobKey(attemptId, text);
+	const running = glossJobs.get(jobKey);
+	if (running) return running;
+
+	const attempt = get(store).attempts.find((item) => item.id === attemptId);
+	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
+	if (!text.trim() || hasWordMeanings(wordGlossesFor(attempt, text))) return Promise.resolve();
+
+	const job = (async () => {
+		const settings = get(appSettings);
+		const [glosses] = await generateWordGlosses([text], resolveLlmEndpoint(settings), teachingLanguages(settings));
+
+		// Selections translated while these were on their way are kept.
+		const key = glossKey(text);
+		const current = get(store).attempts.find((item) => item.id === attemptId);
+		const selections = current?.wordGlosses[key]?.phrases.filter((phrase) => phrase.origin === 'selection') ?? [];
+		const merged = { ...glosses, phrases: [...glosses.phrases, ...selections] };
+		await saveWordGlosses(attemptId, { ...(current?.wordGlosses ?? {}), [key]: merged });
+	})().finally(() => glossJobs.delete(jobKey));
+
+	glossJobs.set(jobKey, job);
+	return job;
+}
+
+/** The text an attempt track reads aloud. */
+function trackText(attempt: AttemptView, kind: AttemptTrackKind): string {
+	if (kind === 'said') return attempt.transcript;
+	if (kind === 'corrected') return attempt.correctedText || attempt.transcript;
+	if (kind === 'followUp') return followUpQuestion(attempt);
+
+	// The coach ends by asking the follow-up question aloud; its translation stays on screen only.
+	const explanation = speakableExplanation(attempt.explanation);
+	const question = attempt.followUp?.question ?? '';
+	return [explanation, question].filter(Boolean).join(' ');
+}
+
+/** The follow-up question in the target language; older takes carried it inside the explanation. */
+function followUpQuestion(attempt: AttemptView): string {
+	return attempt.followUp?.question || separateFollowUp(attempt.explanation).askedQuestion || '';
+}
+
+/**
+ * Speaks one of an attempt's tracks: what the learner said, the correct
+ * version, or the explanation.
+ *
+ * @param id The attempt to play.
+ * @param kind Which track to speak.
+ */
+export async function playAttemptTrack(id: string, kind: AttemptTrackKind): Promise<void> {
 	const attempt = get(store).attempts.find((a) => a.id === id);
 	if (!attempt) return;
-	await playAttemptText(attempt, attempt.naturalSpeech || attempt.correctedText, 'attempt');
+
+	if (kind === 'explanation') {
+		await languageDataChecked();
+		const unavailable = get(explanationAudioUnavailable);
+		if (unavailable) {
+			update({ error: unavailable });
+			return;
+		}
+		if (get(appSettings).ttsMode === 'local') {
+			await playLocalExplanation(attempt);
+			return;
+		}
+	}
+
+	await playAttemptText(attempt, trackText(attempt, kind), kind);
+}
+
+/** Resolves once the device's voices have been checked (they are re-checked at start-up and on changes). */
+function languageDataChecked(): Promise<void> {
+	return new Promise((resolve) => {
+		let stop: (() => void) | undefined;
+		stop = languageData.subscribe((data) => {
+			if (data.status === 'checking') return;
+			queueMicrotask(() => stop?.());
+			resolve();
+		});
+	});
+}
+
+/**
+ * Speaks an explanation on the device: its English with the chosen English
+ * voice, its target-language words and the follow-up question with the
+ * attempt's voice, starting before the whole explanation is spoken.
+ */
+function playLocalExplanation(attempt: AttemptView): Promise<void> {
+	return playAttemptSpeech(attempt, 'explanation', TRACK_LABEL.explanation, undefined, () =>
+		synthesizeExplanation({ ...localExplanationOptions(attempt, get(appSettings)), stream: true })
+	);
+}
+
+/*
+ * What each kind of speech is made with. Playing a clip and preparing it
+ * ahead of time use the same options, so they find the same stored clip.
+ */
+
+/** An attempt's track (or one of its sentences), in the attempt's voice. */
+function trackSpeechOptions(attempt: AttemptView, text: string, settings: AppSettings): SynthesizeOptions {
+	return {
+		text,
+		mode: settings.ttsMode,
+		languageId: settings.targetLanguage,
+		voice: attempt.ttsVoice ?? settings.ttsVoice,
+		...speechApiOptions(settings),
+		attemptId: attempt.id
+	};
+}
+
+/** A correction's read-back, in the voice chosen in Settings. */
+function correctionSpeechOptions(text: string, settings: AppSettings): SynthesizeOptions {
+	return {
+		text,
+		mode: settings.ttsMode,
+		languageId: settings.targetLanguage,
+		voice: settings.ttsVoice,
+		...speechApiOptions(settings)
+	};
+}
+
+/** An explanation spoken on the device by two voices. */
+function localExplanationOptions(attempt: AttemptView, settings: AppSettings): ExplanationSpeechOptions {
+	return {
+		markup: attempt.explanation,
+		question: attempt.followUp?.question ?? '',
+		languageId: settings.targetLanguage,
+		targetVoice: attempt.ttsVoice ?? settings.ttsVoice,
+		instructionLanguage: settings.instructionLanguage,
+		explanationVoice: settings.explanationVoice,
+		attemptId: attempt.id
+	};
+}
+
+/*
+ * On-device read-back costs nothing, so every clip of a take is made ahead of
+ * time and is ready when tapped: the explanation, the follow-up question, the
+ * correct version, what was said, then each correction's read-back. Takes
+ * wait in a queue: a new take, or the one being read, goes first; then the
+ * rest of the session, newest first. One clip is made at a time, so a tap
+ * never waits behind a queue of them (and joins the clip if it is the one
+ * being made). Cloud read-back is never prepared: it costs credits.
+ */
+const preparationQueue: string[] = [];
+let preparing = false;
+
+/**
+ * True when clips can be prepared: on-device read-back with its voice already
+ * downloaded (preparing must never start a download of its own).
+ */
+function canPrepareAudio(): boolean {
+	return get(appSettings).ttsMode === 'local' && get(languageData).installed.voice;
+}
+
+/** Queues a take's clips; `first` puts it at the front, ahead of the take being prepared. */
+function prepareTakeAudio(attemptId: string, { first = false } = {}): void {
+	if (!canPrepareAudio()) return;
+
+	const queued = preparationQueue.indexOf(attemptId);
+	if (queued >= 0) preparationQueue.splice(queued, 1);
+	if (first) preparationQueue.unshift(attemptId);
+	else preparationQueue.push(attemptId);
+
+	if (!preparing) void prepareQueuedAudio();
+}
+
+/** Queues every take of the session, newest first, behind anything already queued. */
+function prepareSessionAudio(attempts: readonly AttemptView[]): void {
+	for (const attempt of [...attempts].reverse()) prepareTakeAudio(attempt.id);
+}
+
+// The voice is confirmed on the device a moment after start-up (or once it is
+// downloaded): that is when the open session's clips can be prepared.
+let voiceWasInstalled = false;
+languageData.subscribe((data) => {
+	const installed = data.installed.voice && data.status !== 'checking';
+	if (installed && !voiceWasInstalled) prepareSessionAudio(get(store).attempts);
+	voiceWasInstalled = installed;
+});
+
+async function prepareQueuedAudio(): Promise<void> {
+	preparing = true;
+	try {
+		while (preparationQueue.length > 0) {
+			const attemptId = preparationQueue[0];
+			for (const makeClip of takeClips(attemptId)) {
+				if (!canPrepareAudio()) {
+					preparationQueue.length = 0;
+					return;
+				}
+				// Another take went to the front: it is prepared now, this one after it
+				// (its clips made so far are stored, so picking up again is quick).
+				if (preparationQueue[0] !== attemptId) break;
+
+				try {
+					URL.revokeObjectURL((await makeClip()).url);
+				} catch (error) {
+					console.warn('[practice] a clip could not be prepared', error);
+				}
+			}
+			if (preparationQueue[0] === attemptId) preparationQueue.shift();
+		}
+	} finally {
+		preparing = false;
+	}
+}
+
+/** A take's clips, most important first. */
+function takeClips(attemptId: string): Array<() => Promise<SpeechResult>> {
+	const attempt = get(store).attempts.find((item) => item.id === attemptId);
+	if (!attempt) return [];
+
+	const settings = get(appSettings);
+	const clips: Array<() => Promise<SpeechResult>> = [];
+	if (attempt.explanation && get(explanationAudioAvailable)) {
+		clips.push(() => synthesizeExplanation(localExplanationOptions(attempt, settings)));
+	}
+	for (const kind of ['followUp', 'corrected', 'said'] as const) {
+		const text = trackText(attempt, kind);
+		if (text.trim()) clips.push(() => synthesizeSpeech(trackSpeechOptions(attempt, text, settings)));
+	}
+	for (const correction of attempt.corrections) {
+		const text = correction.speakText ?? correction.replacement;
+		if (text?.trim()) clips.push(() => synthesizeSpeech(correctionSpeechOptions(text, settings)));
+	}
+	return clips;
 }
 
 /** Plays one sentence/segment of an attempt with that attempt's voice. */
@@ -673,28 +1147,39 @@ export async function playSegment(id: string, text: string, index: number): Prom
 async function playAttemptText(
 	attempt: AttemptView | undefined,
 	text: string,
-	kind: 'attempt' | 'segment',
+	kind: AttemptTrackKind | 'segment',
 	index?: number
 ): Promise<void> {
 	if (!attempt || !text.trim()) return;
 	const settings = get(appSettings);
+	const label = kind === 'segment' ? text : TRACK_LABEL[kind];
+	await playAttemptSpeech(attempt, kind, label, index, () =>
+		// Starts playing while it arrives (cloud); replays come from the stored clip.
+		synthesizeSpeech({ ...trackSpeechOptions(attempt, text, settings), stream: true })
+	);
+}
+
+/**
+ * Plays an attempt's speech on the shared player: shows it loading, then
+ * plays it, unless a newer request took over meanwhile.
+ */
+async function playAttemptSpeech(
+	attempt: AttemptView,
+	kind: AttemptTrackKind | 'segment',
+	label: string,
+	index: number | undefined,
+	synthesize: () => Promise<SpeechResult>
+): Promise<void> {
 	const request = ++speechRequest;
 	setAudioLoading(true, {
 		attemptId: attempt.id,
 		kind,
 		segmentIndex: index,
-		label: kind === 'segment' ? text : 'Corrected audio',
+		label,
 		url: ''
 	});
 	try {
-		const speech = await synthesizeSpeech({
-			text,
-			mode: settings.ttsMode,
-			languageId: settings.targetLanguage,
-			voice: attempt.ttsVoice ?? settings.ttsVoice,
-			openaiApiKey: get(openaiApiKey) || undefined,
-			attemptId: attempt.id
-		});
+		const speech = await synthesize();
 		if (request !== speechRequest) {
 			URL.revokeObjectURL(speech.url);
 			return;
@@ -703,7 +1188,7 @@ async function playAttemptText(
 			attemptId: attempt.id,
 			kind,
 			segmentIndex: index,
-			label: kind === 'segment' ? text : 'Corrected audio',
+			label,
 			url: speech.url
 		});
 	} catch (error) {
@@ -715,22 +1200,23 @@ async function playAttemptText(
 }
 
 /**
- * Re-renders an attempt's read-back with a different voice/model and remembers
- * the choice. Audio is cached per voice, so switching back is instant.
+ * Re-renders an attempt's correct version with a different voice/model and
+ * remembers the choice. Audio is cached per voice, so switching back is instant.
  */
 export async function setAttemptVoice(attemptId: string, voice: string): Promise<void> {
 	if (!db) db = await getDatabaseAdapter();
 	const attempt = get(store).attempts.find((a) => a.id === attemptId);
 	if (!attempt) return;
-	const text = attempt.naturalSpeech || attempt.correctedText;
+	const text = trackText(attempt, 'corrected');
 	const request = ++speechRequest;
+	const settings = get(appSettings);
 	try {
 		const speech = await synthesizeSpeech({
 			text,
-			mode: get(appSettings).ttsMode,
-			languageId: get(appSettings).targetLanguage,
+			mode: settings.ttsMode,
+			languageId: settings.targetLanguage,
 			voice,
-			openaiApiKey: get(openaiApiKey) || undefined,
+			...speechApiOptions(settings),
 			attemptId,
 			force: true
 		});
@@ -743,7 +1229,7 @@ export async function setAttemptVoice(attemptId: string, voice: string): Promise
 				a.id === attemptId ? { ...a, ttsVoice: voice } : a
 			)
 		});
-		if (request === speechRequest) playTrack({ attemptId, kind: 'attempt', label: 'Corrected audio', url: speech.url });
+		if (request === speechRequest) playTrack({ attemptId, kind: 'corrected', label: TRACK_LABEL.corrected, url: speech.url });
 		else URL.revokeObjectURL(speech.url);
 	} catch (error) {
 		toast(error instanceof Error ? error.message : 'Could not re-render audio.');
@@ -757,13 +1243,7 @@ export async function speakText(text: string): Promise<void> {
 	const request = ++speechRequest;
 	setAudioLoading(true, { attemptId: '', kind: 'correction', label: text, url: '' });
 	try {
-		const speech = await synthesizeSpeech({
-			text,
-			mode: settings.ttsMode,
-			languageId: settings.targetLanguage,
-			voice: settings.ttsVoice,
-			openaiApiKey: get(openaiApiKey) || undefined
-		});
+		const speech = await synthesizeSpeech(correctionSpeechOptions(text, settings));
 		if (request !== speechRequest) {
 			URL.revokeObjectURL(speech.url);
 			return;
@@ -854,10 +1334,11 @@ export async function openSession(sessionId: string): Promise<void> {
 			id: attempt.id,
 			transcript: attempt.transcript,
 			correctedText: attempt.correctedText ?? '',
-			naturalSpeech: attempt.naturalSpeech ?? '',
 			translation: attempt.translation ?? '',
 			translations: attempt.translations,
-			summary: attempt.summary ?? '',
+			explanation: attempt.explanation ?? '',
+			followUp: attempt.followUp,
+			wordGlosses: attempt.wordGlosses ?? {},
 			corrections: correctionLists[index],
 			durationSec: attempt.durationSec,
 			wordCount: attempt.wordCount,
@@ -886,6 +1367,8 @@ export async function openSession(sessionId: string): Promise<void> {
 		progress: null,
 		prompt
 	});
+	// After the view holds the takes: preparing reads them from it.
+	prepareSessionAudio(views);
 }
 
 /**

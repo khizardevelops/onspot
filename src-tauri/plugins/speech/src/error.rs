@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, thiserror::Error)]

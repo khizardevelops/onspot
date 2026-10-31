@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { ort } from '#lib/ort.js';
 import { BaseTTSAdapter } from '../BaseTtsAdapter';
 import { cachedFetch, isCached } from './cachedFetch';

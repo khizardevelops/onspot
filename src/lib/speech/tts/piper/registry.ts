@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { ITTSAdapter } from '../BaseTtsAdapter';
 import { PiperAdapter } from './PiperAdapter';
 import { PiperPlusAdapter } from './PiperPlusAdapter';
@@ -82,9 +84,10 @@ class TTSRegistry {
   }
 
   /** Keep no more than one 63–77 MB voice session resident at a time. */
-  public async disposeOthers(activeId: string): Promise<void> {
+  /** Unloads every loaded voice except the ones to keep resident. */
+  public async disposeOthers(keepIds: readonly string[]): Promise<void> {
     for (const [id, adapter] of this.adapters) {
-      if (id !== activeId && adapter.status === 'ready') await adapter.dispose();
+      if (!keepIds.includes(id) && adapter.status === 'ready') await adapter.dispose();
     }
   }
 

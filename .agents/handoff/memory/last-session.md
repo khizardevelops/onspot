@@ -1,5 +1,271 @@
 # Last Session
 
+## 2026-10-31: card stack + paper timeline
+- **Asked:** make the card scrolling look like the user's HTML demo (stack of index cards dropping
+  from behind the header, delayed blur) and add its aged-paper timeline; TypeScript; keep the
+  demo's scroll math and the 0.35 bury delay.
+- **Done:** `components/cardStack.ts` (math), `components/PaperTimeline.svelte`, `AttemptStream.svelte`
+  rewritten (old conveyor, rAF fallback, floor spacer, `tall` class removed). Fonts
+  `@fontsource/caveat` + `@fontsource/courier-prime` added (`package.json`/`bun.lock`, imported in
+  `app.css`). Deviations from the demo and why: see decisions.md (lock onto a card, top card =
+  selected take, depth fade, drop-shadow filter, position-space arrival).
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (176). Headless Chromium
+  against the user's :5173 with the scratch profile (12 extra takes seeded into its OPFS DB by copying
+  a real take; two real fake-mic takes recorded via Groq with ElevenLabs blocked, so no ElevenLabs
+  characters spent). Scripts in the session scratchpad (`stack.mjs`, `snap.mjs`, `swipe.mjs`,
+  `arrival.mjs`, `long.mjs`, `wordselect.mjs`).
+- **Not verified:** Tauri/WebKitGTK; a real mouse wheel and trackpad (Playwright's wheel is precise
+  pixels; real notches go through the same lock).
+- **Follow-up: timeline hover loop + phones.** User: "hover over the timeline component is buggy…
+  fix the hover loop… the whole app needs to work on a mobile phone too". Static hover area, tap to
+  open on touch, slim strip on phones (see decisions.md).
+- **Follow-up: top bar instead of the rail.** `AppHeader.svelte`, `stores/theme.svelte.ts`; layout
+  rail, floating phone menu and rail paper removed; pages wrapped in a flex column with the bar.
+- **Follow-ups (later):** translation UI restyled as notes on the card; scroll direction unified
+  (down = older takes, the top card lifts up); card tilt range narrowed. One real take recorded via
+  Groq for the arrival check (ElevenLabs blocked).
+- **Follow-ups (same day):** page gutter (cards touched the window edge after the rail went), Feedback
+  tab labels clipped (line-height), paper index cards, phone layout (timeline/Feedback buttons in the
+  bar, compact composer, mode in ⋯), smaller touch buttons, compact top bar. See state.md top.
+- **Follow-up: highlighter selection.** "The selection highlight should be like an actual
+  highlighter": `Transcript.svelte` inks selected words (see decisions.md); `wordSelection.ts` gained
+  `selectedWordRange`, now also used by `transcriptMeanings`. Check/build/spdx pass.
+
+## 2026-10-30: spoken explanation, ElevenLabs voice fix, usage monitor
+- **Asked:** (1) attempt card with three TTS tracks and their text: transcription, correct version,
+  explanation (compact, in the language of instruction, highlights); (2) mid-session: "why are voices
+  that are not free even in the list" (HTTP 402 paid_plan_required); (3) mid-session: a proper usage
+  monitor, per model or per account as the provider limits it.
+- **User decisions:** build **cloud-first**; local explanation audio is the user's own follow-up.
+  The correct version "is essentially the natural version but faithful to what the user is trying
+  to say; the card should say 'did you mean to say?'". The explanation auto-plays.
+- **Explanation:** prompt adds `explanation` (≤60 words, ≤3 most important mistakes, follow-up
+  question in the target language, every target-language span tagged). `explanation.ts` parses,
+  normalizes (drops unknown/unclosed/nested tags and markdown) and speaks it tag-free. Migration 7
+  adds `attempts.explanation` and copies `summary`; `naturalSpeech`/`summary` no longer read or
+  written. New components `AttemptTrack.svelte`, `ExplanationText.svelte`; `playAttemptTrack(id,
+  'said'|'corrected'|'explanation')` replaces `playAttempt`; audio kinds `said/corrected/explanation`
+  replace `attempt`. `utils/words.ts sameWords()` ignores case, punctuation and apostrophe style.
+- **ElevenLabs:** the old ids now resolve to other paid library voices (Rachel id → "Janet"); see
+  decisions.md. `elevenLabsAccount.ts` reads plan + allowance (shared by the voice list and usage).
+- **Usage monitor:** `src/lib/usage/` (ledger, rateLimits, publishedLimits, monitor, format);
+  instrumentation in the LLM client, Groq Whisper, ElevenLabs and OpenAI adapters; Settings → Usage
+  tab; Practice notice. `utils/hash.ts` now holds the FNV hash (moved verbatim from the TTS cache).
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (169). Headless Chromium
+  1243 against the user's :5173 dev server with an isolated scratch profile (keys injected from
+  `~/.keys`, never printed): fake-mic takes (ElevenLabs-generated French with "j'ai allé") went
+  through Groq STT → GPT-OSS → card; explanation auto-played; all three tracks played via
+  ElevenLabs (200); local-TTS fallback; Usage tab real figures; injected refusal → red gauge and
+  Practice notice; 390px and dark, no overflow or page errors. ElevenLabs free tier went from
+  843 to ~2 300 of 10 000 characters during testing.
+- **Follow-up (same day): per-model Groq usage.** The user: limits differ per Groq model; show usage
+  per model with the model in use selected by default. The LLM card now has model chips (the app's
+  Groq list + Groq's published chat models + called models; in-use marked and default; resets to the
+  in-use model when Settings changes it). `publishedLimits.ts` now carries Groq's Free and Developer
+  tables (scraped from the docs page's embedded `rows`/`devRows`); Developer applies when live
+  headers show a higher daily request ceiling. `isChatModel()` is exported from the LLM client.
+  Verified in the browser (default, pick 20B/Compound Mini, Settings → Qwen 3.8 and back, phone).
+- **Follow-up: clipped processing details.** Expanded capability rows cut off control shadows on the
+  right; fixed in `CapabilityRow.svelte` (see bugs.md). The dev server served the new CSS module
+  (`?svelte&type=style&lang.css`); a grep of the JS module is the wrong staleness check for styles.
+- **Follow-up: "why show paid voices on a free key?"** Cause: a restricted key cannot read its plan
+  (so nothing was filtered) and a previously saved library voice stayed selected. Now: library voices
+  only when the plan is known paid; `PaidPlanVoiceError` from the adapter is caught in
+  `synthesizeSpeech`, recorded per key (`stores/elevenLabsVoice.ts`), the voice switched to Alice,
+  and the call retried; the picker swaps a saved voice the plan certainly cannot use.
+- **Follow-up: translated follow-up question.** User wants the follow-up separate, with its
+  translation hidden until tapped. `followUp: { question, translation }` in the LLM schema, migration
+  8 (`attempts.follow_up`), `ExplanationText.svelte` renders a Follow-up block with a "Show English"
+  chip; `separateFollowUp()` lifts old `<ask>` questions out; the model's stray `<ask>` is lifted too.
+- **Follow-up: "You said X. Say X — is the prompt broken?"** Partly: free-text explanations can't be
+  validated. Now structured mistakes + `composeExplanation` (see decisions.md). Harness:
+  `bun --preload <scratch>/lib-alias.ts` resolves `#lib/*.js` → `.ts` for running project modules
+  under bun (Groq calls spaced 40 s: one evaluation reserves ~4.8k of the 8k TPM).
+- **Follow-up: auto-play "frictionless".** It already auto-played, but refusals were swallowed and
+  WebKit needs a per-element gesture; primed in Start/Stop, refusals now shown (see decisions.md).
+- **Follow-up: "reads like a report".** The model now writes a natural `line` per mistake and an
+  opening `note`; the app validates and falls back only when a line fails. Live: "Nice description of
+  your trip! You said à le du York, but you should say à New York because city names don't take
+  articles in French." Prompt examples changed (Paris, not New York) after the model copied one.
+- **Follow-ups: replay the follow-up; hover a word for its meaning.** New track kind `followUp` with a
+  play button in the Follow-up block. Hover meanings: `glossary.ts` + `ensureWordGlosses()` +
+  `Transcript` hover/tap + `WordGloss.svelte`; migration 9; `@floating-ui/dom` added as a direct
+  dependency (was transitive via `@skeletonlabs/floating-ui-svelte`). Verified: first hover one LLM
+  call, then instant; reload → from DB; phone taps; single label.
+- **Follow-up: custom ranges / compound words ("le temps", "pomme de terre").** Expressions from the
+  gloss call + native-selection ranges (`translatePhrase`, `ensurePhraseMeaning`); hover logic moved
+  to `transcriptMeanings.svelte.ts`; `WordGloss` takes a virtual anchor + placement + detail line.
+- **2026-10-31: word-granular selection** (`wordSelection.ts`, wired in `Transcript.svelte`,
+  `transcriptMeanings` reads finished/snapped selections). The machine rebooted overnight and `/tmp`
+  (tmpfs) lost the scratch profile, clip and helper scripts; a fresh profile + one take was recorded.
+- **Test tooling note:** Playwright 1.64 lives in `~/.npm/_npx/e41f203b7505f1fb`; use
+  `executablePath` `~/.cache/ms-playwright/chromium_headless_shell-1243/...` (1.64 wants 1248).
+  Import the app's own store instance via `performance.getEntriesByType('resource')` (HMR `?t=`
+  URLs) and wait for `settingsReady` before `setSetting`.
+
+## 2026-10-30 (research only): Groq limits and a five-minute take
+- **Reported:** `openai/gpt-oss-safeguard-20b` returned HTTP 413 "Request too large … TPM: Limit
+  2000, Requested 2214" on the free (`on_demand`) tier. The 2026-09-14 probe recorded 8 000 TPM for
+  it; Groq's rate-limit page now lists it at 3 RPM / 2K TPM. A 413 means one request is larger than
+  the whole per-minute budget, so waiting never helps. It is a safety classifier and
+  `NON_CHAT_MODEL` already hides it from the dropdown.
+- **Measured:** the evaluation prompt alone is ~5.8k chars (~1.5k tokens) with an empty
+  transcript, ~6.5k at 60s and ~9.2k (~2.3k tokens) at 300s of speech.
+- **Live sources:** Groq `GET /openai/v1/models` (per-key list with `active`, `context_window`,
+  `max_completion_tokens`); `x-ratelimit-limit-tokens` = TPM, `-limit-requests` = RPD, plus
+  remaining/reset and `retry-after` on 429. No documented endpoint returns rate limits. ElevenLabs
+  `GET /v1/models` returns `maximum_text_length_per_request`.
+- **Static facts (docs, 2026-10-30):** Groq STT max file 25 MB free / 100 MB dev, min billed 10 s,
+  `prompt` ≤ 224 tokens; free STT 20 RPM, 7.2k audio s/hour, 28.8k/day. Groq Orpheus TTS: 200
+  chars per request, English and Saudi Arabic only, WAV only.
+- **Not changed:** no code. Open decisions are in tasks.md under "Cloud limits for five-minute takes".
+
+## 2026-10-25 (voice picker modal): the TTS voice list is no longer a dropdown
+- **Reported:** the detailed TTS voice dropdown was too much content for a popover. A real
+  ElevenLabs account can hold 100 voices, each with a metadata line, so it covered the section.
+- **Fix:** new `components/settings/VoicePicker.svelte`. The Settings row keeps a compact trigger
+  (selected name + one detail line); clicking it opens a **modal** with a title, a search field
+  (only above six voices), a scrollable option list, and a footer holding the section's own actions
+  (Preview `VoicePreview`, Refresh voices) plus Done. All three branches (Piper, ElevenLabs, OpenAI)
+  use it, so `SettingSelect` is no longer involved for voices.
+- **Layout:** header/search/footer are `flex: 0 0 auto`, the list is `flex: 1 1 auto` with
+  `overflow-y: auto`; the dialog caps at `min(38rem, calc(100dvh - 4rem))`. Verified with 12 voices
+  at 1280×1000 and 390×600: the list scrolls, the footer stays put and Done remains visible.
+- **Keyboard:** ArrowUp/Down/Home/End walk the options (Home/End are left to the text field while
+  searching). The search field auto-focuses **only on a fine pointer**; on a coarse pointer
+  (Pixel 7 emulation) it stays on the close button so no keyboard covers the list. neo's dialog
+  focuses its first control after a 100ms debounce, so the focus call waits ~130ms and backs off if
+  the learner has already moved on.
+- **Contrast:** the 12px detail line used `--muted-foreground`, which measured 3.91:1 on the tinted
+  selected row and 4.45:1 on the plain row in light mode. Both the option detail and the trigger
+  detail now use `color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground))`:
+  7.65/8.7 (light selected/plain) and 8.55/9.93 (dark), trigger 8.79/8.96.
+- **Test-infra note:** the dev server had gone stale (the file changed but Vite kept serving the old
+  module) and produced a false negative on the trigger markup. Restart it if an edit seems not to
+  apply; the /mnt/data/synced mount can miss watcher events.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (156 files); browser
+  suites for the modal (open/search/empty state/select/Done/close), preview requests, keyboard
+  navigation, chevron bounds at 320–1440px, both settings trees and the Practice gate, in light and
+  dark, at desktop and phone widths, with no page errors or overflow.
+
+## 2026-10-25 (settings bug pass): chevrons, voice dropdowns, startup hydration
+- **Chevron overflow (reported):** above 640px the row header is `flex-direction: row`, and the
+  controls flex item shrank below its content width, painting the disclosure chevron outside the
+  frosted card. `CapabilityRow.svelte` now gives the text column `flex: 1 1 auto` with `min-width: 0`
+  and pins the controls with `flex: 0 0 auto`. Measured at 320/375/390/640/768/1024/1440: the icon's
+  right edge is inside the content box at every width.
+- **Detailed voice pickers:** local Piper, ElevenLabs and OpenAI voices became dropdowns instead of
+  chip rows (superseded by the modal entry above; the detail lines survive there unchanged). Each
+  option carries a second line: Piper shows its download size/sample rate, ElevenLabs
+  combines `language · accent · gender · age · use_case` and the voice description, OpenAI shows the
+  voice character. A saved ElevenLabs id that is not in the account list is kept as an option;
+  the six built-in library ids (e.g. `21m00Tcm4TlvDq8ikWAM` → Rachel) are named instead of showing a
+  raw id. With a key present, the account voices load once automatically; failures stay silent and
+  leave the manual Refresh button.
+- **Preview from the text-to-speech section:** an inline Preview/Pause button next to the cloud
+  voice picker, disabled until that provider is fully configured (superseded: Preview now lives in
+  the picker modal footer and only the local branch keeps the standalone preview card).
+- **Settings hydration bug (found while testing):** `initSettings()` ended with an unconditional
+  `store.set(loaded)`, so a choice made while the database was still being read was silently
+  reverted to the stored value (this made a phone test flaky and could drop a real user's first
+  click). Settings now records fields changed before hydration, merges them over the loaded
+  snapshot, and skips persistence for the hydration write itself.
+- **Server-side detail:** `listElevenLabsVoices` now also reads `description`, `age` and `use_case`
+  labels.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (155 files), and browser
+  suites at 320–1440px for chevron bounds, both settings trees, Practice gate routing, detailed
+  dropdowns on desktop/phone, and ElevenLabs/OpenAI preview requests (mocked: `noah-id` and
+  `voice: nova` reached the adapters). No page errors or horizontal overflow.
+  **Not verified:** live ElevenLabs/OpenAI keys and a real local speech server.
+
+## 2026-10-25 (later): per-step Settings accordion + product names (branch `feature/language-delivery-mode`)
+- **Names:** the app uses **Speech-to-text**, **LLM** and **Text-to-speech** in the Settings rows,
+  Practice gate, first-run picker, attempt-card menu and provider error copy. Internal code names
+  (`sttMode`, `correctionMode`, `ttsMode`, `TranscriptionSettings`, …) are unchanged.
+- **No global preset:** removed Balanced/Cloud/Private. Settings is two tabs (Learning / Data); the
+  Learning tab has the language card and three independent rows, each with a Local/Cloud segmented
+  control, a status line and a chevron. Details live inside a `0fr`/`1fr` grid disclosure that keeps
+  the components mounted (neo 1.2.0 cleanup bug); the inactive detail is `inert`, only one row is
+  open, and changing a mode opens that row. The shared row shell is
+  `components/settings/CapabilityRow.svelte`.
+- **First-run:** after the language, the picker asks for the three Local/Cloud choices separately;
+  defaults are speech-to-text local, LLM cloud, text-to-speech local. It shows only the download
+  estimate for the local steps.
+- **Footer:** “N steps left” with the capability names, “Set up &lt;capability&gt;” for a missing key
+  or local server, “Install &lt;size&gt;” for missing local data, progress/cancel, and the data-flow
+  line.
+- **Hash links:** `#speech-to-text`, `#llm`, `#text-to-speech`; legacy `#transcription`,
+  `#ai-provider`, `#voice` still focus the matching row. Practice uses the new targets.
+- **Verified:** `bun run check` 0/0, browser test at 1280/390 (independent rows and modes,
+  all-cloud = no install, all-local = 363 MB install, disclosures, no page errors, no overflow).
+  Not verified: a live ElevenLabs key, a real local LLM server, and the Tauri desktop runtime.
+
+## 2026-10-25: per-capability processing + ElevenLabs (branch `feature/language-delivery-mode`)
+- **Product change:** transcription, correction and read-back are independent device/cloud choices.
+  The first iteration used three tabs (Language / AI & voice / Data), a processing matrix and
+  presets; superseded by the per-step accordion above. The Practice gate and the local-download
+  logic share one requirement model.
+- **Correction:** cloud LLM by default, plus a **local OpenAI-compatible server** (LM Studio,
+  llama.cpp, Ollama). The key is optional; `chatCompletion`/`listModels` no longer reject empty
+  keys, and the LLM client uses `@tauri-apps/plugin-http` on desktop so local servers need no CORS.
+  Browser local servers still need CORS; the note says so.
+- **Read-back:** **ElevenLabs** and **OpenAI-compatible** both stay. Separate keys/model/voice
+  fields mean switching preserves both. ElevenLabs uses `xi-api-key`, `eleven_multilingual_v2`
+  (or turbo v2.5), `mp3_44100_128`, and `GET /v2/voices` for the picker; MP3 decoded with
+  `AudioContext`. The OpenAI adapter gained a configurable base URL and optional key, so a local
+  speech server works too.
+- **Downloads:** `languageData.ts` now downloads only the local parts the choices need. Balanced
+  shows 363 MB (Whisper + Tom); Cloud shows no download; a mixed setup downloads only the missing
+  part. The first-run language picker initially offered Balanced/Cloud/Private; replaced by three
+  per-step choices.
+- **Settings polish:** contextual cards, presets, data-flow line (ElevenLabs vs OpenAI vs local),
+  requirement count and "Set up keys" routing into the right AI subsection. Phone (390px) has no
+  horizontal overflow.
+- **neo trap:** `NeoSelect` sets state in its cleanup and Svelte throws `state_unsafe_mutation` if it
+  unmounts during a tab/mode switch. Tab content and correction/read-back branches stay mounted and
+  are hidden with CSS; transient model/voice pickers are a text input + fetched chips, not a
+  swapped-in select.
+- **Verified:** `bun run check` 0/0, browser suites for the first matrix/presets, cloud-only vs
+  mixed downloads, ElevenLabs/OpenAI switching + reload persistence, keyless local LLM against a
+  mock server (model list + connection test), Practice gate routing, 390px layout, no page errors.
+  **Not verified:** a live ElevenLabs key, a real LM Studio/llama.cpp/Ollama server, and the Tauri
+  desktop local-server path.
+
+## 2026-10-25: Phase 3 BYOC sync + inception closeout (branch `feature/byoc-sync`)
+- **Scope:** completed the only unimplemented inception phase (Google Drive + WebDAV) and the
+  brief's remaining platform/licensing items.
+- **Sync core:** `src/lib/adapters/sync/` (`types`, `service`, `http`, `google/oauth`,
+  `google/drive`, `webdav`, `index`). Whole-database snapshots; manual sync; upload is automatic
+  when only local content changed, a download always asks.
+- **Change detection:** a byte hash was tried and **does not work** — three exports of an unchanged
+  DB differed at the SQLite header change counter and in free pages. Replaced with a monotonic
+  device-local revision (`src/lib/adapters/db/revision.ts`), bumped by every adapter write and
+  deliberately not by `setSyncMetadata`. Verified: first upload → second sync `up-to-date`; a
+  Settings change → upload; a remote touch → `needs-choice`; both changed → `needs-choice`.
+- **Safety:** downloads go through `importSqliteBytes()` and keep the existing header check,
+  quota pre-check and rollback. Added `isOnspotDatabase()` (schema-text scan) for the native path,
+  which had no validation before.
+- **Google Drive:** `appDataFolder` + `drive.appdata`; desktop uses a Rust loopback listener +
+  PKCE (`src-tauri/src/oauth.rs`, three tests: callback parsing plus a real loopback request);
+  web uses Google Identity Services because a public web client cannot exchange a code without a
+  secret. Resumable upload. Build-time `VITE_GOOGLE_CLIENT_ID_DESKTOP/_WEB` (`.env.example`).
+  **Not run against a live account** — no client ids/account were available.
+- **WebDAV:** browser `webdav` package (CORS required) and a native Tauri HTTP transport
+  (`webdav@5` hard-wires its own fetch). Verified in Chromium against a local WebDAV server:
+  connect, first upload, no-op, remote-only conflict, cloud restore, keep-device upload, and a
+  corrupt remote rejected with the local DB intact.
+- **UI:** Settings → Cloud sync (`SyncSection.svelte`, `SyncConflictDialog.svelte`) with provider
+  choice, Google connect, WebDAV fields, Test connection, Sync now, last-sync time, accurate
+  conflict titles, and scrollable errors. Google is hidden/disabled on Android and iOS.
+- **Platform/licence:** AGPL SPDX headers on 145 source files (`scripts/spdx.mjs`, `bun run spdx`
+  / `spdx:check`); `.github/workflows/release.yml` builds Windows `.exe`/`.msi`, macOS `.dmg` and
+  Linux packages; `docs/architecture/sync.md` + `platforms.md` (iOS blockers). Added
+  `@tauri-apps/plugin-http` / `plugin-opener` and the matching Rust plugins.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check`, `cargo check`,
+  `cargo test --lib` (3 OAuth tests), and the browser suites above. **Not verified:** a live Google
+  account, Tauri desktop CSP/HTTP/OAuth at runtime, a real Nextcloud, the Tauri `.sqlite`
+  export/import round trip, and iOS (deferred).
+
 ## 2026-10-06: switched to bun (package manager only)
 - `bun.lock` replaces `package-lock.json` (migrated; all top-level versions identical). Scripts,
   Tauri before*Commands, `scripts/android.sh`, `repomix/bundle.mjs` and CI now use bun/bunx.

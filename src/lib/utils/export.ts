@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import {
 	getDatabaseAdapter,
 	type Attempt,
@@ -76,6 +78,34 @@ export function isSqliteDatabase(data: Uint8Array): boolean {
 	return true;
 }
 
+/** Tables every onspot database has; their schema text is stored in the file. */
+const REQUIRED_TABLES = [
+	'schema_migrations',
+	'sessions',
+	'attempts',
+	'corrections',
+	'audio_assets',
+	'settings'
+] as const;
+
+/**
+ * Rejects a foreign SQLite file before it can replace the local database.
+ *
+ * SQLite keeps each table's `CREATE TABLE` text in the file, so the schema is
+ * visible without opening a connection. The web worker also validates the
+ * restored database; this check is the guard for the native (Tauri) path.
+ *
+ * @param data A SQLite file image.
+ * @returns True when every expected onspot table is declared.
+ */
+export function isOnspotDatabase(data: Uint8Array): boolean {
+	const text = new TextDecoder('latin1').decode(data);
+
+	return REQUIRED_TABLES.every((table) =>
+		new RegExp(`CREATE TABLE\\s+(IF NOT EXISTS\\s+)?["']?${table}["']?`, 'i').test(text)
+	);
+}
+
 /** How long a restore waits for the user to answer the persistent-storage prompt. */
 const PERSIST_PROMPT_WAIT = 60_000;
 
@@ -107,6 +137,19 @@ export interface SqliteRestoreResult {
  * session is opened so every screen reflects the backup immediately.
  */
 export async function importSqliteBackup(file: File): Promise<SqliteRestoreResult> {
+	const bytes = new Uint8Array(await file.arrayBuffer());
+	return importSqliteBytes(bytes);
+}
+
+/**
+ * Restores a `.sqlite` snapshot that is already in memory. Cloud sync calls
+ * this after downloading, so a downloaded backup gets the same header check,
+ * storage pre-check, rollback and rehydration as a file picked by hand.
+ *
+ * @param bytes A snapshot produced by `exportSqliteFile`.
+ * @returns Session and attempt counts for the restore confirmation.
+ */
+export async function importSqliteBytes(bytes: Uint8Array): Promise<SqliteRestoreResult> {
 	// Which step is running, so an unexpected browser error (Firefox's bare
 	// "Unknown failure" DOMException, say) says where it came from.
 	let step = 'starting the restore';
@@ -117,10 +160,14 @@ export async function importSqliteBackup(file: File): Promise<SqliteRestoreResul
 		// Not awaited: the promise only settles once the user answers the prompt.
 		const web = !isTauri();
 		const persisting = web ? requestPersistentStorage() : Promise.resolve(false);
-		step = 'reading the backup file';
-		const bytes = new Uint8Array(await file.arrayBuffer());
+		step = 'checking the backup format';
 		if (!isSqliteDatabase(bytes)) {
 			throw new RestoreError('This is not a SQLite database. Choose an onspot .sqlite backup.');
+		}
+		// The web worker validates the restored schema with SQLite itself. The
+		// native path has no such check, so inspect the schema text there.
+		if (isTauri() && !isOnspotDatabase(bytes)) {
+			throw new RestoreError('This SQLite file is not an onspot backup. Nothing was changed.');
 		}
 		step = 'opening the local database';
 		const db = await getDatabaseAdapter();
@@ -296,11 +343,13 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 			promptText: string(row.promptText),
 			transcript: string(row.transcript),
 			correctedText: nullableString(row.correctedText),
-			naturalSpeech: nullableString(row.naturalSpeech),
 			translation: nullableString(row.translation),
 			translations: translation(row.translations),
 			ttsVoice: nullableString(row.ttsVoice),
-			summary: nullableString(row.summary),
+			// Format-1 backups predate the spoken explanation; their summary takes its place.
+			explanation: nullableString(row.explanation) ?? nullableString(row.summary),
+			followUp: null,
+			wordGlosses: null,
 			durationSec: number(row.durationSec),
 			wordCount: number(row.wordCount),
 			audioKey: nullableString(row.audioKey),

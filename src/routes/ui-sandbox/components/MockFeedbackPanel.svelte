@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	/**
 	 * Interactive clone of the feedback sidebar that lives inline in

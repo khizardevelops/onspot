@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { recordingFormat } from '#lib/speech/audioFormat.js';
 import { resampleAudioTo16kHz } from './audio';
 
 export interface Recording {
+	/** The take as recorded: Opus where the platform has it (see `recordingFormat`). */
 	blob: Blob;
 	/** Object URL for immediate playback. Revoke when discarding. */
 	url: string;
@@ -12,8 +16,9 @@ export interface Recording {
 /**
  * Microphone capture with live level metering.
  *
- * `MediaRecorder` produces the encoded blob; the blob is decoded to 16 kHz mono
- * PCM for the recogniser. The level callback drives the waveform and is only
+ * `MediaRecorder` produces the encoded blob, compact Opus from the start; the
+ * blob is decoded to 16 kHz mono PCM for the on-device recogniser and the
+ * silence check. The level callback drives the waveform and is only
  * active while recording. Everything is torn down on stop so the mic indicator
  * does not linger.
  */
@@ -41,7 +46,7 @@ export class VoiceRecorder {
 		this.stream = await navigator.mediaDevices.getUserMedia({
 			audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
 		});
-		this.mediaRecorder = new MediaRecorder(this.stream);
+		this.mediaRecorder = new MediaRecorder(this.stream, recordingFormat());
 		this.mediaRecorder.ondataavailable = (event) => {
 			if (event.data.size > 0) this.chunks.push(event.data);
 		};

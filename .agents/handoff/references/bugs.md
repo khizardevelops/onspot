@@ -4,6 +4,29 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+
+### Groq rejected an almost-valid JSON reply (HTTP 400 json_validate_failed)
+- **Symptom**: "openai/gpt-oss-120b request failed (HTTP 400): … json_validate_failed …" when
+  generating translations; the reply in `failed_generation` was complete except for a stray `"`
+  between `]` and `}}`.
+- **Cause**: Groq validates JSON-mode output and rejects the whole reply over one character; the
+  client surfaced the raw error.
+- **Fix**: `chatCompletion` repairs `failed_generation` (`jsonRepair.ts`) and returns it, otherwise
+  retries once, otherwise shows a readable error. Verified by intercepting the request in the
+  browser: repaired (1 request), retried (2 requests), gave up (2 requests, readable error).
+- **Files**: `src/lib/adapters/llm/client.ts`, `src/lib/adapters/llm/jsonRepair.ts`, `evaluate.ts`
+
+### Expanded Processing Rows Clipped Their Controls On The Right (2026-10-30)
+- **Symptom:** opening Speech-to-text / LLM / Text-to-speech in Settings cut off the raised neo
+  controls' shadows and the inset panel's right corners at the card's content edge.
+- **Cause:** the 0fr/1fr disclosure in `CapabilityRow.svelte` needs `overflow: hidden` on
+  `.capability-detail-inner`, whose box ended exactly at the content edge, where the controls end.
+- **Fix:** the clip box reaches out 1.125rem on both sides (`margin-inline` negative, `padding-inline`
+  back), so content stays aligned with the row header and shadows have room; the card's 20–28px side
+  padding holds it. Measured at 1920 and 390px: 18px of room, content edges unchanged, no overflow.
+- **Trap:** neo's `--neo-shadow-margin-lg` reads as `0` inside the settings card, so a
+  `var(--neo-shadow-margin-lg)` bleed silently did nothing; the value is a fixed constant.
+
 ### Restoring A Non-onspot `.sqlite` File Wiped The Database (2026-10-03)
 - **Cause**: the worker imported any SQLite image, then migrations produced an empty schema.
 - **Fix**: `sqlite.worker.ts` `checkBackup` requires the onspot tables + `integrity_check` before
@@ -74,7 +97,7 @@ Active defects that can be fixed within the current foundational technology.
   watcher registrations and must be restarted once.
 - **Files**: `src/app.css`
 
-### Long Cards Flipped Away While Being Read
+### Long Cards Flipped Away While Being Read (conveyor removed 2026-10-31; tall cards now scroll inside the stack)
 - **Symptom**: expanding the word breakdown on a long take and scrolling down through it made the
   card rotate/curve off-screen. The card expanded visually but the conveyor kept treating the
   card's exit progress as if it were short.

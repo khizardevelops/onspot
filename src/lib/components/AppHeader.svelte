@@ -1,0 +1,272 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
+<script lang="ts">
+	import { pageHref } from '#lib/pages.js';
+	/**
+	 * The bar across the top of every page: onspot's navigation on the left
+	 * (new session, the four sections, light or dark), then the page's own title
+	 * and controls. It replaced the vertical navigation rail, which took a strip
+	 * off the side of every screen. On phones the navigation folds into one menu
+	 * at the end of the bar.
+	 *
+	 * Each page renders its own bar, so Practice can keep it above the attempt
+	 * stack only and leave the Feedback panel its full height. Practice also
+	 * puts its prompt and recording controls in it: there is no bottom bar.
+	 * Whenever the bar is narrow (phones, or a window shared with the Feedback
+	 * panel), the navigation folds into one menu so the page keeps the room.
+	 * On phones the bar sits at the bottom of the screen, under the thumb.
+	 */
+	import type { Snippet } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { quickTooltip } from '#lib/neo.js';
+	import { newSession } from '#lib/stores/practice.js';
+	import { theme, toggleTheme } from '#lib/stores/theme.svelte.js';
+	import PopMenu from '#lib/components/PopMenu.svelte';
+	import { NeoButton } from '@dvcol/neo-svelte/buttons';
+	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
+	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
+	import { BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
+
+	interface Props {
+		/** The page's name, shown as its heading. */
+		title?: string;
+		/** Richer heading content instead of `title` (Practice: the session's name, language and level). */
+		heading?: Snippet;
+		/** The page's own controls, at the end of the bar. */
+		actions?: Snippet;
+		/** A second row inside the same bar, full width (Practice on phones: the session line and its small controls). */
+		below?: Snippet;
+	}
+
+	let { title = '', heading, actions, below }: Props = $props();
+
+	const SECTIONS = [
+		{ href: pageHref('/'), label: 'Practice', icon: Mic },
+		{ href: pageHref('/history'), label: 'History', icon: History },
+		{ href: pageHref('/insights'), label: 'Insights', icon: BarChart3 },
+		{ href: pageHref('/settings'), label: 'Settings', icon: Settings2 }
+	];
+
+	const themeLabel = $derived(theme.current === 'dark' ? 'Light appearance' : 'Dark appearance');
+
+	let menuOpen = $state(false);
+
+	function startNewSession(): void {
+		newSession();
+		void goto(pageHref('/'));
+	}
+
+	const menuIcons: Record<string, typeof Mic> = {
+		new: Plus,
+		...Object.fromEntries(SECTIONS.map((section) => [section.href, section.icon]))
+	};
+
+	const menuItems = $derived<NeoMenuItem[]>([
+		{ value: 'new', label: 'New session', before: menuIcon, divider: { bottom: true } },
+		...SECTIONS.map((section, index) => ({
+			value: section.href,
+			label: section.label,
+			before: menuIcon,
+			color: page.url.pathname === section.href ? 'primary' : undefined,
+			divider: index === SECTIONS.length - 1 ? { bottom: true } : undefined
+		})),
+		{ value: 'theme', label: themeLabel, before: menuIcon }
+	]);
+
+	function onMenuSelect(item: NeoMenuItem): void {
+		if (item.value === 'new') startNewSession();
+		else if (item.value === 'theme') toggleTheme();
+		else void goto(String(item.value));
+	}
+</script>
+
+{#snippet menuIcon({ item }: { item: { value: unknown } })}
+	{@const Icon = item.value === 'theme' ? (theme.current === 'dark' ? Sun : Moon) : menuIcons[String(item.value)]}
+	<Icon size={17} strokeWidth={1.8} />
+{/snippet}
+
+<header class="app-header paper-surface relative z-20 border-b">
+	<div class="app-header-row">
+		<nav class="app-nav flex shrink-0 items-center gap-1.5" aria-label="Primary navigation">
+			<div class="brand-mark mr-1 grid size-7 place-items-center rounded-[9px] text-[13px] font-semibold text-white shadow-md" role="img" aria-label="onspot">o</div>
+
+			<NeoTooltip tooltip="New session" placement="bottom" {...quickTooltip}>
+				<NeoButton aria-label="New session" class="nav-key" rounded elevation={2} onclick={startNewSession}>
+					{#snippet icon()}<Plus size={16} strokeWidth={1.8} />{/snippet}
+				</NeoButton>
+			</NeoTooltip>
+
+			{#each SECTIONS as section (section.href)}
+				{@const Icon = section.icon}
+				{@const current = page.url.pathname === section.href}
+				<NeoTooltip tooltip={section.label} placement="bottom" {...quickTooltip}>
+					<NeoButton
+						href={section.href}
+						aria-label={section.label}
+						aria-current={current ? 'page' : undefined}
+						class="nav-key {current ? 'current' : ''}"
+						rounded
+						elevation={current ? -2 : 2}
+						hover={current ? 0 : -1}
+						color={current ? 'primary' : undefined}
+					>
+						{#snippet icon()}<Icon size={16} strokeWidth={current ? 2 : 1.75} />{/snippet}
+					</NeoButton>
+				</NeoTooltip>
+			{/each}
+
+			<NeoTooltip tooltip={themeLabel} placement="bottom" {...quickTooltip}>
+				<NeoButton aria-label={`Switch to ${themeLabel.toLowerCase()}`} class="nav-key" rounded elevation={2} onclick={toggleTheme}>
+					{#snippet icon()}
+						{#key theme.current}
+							<span class="grid place-items-center" in:fade={{ duration: 90 }}>
+								{#if theme.current === 'dark'}<Sun size={16} strokeWidth={1.75} />{:else}<Moon size={16} strokeWidth={1.75} />{/if}
+							</span>
+						{/key}
+					{/snippet}
+				</NeoButton>
+			</NeoTooltip>
+		</nav>
+
+		<span class="nav-divider shrink-0" aria-hidden="true"></span>
+
+		<div class="min-w-0 flex-1">
+			{#if heading}
+				{@render heading()}
+			{:else}
+				<h1 class="truncate text-base leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
+			{/if}
+	</div>
+
+	{#if actions}
+		<div class="flex shrink-0 items-center gap-1.5">{@render actions()}</div>
+	{/if}
+
+	<!-- A narrow bar: the navigation is one menu, so the bar keeps its room for the page. -->
+	<div class="app-menu shrink-0">
+		<PopMenu items={menuItems} bind:open={menuOpen} placement="bottom-end" onSelect={onMenuSelect} rounded>
+			<NeoButton class="menu-trigger" aria-label="Open navigation menu" aria-expanded={menuOpen} rounded elevation={2}>
+				{#snippet icon()}<Menu size={18} strokeWidth={1.8} />{/snippet}
+			</NeoButton>
+		</PopMenu>
+	</div>
+	</div>
+
+	{#if below}
+		<div class="app-header-below">{@render below()}</div>
+	{/if}
+</header>
+
+<style>
+	/* Compact: the bar takes as little height as its keys need. */
+	.app-header {
+		container: app-header / inline-size;
+		padding: 0.375rem var(--page-gutter);
+		/* Cut from the same paper as the page; a highlight on its lower edge. */
+		box-shadow: 0 1px 0 color-mix(in srgb, white 40%, transparent);
+	}
+	:global([data-theme='dark']) .app-header {
+		box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+	}
+
+	.app-header-row {
+		display: flex;
+		align-items: center;
+		gap: 0.875rem;
+		min-height: 36px;
+	}
+	.app-header-below {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-height: 32px;
+		margin-top: 0.125rem;
+	}
+
+	.brand-mark {
+		background: linear-gradient(145deg, var(--brand), var(--brand-2) 62%, var(--brand-3));
+	}
+	.nav-divider {
+		width: 1px;
+		height: 22px;
+		background: var(--border);
+	}
+
+	/*
+	 * Navigation keys are neo buttons: raised keys on the paper, the current
+	 * section pressed in and tinted primary. Only their footprint and ink are
+	 * set here; relief and states come from neo-svelte.
+	 */
+	.app-nav :global(.neo-button.nav-key) {
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		justify-content: center;
+		/* Neutral ink, so the accent marks only the current section. */
+		color: var(--muted-foreground);
+	}
+	.app-nav :global(.neo-button.nav-key:hover) {
+		color: var(--foreground);
+	}
+	/* neo recolours a key's content on hover/press; the current section stays accent throughout. */
+	.app-nav :global(.neo-button.nav-key.current),
+	.app-nav :global(.neo-button.nav-key.current:hover) {
+		color: var(--primary);
+		--neo-btn-text-color: var(--primary);
+		--neo-text-color-hover: var(--primary);
+		--neo-text-color-active: var(--primary);
+		--neo-text-color-hover-active: var(--primary);
+	}
+	.app-nav :global(.neo-button.nav-key.current *) {
+		color: var(--primary);
+	}
+
+	.app-menu {
+		display: none;
+	}
+	.app-menu :global(.neo-button.menu-trigger) {
+		width: 34px;
+		height: 34px;
+		padding: 0;
+		justify-content: center;
+		color: var(--muted-foreground);
+	}
+
+	/* A narrow bar: the page gets the room; the navigation is the menu at its end. */
+	@container app-header (width < 900px) {
+		.app-header-row {
+			gap: 0.5rem;
+		}
+		.app-nav,
+		.nav-divider {
+			display: none;
+		}
+		.app-menu {
+			display: block;
+		}
+	}
+	/*
+	 * Phones: the bar is at the bottom, under the thumb (pages lay out as a
+	 * flex column, so `order` moves it there), clear of the gesture area, its
+	 * edge and shadow on top.
+	 */
+	@media (max-width: 640px) {
+		.app-header {
+			order: 99;
+			padding: 0.25rem var(--page-gutter) calc(0.25rem + env(safe-area-inset-bottom));
+			border-top: 1px solid var(--border);
+			border-bottom-width: 0;
+			box-shadow:
+				0 -1px 0 color-mix(in srgb, white 40%, transparent),
+				0 -8px 18px -10px rgb(60 50 35 / 0.25);
+		}
+		:global([data-theme='dark']) .app-header {
+			box-shadow: 0 -8px 18px -10px rgb(0 0 0 / 0.6);
+		}
+		.app-header-row {
+			gap: 0.375rem;
+		}
+	}
+</style>

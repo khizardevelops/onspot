@@ -16,6 +16,8 @@ installed. After switching to a branch with different dependencies, run
 - `bun run build` — production SPA build to `build/` (single `index.html` + `_app/`).
 - `bun run preview` — serve the production build. COOP/COEP are applied by the Vite plugin.
 - `bun run check` — `svelte-kit sync` + `svelte-check`.
+- `bun run spdx` — add the AGPL SPDX header to every source file the project owns.
+  `bun run spdx:check` fails when one is missing (used by the release workflow).
 - `bun run bundle:ui` — pack the isolated `src/routes/ui-sandbox/` UI with
   `bunx repomix --include "src/routes/ui-sandbox/**/*.svelte" --output "repomix/ui-sandbox-bundle.xml"`.
   Output stays in `repomix/` (never the repo root). The folder is tracked via `repomix/.gitkeep`;
@@ -70,6 +72,44 @@ installed. After switching to a branch with different dependencies, run
 - `cargo run --release -p tauri-plugin-speech --example bench -- …` (see above) measures the
   native STT engine without the app.
 
+## Cloud sync (BYOC)
+- **Google Drive:** enable the Drive API in Google Cloud and create two OAuth clients — a
+  *Desktop app* (loopback, no secret) and a *Web application* (authorized JavaScript origins:
+  `http://localhost:5173` plus the deployed origin). Set
+  `VITE_GOOGLE_CLIENT_ID_DESKTOP` / `VITE_GOOGLE_CLIENT_ID_WEB` (see `.env.example`).
+  The desktop flow binds a loopback port in `src-tauri/src/oauth.rs`; `cargo test --lib` covers
+  callback parsing and a real loopback request. The browser flow uses Google Identity Services,
+  so an expired token asks the learner to reconnect.
+- **WebDAV:** Settings → Cloud sync → WebDAV, with the collection URL, backup path, username and
+  password. The browser build requires the server to allow the app origin via CORS; the desktop,
+  Android and iOS apps go through the Tauri HTTP plugin and do not. A local test server must answer
+  `OPTIONS` with `Access-Control-Allow-Methods: OPTIONS, PROPFIND, MKCOL, PUT, GET, HEAD, DELETE`
+  and allow the `Authorization`, `Depth` and `Content-Type` headers.
+- **Smoke tests:** first sync uploads; a second with no edits is a no-op; touching the remote file
+  opens the conflict dialog; choosing the cloud copy restores the database; a non-onspot file is
+  rejected before anything is replaced.
+
+## Processing choices (Local vs Cloud per step)
+Settings → **Learning** has three independent rows, each with its own Local/Cloud switch and an
+inline disclosure:
+- **Speech-to-text:** Local (Whisper) or Cloud (Groq `whisper-large-v3-turbo`). The Groq key here is
+  shared with the LLM when Groq is selected.
+- **LLM:** Cloud (Groq/DeepSeek/custom) or **Local** (any OpenAI-compatible
+  `/v1/chat/completions`). Common URLs: LM Studio `http://localhost:1234/v1`, llama.cpp
+  `http://localhost:8080/v1`, Ollama `http://localhost:11434/v1`. The key is optional. The browser
+  build needs the server to allow the app origin (CORS); the desktop app uses the Tauri HTTP plugin
+  and does not. Use the model name the server reports; **Test connection** sends one tiny chat
+  completion and **Refresh models** reads `GET /v1/models`.
+- **Text-to-speech:** Local (Piper) or Cloud. Cloud keeps **ElevenLabs** and
+  **OpenAI-compatible** separately: ElevenLabs needs its own key and voice id (refresh via
+  `GET /v2/voices`), while the OpenAI-compatible path accepts OpenAI or a local
+  `/v1/audio/speech` server. Switching providers preserves both configurations. **Voice** opens a
+  picker modal (search, details per voice, Preview, Refresh, Done), not a dropdown; with an
+  ElevenLabs key stored the account's voices load automatically.
+Downloads happen only for the local parts selected; cloud-only needs no speech downloads. There is
+no global preset: toggle each row independently. The footer lists the missing steps and the data
+that leaves the device.
+
 ## Android (Tauri v2)
 - `scripts/android.sh` wraps `tauri android …` with the right toolchain. Paths come from the
   gitignored `scripts/android.local.env` (template: `android.local.env.example`): JDK 17/21 (Gradle
@@ -84,8 +124,10 @@ installed. After switching to a branch with different dependencies, run
   storeFile) → `onspot-release.jks`. **Back up the keystore**; updates must be signed with it.
 - `bun run android:dev` — hot-reload on a device/emulator. `scripts/android.sh env` prints the
   resolved toolchain.
-- CI: `.github/workflows/android.yml` builds the arm64 release APK on push to main (not for
-  md/docs/.agents-only changes), `workflow_dispatch`, and `v*` tags (tag → GitHub Release).
+- CI: `.github/workflows/release.yml` builds the Windows `.exe`/`.msi`, macOS `.dmg` and Linux
+  `.deb`/`.AppImage` bundles on `v*` tags or a manual run. `.github/workflows/android.yml` builds
+  the arm64 release APK on push to main (not for md/docs/.agents-only changes),
+  `workflow_dispatch`, and `v*` tags (tag → GitHub Release).
   versionCode = 10000 + run number (via `--config`). Artifact `onspot-android-apk`. Signing
   secrets: `base64 -w0 /mnt/data/not_synced/dev-cache/onspot-release.jks | gh secret set
   ANDROID_KEYSTORE_BASE64`, `gh secret set ANDROID_KEY_ALIAS -b onspot`,
@@ -103,6 +145,28 @@ SvelteKit ignores. A deployed static SPA must set these at the host/CDN:
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: credentialless
 ```
+
+## Testing the built apps (no window, no real data)
+- **Linux release (WebKitGTK):** `WebKitWebDriver` (ships with webkit2gtk-4.1) under `xvfb-run`,
+  env `TAURI_WEBVIEW_AUTOMATION=true`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset,
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1`, and throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/
+  `XDG_CACHE_HOME` (otherwise it uses the real desktop database). Session capability
+  `webkitgtk:browserOptions: { binary: src-tauri/target/release/onspot, args: [] }`, then
+  `execute/async`. End leftover `Xvfb`/`WebKitWebDriver` by PID (`pkill -f` matches its own shell).
+- **Android emulator:** `bun run android:emulator-apk` (debug, x86_64, WebView debuggable), boot
+  `emulator -avd dev_api36 -no-window -no-audio -memory 2048 -gpu swiftshader_indirect`, install,
+  `adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`, then raw CDP
+  (`/json` → page `webSocketDebuggerUrl` → `Runtime.evaluate` with `awaitPromise`). Playwright's
+  `connectOverCDP` refuses WebViews. The host is `10.0.2.2` from the emulator. Stop Gradle/Kotlin
+  daemons first on this 11 GB machine.
+- Built bundles hash their chunks: find a module by fetching the page's scripts and matching a
+  string it contains, then `import()` that URL (same instance as the app's).
+
+## GitHub Pages build
+- `BASE_PATH=/onspot bun run build && cp build/index.html build/404.html` builds what
+  `.github/workflows/pages.yml` deploys (BASE_PATH must start with "/" and not end with one).
+  Never hard-code root paths: use `pageHref()` (`src/lib/pages.ts`) for pages, `__BASE_PATH__` in
+  workers.
 
 ## Rust / Tauri
 - `cargo check` (in `src-tauri/`) — typecheck the backend.

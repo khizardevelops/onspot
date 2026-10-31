@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { Correction } from '#lib/adapters/db/index.js';
 
 export function isDeletion(correction: Pick<Correction, 'original' | 'replacement'>): boolean {

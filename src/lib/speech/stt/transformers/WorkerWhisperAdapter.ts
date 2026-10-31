@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { BaseSTTAdapter } from '../BaseSttAdapter';
 import STTWorker from './stt.worker?worker';
 import type { ModelConfig, ModelProgress, TranscribeOptions } from '#lib/types.js';

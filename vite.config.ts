@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -39,7 +41,26 @@ function crossOriginIsolation(): Plugin {
 	};
 }
 
+/**
+ * Where the app is served from: '' at a domain's root (dev, preview, the
+ * Tauri apps) or a sub-path, e.g. '/onspot' for the GitHub Pages project site
+ * (set by its workflow). SvelteKit prefixes every route and asset with it;
+ * `__BASE_PATH__` carries it into code that cannot import `$app/paths`.
+ */
+const BASE_PATH = basePath(process.env.BASE_PATH);
+
+function basePath(value: string | undefined): '' | `/${string}` {
+	if (!value) return '';
+	if (!value.startsWith('/') || value.endsWith('/')) {
+		throw new Error(`BASE_PATH must start with "/" and not end with one, e.g. "/onspot" (got "${value}").`);
+	}
+	return value as `/${string}`;
+}
+
 export default defineConfig({
+	define: {
+		__BASE_PATH__: JSON.stringify(BASE_PATH)
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({
@@ -47,7 +68,8 @@ export default defineConfig({
 			// Pure client-side SPA. `fallback` is the SPA entry point: any route the
 			// static host does not have a file for is served index.html and the
 			// client router takes over.
-			adapter: adapter({ fallback: 'index.html' })
+			adapter: adapter({ fallback: 'index.html' }),
+			paths: { base: BASE_PATH }
 		}),
 		crossOriginIsolation()
 	],

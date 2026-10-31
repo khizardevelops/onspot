@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { translationGuidance } from './languageGuidance';
 
 export const TRANSLATION_SCHEMA = `{
@@ -20,8 +22,18 @@ export const DETAILED_TRANSLATION_SCHEMA = `{
 export interface TranslationLanguage {
 	/** Source language name, e.g. `French`. */
 	language: string;
-	/** Learner's native language name, e.g. `English`. */
+	/** The language of instruction, by its English name, e.g. `English`, `Spanish`. */
 	translationTarget: string;
+}
+
+/**
+ * The worked examples are written in English. For any other language of
+ * instruction they still show the structure, but the model must not copy their
+ * language.
+ */
+function englishExampleNote(translationTarget: string): string {
+	if (translationTarget === 'English') return '';
+	return `\nThe contrastive example is in English only to show the three structures; write every translation in ${translationTarget}.`;
 }
 
 /**
@@ -43,10 +55,10 @@ export function translationRules({ language, translationTarget }: TranslationLan
 	// particles, romaji in the breakdown). Contrastive examples are what fixed
 	// strict literal/word-for-word output in the model lab.
 	const extra = translationGuidance(language, translationTarget);
-	if (extra) return `${rules}\n\n${extra}`;
+	if (extra) return `${rules}\n\n${extra}${englishExampleNote(translationTarget)}`;
 	if (language.toLowerCase() !== 'french') return rules;
 
-	return `${rules}
+	return `${rules}${englishExampleNote(translationTarget)}
 
 Required contrastive example:
 French: "Bonjour Mademoiselle, je m'appelle Jean-Hétongue et j'ai parlé en français ici."

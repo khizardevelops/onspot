@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { flip, offset, shift, size, type UseFloatingOptions } from '@skeletonlabs/floating-ui-svelte';
 import { fade, scale } from 'svelte/transition';
 

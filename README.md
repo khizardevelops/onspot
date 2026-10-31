@@ -127,10 +127,14 @@ Your answer is transcribed and analysed by a language model briefed to coach, no
   anything to strictly avoid. Just chatting? It favours natural, idiomatic phrasing instead.
 - **Better connectors and vocabulary.** It suggests upgrades a fluent speaker would plausibly use,
   including formal alternatives to casual fillers.
-- **A one- or two-sentence summary** of the thing that matters most.
+- **A spoken explanation** in English, straight to the point: what you said wrong and what to say
+  instead, or "well done" and a follow-up question to keep you talking. Its text highlights your
+  mistakes, the fixes and the words worth remembering.
 
 ### 🔊 Hear the fix
-- The **natural version** of what you meant is read aloud by a high-quality neural voice.
+- Every take has three things to listen to: **what you said**, **"Did you mean to say…?"** (your
+  own sentence with the mistakes fixed) and **the explanation**, which plays as soon as the take is
+  marked.
 - **Click any word** in your transcript to hear how it's pronounced.
 - **Replay sentence by sentence**, loop it and slow it down.
 - Replay **your own recording** straight after, to hear the difference.
@@ -155,6 +159,16 @@ There's also a word-by-word breakdown and alternative phrasings when you want to
 A per-voice **4-band equaliser and volume** with a live preview. Tune the voice until it's
 comfortable to listen to for an hour, without ever changing the approved defaults.
 
+### 🧩 Choose what runs where
+Speech-to-text, the LLM and text-to-speech are independent choices. Each has its own Local/Cloud
+switch: run it on this device or through an API you control. The app shows exactly what still needs
+downloading and exactly what leaves your device.
+
+### ☁️ Sync to your own cloud
+Back up the whole database to Google Drive's app-private folder or to any WebDAV server
+(Nextcloud, ownCloud, pCloud). Sync is manual, compares both copies first, and **never replaces a
+device without asking**. There is no onspot server in the middle.
+
 ## How a session works
 
 ```
@@ -167,8 +181,10 @@ comfortable to listen to for an hour, without ever changing the approved default
    exaggeration: it doesn't matter, as long as you keep talking and aim for accuracy. Your audio
    is transcribed **on your device** by Whisper.
 3. **Get marked.** The transcript, never your audio, is sent to the language model you chose,
-   which returns corrections, explanations, a natural version and translations.
-4. **Listen.** The corrected version is spoken **on your device** by a neural voice.
+   which returns corrections, the correct version of what you meant, a spoken explanation and
+   translations.
+4. **Listen.** The explanation plays straight away; replay what you said or the correct version
+   whenever you like.
 5. **Go again.** Each take slides into place in your timeline, so you can compare attempts.
 
 ## Private by design
@@ -177,19 +193,22 @@ onspot has **no server, no account and no tracking**. It was built privacy-first
 
 | | Where it happens |
 |---|---|
-| Speech recognition (your voice) | **On your device** (Whisper in a Web Worker) |
-| Read-aloud voices | **On your device** (Piper neural TTS in a Web Worker) |
+| Speech-to-text (your voice) | **On your device** (Whisper in a Web Worker), or Groq if you choose cloud speech-to-text |
+| Text-to-speech (spoken replies) | **On your device** (Piper neural TTS in a Web Worker), or ElevenLabs / an OpenAI-compatible voice if you choose cloud text-to-speech |
 | Your sessions, recordings and history | **On your device** (SQLite, in the browser or on the desktop) |
-| Feedback and translation | The LLM provider **you** choose, with **your own** API key |
+| Feedback and translation | The LLM provider **you** choose, in the cloud or on your own local server |
+| Cloud backup (optional) | The Google Drive account or WebDAV server **you** configure |
 
-- **Works offline** for recording, transcription and read-back once the language data is
-  downloaded. Only the feedback step calls out to your AI provider.
-- **Bring your own key (BYOK):** Groq, DeepSeek, or any OpenAI-compatible endpoint. Keys stay in
-  your browser and are never written to your database or exports.
+- **Works offline** for whichever steps you keep on the device, once their data is downloaded.
+  Any step you switch to an API is labelled with the provider that receives it.
+- **Bring your own key (BYOK):** Groq, DeepSeek, ElevenLabs, or any OpenAI-compatible endpoint.
+  Keys stay in your browser and are never written to your database or exports.
 - **Your data is portable.** Export everything (sessions, recordings, cached audio, settings) to a
-  single `.sqlite` file, and restore it on another browser or computer.
-- **Cloud speech is optional and labelled.** Prefer Groq's hosted Whisper or an OpenAI voice? Turn
-  them on and the app tells you plainly that audio or text is leaving your device.
+  single `.sqlite` file, restore it on another browser or computer, or sync it to your own cloud.
+  Google and WebDAV credentials stay in browser storage and are never written to the database.
+- **Cloud speech is optional and labelled.** Prefer Groq's hosted Whisper, ElevenLabs, or another
+  OpenAI-compatible voice? Turn them on and the app tells you plainly that audio or text is leaving
+  your device.
 
 ## Languages
 
@@ -272,6 +291,14 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: credentialless
 ```
 
+Pushing a `v*` tag — or running the **Desktop release** workflow manually — builds the Windows
+`.exe`/`.msi`, macOS `.dmg` and Linux `.deb`/`.AppImage` bundles
+(`.github/workflows/release.yml`).
+
+Google Drive sync is optional at build time. Register an OAuth client in Google Cloud, enable the
+Drive API, and set `VITE_GOOGLE_CLIENT_ID_DESKTOP` and/or `VITE_GOOGLE_CLIENT_ID_WEB` (see
+`.env.example`). WebDAV needs no build configuration.
+
 ## Under the hood
 
 | Layer | Technology |
@@ -279,11 +306,12 @@ Cross-Origin-Embedder-Policy: credentialless
 | App | [SvelteKit](https://svelte.dev) (Svelte 5), static SPA via `adapter-static` |
 | Desktop | [Tauri v2](https://tauri.app) |
 | UI | [`@dvcol/neo-svelte`](https://github.com/dvcol/neo-svelte) neumorphic components, Tailwind CSS v4, a paper-textured theme with light and dark modes |
-| Speech-to-text | [Transformers.js](https://huggingface.co/docs/transformers.js) running `whisper-small` q4 on ONNX Runtime Web (WASM), in a Web Worker |
-| Text-to-speech | [Piper](https://github.com/rhasspy/piper) and [piper-plus](https://github.com/ayutaz/piper-plus) VITS voices on ONNX Runtime Web, in a lazily loaded Web Worker |
+| Speech-to-text | [Transformers.js](https://huggingface.co/docs/transformers.js) running `whisper-small` q4 on ONNX Runtime Web (WASM), in a Web Worker; Groq Whisper in the cloud |
+| Text-to-speech | [Piper](https://github.com/rhasspy/piper) and [piper-plus](https://github.com/ayutaz/piper-plus) VITS voices on ONNX Runtime Web, in a lazily loaded Web Worker; [ElevenLabs](https://elevenlabs.io) or an OpenAI-compatible API in the cloud |
 | Pronunciation (G2P) | eSpeak-ng (French), OpenJTalk/jpreprocess compiled to WASM (Japanese) |
 | Audio | Web Audio: EQ, compressor, limiter and loudness normalisation per voice |
 | Storage | SQLite everywhere: `sqlite-wasm` on OPFS in the browser, native SQLite on desktop, behind one adapter |
+| Cloud sync | Google Drive (app-private folder, OAuth 2.0) and WebDAV, as whole-database snapshots |
 | Feedback | Any OpenAI-compatible chat API (Groq, DeepSeek, custom) |
 
 Heavy work never touches the interface thread: transcription, speech synthesis and the database
@@ -292,10 +320,9 @@ speaks.
 
 ## Roadmap
 
-- **Sync to your own cloud**: Google Drive and WebDAV (Nextcloud, ownCloud, pCloud), still with
-  no onspot server
 - **More languages**, each approved through a human listening test and transcript review
 - Pronunciation scoring and spaced-repetition drills built from your recurring mistakes
+- An iOS app (the desktop, web and Android builds are available today)
 
 ## Contributing
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Database abstraction for onspot.
  *
@@ -49,9 +51,19 @@ export interface TranslationBreakdownItem {
  * idiomatic, literal (grammar fixed, structure preserved) and word-for-word
  * (root meaning in the original order, for study).
  */
+/**
+ * The translation format in use. Version 3 translates the correct version of
+ * the take ("Did you mean to say?"), not the raw transcript, which can be
+ * nonsense; version 2 sets translated the transcript and are regenerated
+ * when the learner asks for a translation.
+ */
+export const TRANSLATION_SET_VERSION = 3;
+
 export interface TranslationSet {
-	/** Prompt/format version. Missing on attempts created before the stricter translation prompt. */
-	version?: 2;
+	/** Prompt/format version (see `TRANSLATION_SET_VERSION`). Missing on attempts created before the stricter translation prompt. */
+	version?: number;
+	/** The language of instruction it is written in (an `INSTRUCTION_LANGUAGES` id); missing means English. */
+	instructionLanguage?: string;
 	idiomatic: string;
 	/** Other genuinely distinct natural renderings; excludes the primary idiomatic value. */
 	idiomaticVariants: string[];
@@ -60,6 +72,40 @@ export interface TranslationSet {
 	/** Token/morpheme mapping, generated on demand to keep normal evaluation compact. */
 	wordBreakdown: TranslationBreakdownItem[];
 }
+
+/** The question that keeps the learner talking after a take, and what it means. */
+export interface FollowUp {
+	/** In the target language; the learner answers it in their next take. */
+	question: string;
+	/** In the language of instruction; hidden until the learner asks for it. Empty on older takes. */
+	translation: string;
+}
+
+/**
+ * The meaning of several words read together. `start` and `end` are word-token
+ * indexes, inclusive. `expression` phrases come with the word meanings (fixed
+ * expressions, compound nouns: "pomme de terre"); `selection` phrases are
+ * ranges the learner selected, kept so selecting them again is instant.
+ */
+export interface PhraseGloss {
+	start: number;
+	end: number;
+	meaning: string;
+	origin: 'expression' | 'selection';
+}
+
+/** One text's hover translations: a meaning per word token, and its phrases. */
+export interface TextGlosses {
+	words: string[];
+	phrases: PhraseGloss[];
+}
+
+/**
+ * Hover translations per text of an attempt (the transcript, the correct
+ * version), keyed by a hash of the text so a regenerated text never shows
+ * stale meanings.
+ */
+export type WordGlosses = Record<string, TextGlosses>;
 
 /** A speaking prompt. Populated from a seed list and/or generated per session. */
 export interface Prompt {
@@ -91,18 +137,24 @@ export interface Attempt {
 	promptText: string;
 	/** Raw STT transcript of what the learner actually said. */
 	transcript: string;
-	/** LLM-rewritten, natural French version. */
+	/** The correct version: what the learner was trying to say, fixed but faithful. */
 	correctedText: string | null;
-	/** Fluent spoken version, written for TTS read-back. */
-	naturalSpeech: string | null;
-	/** English translation of what the learner said (idiomatic variant). */
+	/** Translation of what the learner meant, in the language of instruction (idiomatic variant). */
 	translation: string | null;
 	/** All three translation variants. */
 	translations: TranslationSet | null;
 	/** Voice id or cloud model last used to synthesize this attempt. */
 	ttsVoice: string | null;
-	/** Short coaching summary from the LLM. */
-	summary: string | null;
+	/**
+	 * Spoken coaching in the language of instruction, with highlight tags
+	 * (`adapters/llm/explanation.ts`). Takes from before migration 7 carry
+	 * their plain coaching summary here.
+	 */
+	explanation: string | null;
+	/** The follow-up question and its translation (migration 8); older takes carry it in `explanation`. */
+	followUp: FollowUp | null;
+	/** In-context word meanings for hover translations (migration 9), fetched on first hover. */
+	wordGlosses: WordGlosses | null;
 	durationSec: number;
 	wordCount: number;
 	/** Cache key for the recorded audio in `audio_assets`, if any. */
@@ -120,7 +172,7 @@ export interface Correction {
 	label: string;
 	original: string;
 	replacement: string;
-	/** English translation of the suggested replacement. */
+	/** The suggested replacement's meaning, in the language of instruction. */
 	replacementTranslation: string | null;
 	/** Character offsets of `original` in the attempt transcript, when known. */
 	start: number | null;

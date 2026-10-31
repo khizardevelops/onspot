@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	/**
 	 * Interactive 1:1 clone of `#lib/components/AttemptStream.svelte`.

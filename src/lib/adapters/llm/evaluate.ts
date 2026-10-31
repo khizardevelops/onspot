@@ -1,7 +1,19 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { chatCompletion, stripThinking } from './client';
+import { repairJson } from './jsonRepair';
 import { buildEvaluationMessages, isCategory, isExamStatus, isSeverity } from './prompt';
+import {
+	composeExplanation,
+	formatExplanation,
+	normalizeFollowUp,
+	separateFollowUp,
+	speakableExplanation,
+	type FollowUp
+} from './explanation';
+import { sameWords } from '#lib/utils/words.js';
 import { MAX_EVALUATION_TOKENS } from '../../config';
-import type { TranslationSet } from '../db/types';
+import { TRANSLATION_SET_VERSION, type TranslationSet } from '../db/types';
 import type {
 	ConnectorSuggestion,
 	EvaluationCorrection,
@@ -50,17 +62,14 @@ export function extractJson(raw: string): unknown {
 	if (end === -1) {
 		throw new Error('The model’s reply was cut off before it finished. Please try again.');
 	}
-	try {
-		return JSON.parse(candidate.slice(start, end + 1));
-	} catch {
-		// Fall back to the widest span in case the balanced scan was misled.
-		const last = candidate.lastIndexOf('}');
-		try {
-			return JSON.parse(candidate.slice(start, last + 1));
-		} catch {
-			throw new Error('The model returned malformed JSON. Please try again.');
-		}
+	// The balanced span first, then the widest one in case the scan was misled,
+	// each repaired for the small slips models make (see jsonRepair.ts).
+	const last = candidate.lastIndexOf('}');
+	for (const span of [candidate.slice(start, end + 1), candidate.slice(start, last + 1)]) {
+		const repaired = repairJson(span);
+		if (repaired) return JSON.parse(repaired);
 	}
+	throw new Error('The model returned malformed JSON. Please try again.');
 }
 
 function asString(value: unknown, fallback = ''): string {
@@ -79,6 +88,9 @@ function mapCorrection(raw: unknown): EvaluationCorrection | null {
 	const original = asString(r.original);
 	const replacement = asString(r.replacement);
 	if (!original && !replacement) return null;
+	// A "correction" that says the same words is no correction (the model's way
+	// of flagging something merely unclear); it would show the learner a fake fix.
+	if (original && replacement && sameWords(original, replacement)) return null;
 
 	return {
 		category: r.category,
@@ -115,6 +127,25 @@ function mapConnector(raw: unknown): ConnectorSuggestion | null {
 	};
 }
 
+/**
+ * The explanation, written from the model's validated mistakes, and its
+ * follow-up question, kept apart. A model that still puts an `<ask>` question
+ * in the explanation would have it spoken twice and shown twice, so the
+ * question is lifted out, and used as the follow-up (without a translation)
+ * when the model gave no `followUp`.
+ */
+function explanationAndFollowUp(
+	rawExplanation: unknown,
+	rawFollowUp: unknown
+): { explanation: string; followUp: FollowUp | null } {
+	const { parts, askedQuestion } = separateFollowUp(composeExplanation(rawExplanation));
+	const explanation = formatExplanation(parts).trim();
+	const followUp =
+		normalizeFollowUp(rawFollowUp) ?? (askedQuestion ? { question: askedQuestion, translation: '' } : null);
+
+	return { explanation, followUp };
+}
+
 /** Validates and normalises a model response into a trusted `EvaluationResult`. */
 export function normalizeEvaluation(raw: unknown, transcript: string, language?: string): EvaluationResult {
 	if (!raw || typeof raw !== 'object') throw new Error('Empty evaluation response.');
@@ -135,23 +166,24 @@ export function normalizeEvaluation(raw: unknown, transcript: string, language?:
 	const idiomatic = asString(rawTranslations.idiomatic) || asString(r.translation);
 	const literal = asString(rawTranslations.literal);
 	const wordForWord = asString(rawTranslations.wordForWord);
-	const translations: TranslationSet = {
-		// An incomplete model response stays readable, but remains versionless so
-		// choosing a translation view repairs it with the dedicated strict prompt.
-		version: idiomatic && literal && wordForWord ? 2 : undefined,
-		idiomatic,
-		idiomaticVariants: asStringArray(rawTranslations.idiomaticVariants)
-			.map((value) => value.trim())
-			.filter((value, index, values) => value && value !== idiomatic && values.indexOf(value) === index)
-			.slice(0, 2),
-		literal: literal || idiomatic,
-		wordForWord: wordForWord || idiomatic,
-		wordBreakdown: []
-	};
+	// None when they were not asked for. An incomplete set stays readable, but
+	// versionless, so choosing a translation view repairs it with the dedicated prompt.
+	const translations: TranslationSet | null = !idiomatic
+		? null
+		: {
+				version: literal && wordForWord ? TRANSLATION_SET_VERSION : undefined,
+				idiomatic,
+				idiomaticVariants: asStringArray(rawTranslations.idiomaticVariants)
+					.map((value) => value.trim())
+					.filter((value, index, values) => value && value !== idiomatic && values.indexOf(value) === index)
+					.slice(0, 2),
+				literal: literal || idiomatic,
+				wordForWord: wordForWord || idiomatic,
+				wordBreakdown: []
+			};
 
-	const correctedText = asString(r.correctedText, transcript);
-	const naturalSpeech = asString(r.naturalSpeech, correctedText);
-	const summary = asString(r.summary);
+	const correctedText = asString(r.correctedText).trim() || transcript;
+	const { explanation, followUp } = explanationAndFollowUp(r.explanation, r.followUp);
 
 	// A take in the wrong language has no French mistakes to list, so the model
 	// returns none, and an empty list reads as a clean take. Flag the whole take
@@ -160,22 +192,23 @@ export function normalizeEvaluation(raw: unknown, transcript: string, language?:
 	const wrongLanguage =
 		language && spoken && !spoken.toLowerCase().includes(language.toLowerCase()) && transcript.trim();
 	if (wrongLanguage) {
+		const spokenExplanation = speakableExplanation(explanation);
 		corrections.splice(0, corrections.length, {
 			category: 'grammar',
 			severity: 'error',
 			label: `Answered in ${spoken} instead of ${language}`,
 			original: transcript.trim(),
-			replacement: naturalSpeech !== transcript.trim() ? naturalSpeech : '',
-			explanation: summary || `This take was spoken in ${spoken}. Answer the prompt in ${language}.`,
+			replacement: correctedText !== transcript.trim() ? correctedText : '',
+			explanation: spokenExplanation || `This take was spoken in ${spoken}. Answer the prompt in ${language}.`,
 			formalAlternatives: []
 		});
 	}
 
 	return {
 		correctedText,
-		naturalSpeech,
+		explanation,
+		followUp,
 		translations,
-		summary,
 		corrections,
 		vocabulary,
 		connectors

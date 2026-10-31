@@ -1,22 +1,31 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
-	import { quickCollapse, quickTooltip } from '#lib/neo.js';
+	import { quickCollapse } from '#lib/neo.js';
 	import { fade, fly, slide } from 'svelte/transition';
-	import type { AttemptView } from '#lib/stores/practice.js';
+	import type { AttemptTrackKind, AttemptView } from '#lib/stores/practice.js';
 	import {
 		ensureAttemptTranslations,
-		playAttempt,
+		explanationAudioUnavailable,
+		playAttemptTrack,
 		playRecording,
 		playSegment,
-		setAttemptVoice
+		setAttemptVoice,
+		ensurePhraseMeaning,
+		ensureWordGlosses,
+		translationsCurrent as areTranslationsCurrent,
+		wordGlossesFor
 	} from '#lib/stores/practice.js';
 	import { appSettings } from '#lib/stores/settings.js';
-	import { getLanguage } from '#lib/languages/index.js';
+	import { getInstructionLanguage, getLanguage } from '#lib/languages/index.js';
 	import { listLocalVoices } from '#lib/speech/tts/service.js';
 	import { splitSentences } from '#lib/utils/segments.js';
 	import { fitFontSize } from '#lib/utils/fitText.js';
-	import { layoutLength } from '#lib/utils/words.js';
+	import { layoutLength, sameWords } from '#lib/utils/words.js';
 	import { audioActivity, togglePlay } from '#lib/stores/audio.js';
 	import Transcript from './Transcript.svelte';
+	import AttemptTrack from './AttemptTrack.svelte';
+	import ExplanationText from './ExplanationText.svelte';
 	import AudioBar from './AudioBar.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
@@ -24,7 +33,6 @@
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';
 	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
 	import PopMenu from '#lib/components/PopMenu.svelte';
-	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import {
 		Check,
@@ -64,10 +72,26 @@
 		advance: 0.47,
 		lineHeight: 1.6
 	} as const;
+	/*
+	 * Narrow cards (phones) get smaller display type and tighter lines: at the
+	 * desktop sizes a single sentence filled six lines of a phone screen. The
+	 * floor stays at the 15px reading size of the rest of the card.
+	 */
+	const COMPACT_TRANSCRIPT_FIT = {
+		min: 15,
+		max: 19,
+		targetHeight: 120,
+		advance: 0.47,
+		lineHeight: 1.45
+	} as const;
+	const COMPACT_TEXT_WIDTH_PX = 480;
 	let transcriptWidth = $state(0);
+	const transcriptFit = $derived(
+		transcriptWidth > 0 && transcriptWidth < COMPACT_TEXT_WIDTH_PX ? COMPACT_TRANSCRIPT_FIT : TRANSCRIPT_FIT
+	);
 	const transcriptSize = $derived(
 		// Japanese glyphs are about twice as wide as Latin ones.
-		fitFontSize(layoutLength(attempt.transcript), transcriptWidth, TRANSCRIPT_FIT)
+		fitFontSize(layoutLength(attempt.transcript), transcriptWidth, transcriptFit)
 	);
 	let showSegments = $state(false);
 	let rerendering = $state(false);
@@ -83,22 +107,49 @@
 				: 'off'
 	);
 
-	const languageName = $derived(getLanguage($appSettings.targetLanguage)?.name ?? 'target language');
+	const language = $derived(getLanguage($appSettings.targetLanguage));
+	const languageName = $derived(language?.name ?? 'target language');
+	/** The language the learner is taught in: translations, meanings and explanations are in it. */
+	const instructionName = $derived(getInstructionLanguage($appSettings.instructionLanguage).name);
+
+	/*
+	 * The correct version only gets its own row when it says something
+	 * different; a take with nothing to fix says so with a pill instead of
+	 * repeating the same sentence.
+	 */
+	const correctVersionDiffers = $derived(
+		Boolean(attempt.correctedText) && !sameWords(attempt.transcript, attempt.correctedText)
+	);
+	const hasErrors = $derived(attempt.corrections.some((correction) => correction.severity === 'error'));
+	const saidCorrectly = $derived(!correctVersionDiffers && !hasErrors);
+
+	const explanationUnavailableReason = $derived($explanationAudioUnavailable);
 	const TRANSLATION_OPTIONS = $derived<{ id: TranslationView; label: string; detail: string }[]>([
-		{ id: 'idiomatic', label: 'Idiomatic', detail: 'Natural English with the same meaning' },
-		{ id: 'literal', label: 'Literal', detail: `English that follows the ${languageName} structure` },
+		{ id: 'idiomatic', label: 'Idiomatic', detail: `Natural ${instructionName} with the same meaning` },
+		{ id: 'literal', label: 'Literal', detail: `${instructionName} that follows the ${languageName} structure` },
 		{ id: 'wordForWord', label: 'Word-for-word', detail: 'Each word in the original order' },
 		{ id: 'all', label: 'Compare all three', detail: 'See the differences side by side' },
 		{ id: 'off', label: 'Hide translation', detail: `Keep the focus on your ${languageName}` }
 	]);
 
-	const translations = $derived({
-		idiomatic: attempt.translations?.idiomatic || attempt.translation,
-		idiomaticVariants: attempt.translations?.idiomaticVariants ?? [],
-		literal: attempt.translations?.literal || '',
-		wordForWord: attempt.translations?.wordForWord || '',
-		wordBreakdown: attempt.translations?.wordBreakdown ?? []
-	});
+	/*
+	 * Translations are of the correct version ("Did you mean to say?"), which is
+	 * the transcript itself when nothing needed fixing. Sets from older versions
+	 * translated the raw transcript, so they are not shown; they are replaced
+	 * when a translation is asked for.
+	 */
+	const translationsCurrent = $derived(areTranslationsCurrent(attempt.translations, $appSettings.instructionLanguage));
+	const translations = $derived(
+		translationsCurrent
+			? {
+					idiomatic: attempt.translations?.idiomatic ?? '',
+					idiomaticVariants: attempt.translations?.idiomaticVariants ?? [],
+					literal: attempt.translations?.literal || '',
+					wordForWord: attempt.translations?.wordForWord || '',
+					wordBreakdown: attempt.translations?.wordBreakdown ?? []
+				}
+			: { idiomatic: '', idiomaticVariants: [], literal: '', wordForWord: '', wordBreakdown: [] }
+	);
 
 	const translationLabel = $derived.by(() => {
 		if (translationView === 'off') return 'Translate';
@@ -122,9 +173,10 @@
 			: [];
 	});
 
-	const segments = $derived(
-		splitSentences(attempt.naturalSpeech || attempt.correctedText || attempt.transcript)
-	);
+	/** The word list without lone punctuation ("," → ","), which only takes rows. */
+	const vocabulary = $derived(translations.wordBreakdown.filter((item) => /[\p{L}\p{N}]/u.test(item.source)));
+
+	const segments = $derived(splitSentences(attempt.correctedText || attempt.transcript));
 	const selectedVoice = $derived(attempt.ttsVoice ?? $appSettings.ttsVoice);
 
 	/* Menu values are namespaced so one onSelect can route every action. */
@@ -151,7 +203,7 @@
 			? [
 					{
 						value: 'voice',
-						label: 'Read-back voice',
+						label: 'Text-to-speech voice',
 						before: menuIcon,
 						items: voices.map((voice) => ({ value: `voice:${voice.id}`, label: voice.label, after: optionCheck }))
 					}
@@ -176,9 +228,16 @@
 		else if (key.startsWith('voice:')) void rerender(key.slice(6));
 	}
 
+	// A take still holding an older (transcript) translation while a view is on: replace it,
+	// but only for the take being read, so an old session does not fire a request per card.
+	$effect(() => {
+		const outdated = translationView !== 'off' && !translationsCurrent;
+		if (active && outdated && !generatingTranslations && !translationError) void requestTranslations(false);
+	});
+
 	function needsGeneration(view: TranslationView): boolean {
 		if (view === 'off') return false;
-		if (attempt.translations?.version !== 2) return true;
+		if (!translationsCurrent) return true;
 		if (view === 'all') return !translations.idiomatic || !translations.literal || !translations.wordForWord;
 		return !translations[view];
 	}
@@ -221,17 +280,24 @@
 		showWordBreakdown = true;
 	}
 
-	function attemptPlaying(): boolean {
-		return Boolean(
-			$audioActivity.playing &&
-				$audioActivity.track?.attemptId === attempt.id &&
-				$audioActivity.track?.kind === 'attempt'
-		);
+	function isCurrentTrack(kind: AttemptTrackKind): boolean {
+		return $audioActivity.track?.attemptId === attempt.id && $audioActivity.track?.kind === kind;
 	}
 
-	function toggleAttemptAudio(): void {
-		if (attemptPlaying()) togglePlay();
-		else void playAttempt(attempt.id);
+	function trackPlaying(kind: AttemptTrackKind): boolean {
+		return $audioActivity.playing && isCurrentTrack(kind);
+	}
+
+	function trackLoading(kind: AttemptTrackKind): boolean {
+		return $audioActivity.loading && isCurrentTrack(kind);
+	}
+
+	/** Pauses or resumes the track already loaded; otherwise synthesizes and plays it. */
+	function toggleTrack(kind: AttemptTrackKind): void {
+		if (trackLoading(kind)) return;
+
+		if (isCurrentTrack(kind) && $audioActivity.track?.url) togglePlay();
+		else void playAttemptTrack(attempt.id, kind);
 	}
 
 	function segmentPlaying(position: number): boolean {
@@ -267,46 +333,17 @@
 	<Check size={15} class="menu-check {isChecked(item.value) ? '' : 'invisible'}" aria-hidden="true" />
 {/snippet}
 
-{#snippet detailChip(kind: string)}
-	{#if kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
-		<NeoButton
-			rounded
-			elevation={1}
-			scale={false}
-			class="inline-chip"
-			aria-expanded={showIdiomaticVariants}
-			onclick={() => (showIdiomaticVariants = !showIdiomaticVariants)}
-		>
-			{showIdiomaticVariants ? 'Hide' : `+${translations.idiomaticVariants.length}`} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
-			<ChevronDown class="size-3 transition-transform duration-300 {showIdiomaticVariants ? 'rotate-180' : ''}" />
-		</NeoButton>
-	{:else if kind === 'wordForWord'}
-		<NeoButton
-			rounded
-			elevation={1}
-			scale={false}
-			class="inline-chip"
-			aria-expanded={showWordBreakdown}
-			onclick={() => void toggleWordBreakdown(!showWordBreakdown)}
-		>
-			Word breakdown
-			<ChevronDown class="size-3 transition-transform duration-300 {showWordBreakdown ? 'rotate-180' : ''}" />
-		</NeoButton>
-	{/if}
-{/snippet}
-
+<!-- An index card: its paper, rules and edges are styled below; the pile adds tape and shadow. -->
 <NeoCard
 	data-card-surface
-	class="attempt-card relative w-full min-w-0 {active ? 'active-card' : ''}"
+	class="attempt-card relative w-full min-w-0"
 	spacing="0"
 	width="100%"
-	elevation={active ? 2 : 1}
-	hover={active ? 0 : 1}
-	rounded
-	glass
+	elevation={0}
+	hover={0}
 	borderless
 >
-	<div class="flex items-center justify-between gap-2 px-4 pt-3 pb-0 sm:px-5 sm:pt-3.5">
+	<div class="index-card-header flex items-center justify-between gap-2 px-4 pt-3 pb-2 sm:px-5 sm:pt-3.5">
 		<div class="flex min-w-0 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
 			<NeoPill size="small" rounded elevation={active ? -1 : 1} color={active ? 'primary' : undefined} class="take-pill">Take {index}</NeoPill>
 			<span class="text-faint">·</span>
@@ -316,18 +353,6 @@
 		</div>
 
 		<div class="flex shrink-0 items-center gap-1">
-			<NeoTooltip tooltip={attemptPlaying() ? 'Pause' : 'Play natural version'} {...quickTooltip}>
-				<NeoButton
-					text
-					rounded
-					class="card-icon-button play-button"
-					aria-label={attemptPlaying() ? 'Pause natural version' : 'Play natural version'}
-					onclick={toggleAttemptAudio}
-				>
-					{#snippet icon()}{#if attemptPlaying()}<Pause size={16} />{:else}<Volume2 size={16} />{/if}{/snippet}
-				</NeoButton>
-			</NeoTooltip>
-
 			<PopMenu items={translationItems} placement="bottom-end" onSelect={onMenuSelect} rounded>
 				<NeoButton
 					text={translationView === 'off'}
@@ -350,20 +375,83 @@
 		</div>
 	</div>
 
-	<div class="px-4 pt-2 pb-3.5 sm:px-5 sm:pb-4">
-		<div
-			bind:clientWidth={transcriptWidth}
-			class="transcript-fit"
-			style:font-size={`${transcriptSize}px`}
-			style:line-height={TRANSCRIPT_FIT.lineHeight}
-		>
-			<Transcript
-				text={attempt.transcript}
-				corrections={attempt.corrections}
-				activeCorrectionId={active ? activeCorrectionId : null}
-				onSelect={(correctionId) => onSelectCorrection?.(attempt.id, correctionId)}
-				class="block break-words font-serif [text-wrap:pretty]"
-			/>
+	<div class="index-card-lines px-4 pt-3 pb-3.5 sm:px-5 sm:pb-4">
+		<div class="grid gap-3">
+			<AttemptTrack
+				label="You said"
+				audioName="what you said"
+				playing={trackPlaying('said')}
+				loading={trackLoading('said')}
+				onToggle={() => toggleTrack('said')}
+			>
+				{#snippet badge()}
+					{#if saidCorrectly}
+						<NeoPill size="small" rounded elevation={0} tinted color="success" class="correct-pill"><Check size={11} /> Correct</NeoPill>
+					{/if}
+				{/snippet}
+				<div
+					bind:clientWidth={transcriptWidth}
+					class="transcript-fit"
+					style:font-size={`${transcriptSize}px`}
+					style:line-height={transcriptFit.lineHeight}
+				>
+					<Transcript
+						text={attempt.transcript}
+						corrections={attempt.corrections}
+						activeCorrectionId={active ? activeCorrectionId : null}
+						onSelect={(correctionId) => onSelectCorrection?.(attempt.id, correctionId)}
+						glosses={wordGlossesFor(attempt, attempt.transcript, $appSettings.instructionLanguage)}
+						requestGlosses={() => ensureWordGlosses(attempt.id, attempt.transcript)}
+						requestPhrase={(start, end, phrase) => ensurePhraseMeaning(attempt.id, attempt.transcript, start, end, phrase)}
+						class="block break-words font-serif [text-wrap:pretty]"
+					/>
+				</div>
+			</AttemptTrack>
+
+			{#if correctVersionDiffers}
+				<AttemptTrack
+					label="Did you mean to say?"
+					audioName="the correct version"
+					playing={trackPlaying('corrected')}
+					loading={trackLoading('corrected')}
+					onToggle={() => toggleTrack('corrected')}
+				>
+					<!-- Same size as the transcript, so the two read as a pair. -->
+					<div style:font-size={`${transcriptSize}px`} style:line-height={transcriptFit.lineHeight}>
+						<Transcript
+							text={attempt.correctedText}
+							glosses={wordGlossesFor(attempt, attempt.correctedText, $appSettings.instructionLanguage)}
+							requestGlosses={() => ensureWordGlosses(attempt.id, attempt.correctedText)}
+							requestPhrase={(start, end, phrase) => ensurePhraseMeaning(attempt.id, attempt.correctedText, start, end, phrase)}
+							class="block break-words font-serif [text-wrap:pretty]"
+						/>
+					</div>
+				</AttemptTrack>
+			{/if}
+
+			{#if attempt.explanation || attempt.followUp}
+				<AttemptTrack
+					label="Explanation"
+					audioName="the explanation"
+					playing={trackPlaying('explanation')}
+					loading={trackLoading('explanation')}
+					unavailableReason={explanationUnavailableReason}
+					onToggle={() => toggleTrack('explanation')}
+				>
+					<ExplanationText
+						markup={attempt.explanation}
+						followUp={attempt.followUp}
+						targetLocale={language?.locale ?? 'und'}
+						instructionLanguage={instructionName}
+						followUpAudio={{
+							playing: trackPlaying('followUp'),
+							loading: trackLoading('followUp'),
+							onToggle: () => toggleTrack('followUp')
+						}}
+						class="text-[0.9375rem] leading-relaxed [text-wrap:pretty]"
+					/>
+				</AttemptTrack>
+			{/if}
 		</div>
 
 		{#if active}
@@ -380,51 +468,66 @@
 		{/if}
 
 		{#if translationView !== 'off'}
-			<div class="mt-3 min-w-0" aria-live="polite" in:slide={{ duration: 170 }} out:fade={{ duration: 140 }}>
-				<NeoDivider style="margin: 0 0 0.625rem" /><!-- neo folds a multi-value `margin` prop into its height calc() -->
+			<!-- A sticky note stuck on the card: clearly not the take's own text. -->
+			<section class="card-translation mt-4 min-w-0" aria-label="Translation" aria-live="polite" in:slide={{ duration: 170 }} out:fade={{ duration: 140 }}>
+				<div class="flex min-h-7 items-center gap-1.5">
+					<span class="translation-mark grid size-7 shrink-0 place-items-center" aria-hidden="true"><Languages size={14} /></span>
+					<p class="eyebrow">Translation</p>
+				</div>
+
 				{#if generatingTranslations}
-					<p class="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 class="size-4 animate-spin text-[var(--brand)]" /> Generating and saving translations…</p>
+					<p class="pencil-note mt-1 flex items-center gap-2"><Loader2 class="size-3.5 animate-spin" /> Writing the translations…</p>
 				{:else}
-					<div class="grid gap-2">
-						{#each visibleTranslations as translation (translation.label)}
-							<div class="translation-surface min-w-0 rounded-xl px-3 py-2" in:fly={{ y: 5, duration: 150 }}>
-								<!-- Secondary detail takes space that is already there: the label row, or the text's first line. -->
-								{#if visibleTranslations.length > 1}
-									<div class="flex min-h-5 items-center justify-between gap-2">
-										<p class="text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">{translation.label}</p>
-										{@render detailChip(translation.kind)}
+					<!-- One ruled row per translation: tag, text, and that row's own toggle on its first line. -->
+					<ul class="translation-rows">
+						{#each visibleTranslations as translation (translation.kind)}
+							<li class="translation-row">
+								<span class="translation-label">{translation.label}</span>
+								<div class="translation-body min-w-0">
+									<p class="translation-text" class:word-for-word={translation.italic} dir="auto">{translation.value}</p>
+									{#if translation.kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
+										<NeoCollapse transition={quickCollapse} bind:open={showIdiomaticVariants}>
+											{#each translations.idiomaticVariants as variant (variant)}
+												<p class="translation-text translation-alternative" dir="auto"><span class="or-mark">or</span> {variant}</p>
+											{/each}
+										</NeoCollapse>
+									{/if}
+								</div>
+								<div class="translation-toggle">
+									{#if translation.kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
+										<button type="button" class="pencil-link" aria-expanded={showIdiomaticVariants} onclick={() => (showIdiomaticVariants = !showIdiomaticVariants)}>
+											{showIdiomaticVariants ? 'Hide' : `+${translations.idiomaticVariants.length}`} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
+										</button>
+									{:else if translation.kind === 'wordForWord'}
+										<button type="button" class="pencil-link" aria-expanded={showWordBreakdown} onclick={() => void toggleWordBreakdown(!showWordBreakdown)}>
+											{showWordBreakdown ? 'Hide each word' : 'Each word'}
+										</button>
+									{/if}
+								</div>
+								{#if translation.kind === 'wordForWord'}
+									<!-- The word list takes the note's full width, so more columns fit. -->
+									<div class="vocab-span">
+										<NeoCollapse transition={quickCollapse} open={showWordBreakdown}>
+											{#if vocabulary.length > 0}
+												<!-- A vocabulary list from a notebook: the word, a dotted leader, its meaning. -->
+												<ol class="vocab-list">
+													{#each vocabulary as item, position (`${item.source}-${position}`)}
+														<li class="vocab-entry">
+															<span class="vocab-source">{item.source}</span>
+															<span class="vocab-leader" aria-hidden="true"></span>
+															<span class="vocab-target" dir="auto">{item.target}</span>
+														</li>
+													{/each}
+												</ol>
+											{/if}
+										</NeoCollapse>
 									</div>
 								{/if}
-								<p class="text-sm leading-relaxed break-words {visibleTranslations.length > 1 ? 'mt-0.5' : ''} {translation.italic ? 'text-muted-foreground italic' : ''}">
-									{#if visibleTranslations.length === 1}<span class="float-right ml-2">{@render detailChip(translation.kind)}</span>{/if}{translation.value}
-								</p>
-							</div>
+							</li>
 						{/each}
-					</div>
-
-					{#if (translationView === 'idiomatic' || translationView === 'all') && translations.idiomaticVariants.length > 0}
-						<NeoCollapse transition={quickCollapse} bind:open={showIdiomaticVariants}>
-								<div class="grid gap-2 pt-2 sm:grid-cols-2">
-									{#each translations.idiomaticVariants as variant (variant)}
-										<p class="translation-surface rounded-xl px-3 py-2 text-sm">{variant}</p>
-									{/each}
-								</div>
-						</NeoCollapse>
-					{/if}
-
-					{#if translationView === 'wordForWord' || translationView === 'all'}
-						<NeoCollapse transition={quickCollapse} open={showWordBreakdown}>
-								{#if translations.wordBreakdown.length > 0}
-									<dl class="translation-surface mt-2 grid grid-cols-[minmax(0,auto)_1fr] gap-x-3 gap-y-1.5 rounded-xl p-3 text-xs">
-										{#each translations.wordBreakdown as item, position (`${item.source}-${position}`)}
-											<dt class="font-medium break-words">{item.source}</dt><dd class="min-w-0 text-muted-foreground break-words">{item.target}</dd>
-										{/each}
-									</dl>
-								{/if}
-						</NeoCollapse>
-					{/if}
+					</ul>
 				{/if}
-			</div>
+			</section>
 		{/if}
 
 		{#if showSegments && segments.length > 1}
@@ -451,18 +554,50 @@
 </NeoCard>
 
 <style>
-	/* The selected take: a glass neo card with a teal edge (it is the selected item). */
-	/* One radius for the card, its shadow, its selection outline and its focus ring. */
+	/*
+	 * Each take is an index card: warm card stock with the app's fine paper
+	 * grain, nearly square corners, a red rule under the header, faint blue
+	 * lines below it, and edges a little darker with age. The lines are on the
+	 * card's body, so they scroll with the text of a long take.
+	 */
 	:global(.neo-card.attempt-card) {
-		--neo-card-border-radius: var(--attempt-radius, 22px);
-		border-radius: var(--attempt-radius, 22px);
+		--index-card: #fffdf7;
+		--index-hairline: rgb(120 100 70 / 0.14);
+		--index-edge: rgb(139 100 50 / 0.07);
+		--index-rule: rgb(110 140 185 / 0.17);
+		--index-red-rule: rgb(214 88 80 / 0.5);
+		--neo-card-border-radius: var(--attempt-radius, 6px);
+		border-radius: var(--attempt-radius, 6px);
 		overflow: visible;
-		transition: box-shadow 120ms ease;
+	}
+	:global([data-theme='dark'] .neo-card.attempt-card) {
+		--index-card: #24211c;
+		--index-hairline: rgb(255 240 215 / 0.07);
+		--index-edge: rgb(0 0 0 / 0.32);
+		--index-rule: rgb(170 190 225 / 0.08);
+		--index-red-rule: rgb(224 103 90 / 0.42);
+	}
+	/* Out-ranks neo's own card surface and shadow rules. */
+	:global(html[neo-theme-root] .neo-card.neo-card.attempt-card) {
+		background-color: var(--index-card);
+		background-image: var(--paper-key, none);
+		background-size: cover;
+		background-blend-mode: var(--key-blend);
+		box-shadow:
+			inset 0 0 0 1px var(--index-hairline),
+			inset 0 0 36px var(--index-edge);
 	}
 	:global(.neo-card.attempt-card .neo-card-content) { overflow: visible; }
-	:global(.neo-card.attempt-card.active-card) {
-		outline: 1.5px solid var(--brand);
-		outline-offset: -1px;
+	.index-card-header {
+		border-bottom: 1.5px solid var(--index-red-rule);
+	}
+	.index-card-lines {
+		--rule-gap: 1.75rem;
+		background-image: repeating-linear-gradient(
+			to bottom,
+			transparent 0 calc(var(--rule-gap) - 1px),
+			var(--index-rule) calc(var(--rule-gap) - 1px) var(--rule-gap)
+		);
 	}
 	:global(.neo-card.attempt-card .neo-pill.take-pill) {
 		height: 20px;
@@ -478,8 +613,16 @@
 		justify-content: center;
 		color: var(--muted-foreground);
 	}
-	:global(.neo-card.attempt-card .neo-button.play-button:hover),
 	:global(.neo-card.attempt-card .neo-button.segment-button) { color: var(--brand); }
+	:global(.neo-card.attempt-card .neo-pill.correct-pill) {
+		height: 18px;
+		gap: 3px;
+		padding: 0 7px;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
 	:global(.neo-card.attempt-card .neo-button.translate-trigger) {
 		height: 32px;
 		padding: 0 10px;
@@ -491,25 +634,169 @@
 	:global(.neo-card.attempt-card .neo-button.retry-button) { height: 28px; padding: 0 10px; font-size: 0.75rem; }
 	:global(.menu-check) { color: var(--primary); flex-shrink: 0; }
 	/*
-	 * Translation surfaces are deliberately tinted with the brand colour. The
-	 * neutral surface token is almost the page background, so a neutral box read
-	 * as an accidental colour mismatch rather than a highlighted translation.
+	 * The translation is a yellow sticky note stuck on the card, so it reads at
+	 * once as something added to the take, not part of it: its own paper over
+	 * the ruled lines, a soft lift at the bottom, a folded corner. Each
+	 * variant's label sits in the note's margin (above the text on phones).
 	 */
-	.translation-surface {
-		background: color-mix(in srgb, var(--brand) 8%, var(--card));
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 20%, transparent);
+	.card-translation {
+		--note-paper: #fff6bf;
+		--note-paper-shade: #f8e9a0;
+		--note-label: #8a6a1f;
+		--note-tag: #a8791c;
+		--note-tag-ink: #fffaf0;
+		--note-rule: rgb(138 106 31 / 0.28);
+		--note-shadow: rgb(110 85 20 / 0.28);
+		position: relative;
+		padding: 0.5rem 0.875rem 0.875rem 0.625rem;
+		border-radius: 2px 2px 3px 3px;
+		background: linear-gradient(175deg, var(--note-paper) 55%, var(--note-paper-shade));
+		box-shadow:
+			0 1px 1px rgb(0 0 0 / 0.05),
+			0 8px 14px -8px var(--note-shadow);
 	}
-	/* A compact control chip for a translation's secondary detail. */
-	:global(.neo-button.inline-chip) {
-		gap: 3px;
-		padding: 1px 8px;
-		color: var(--on-control);
-		font-size: 0.75rem;
-		font-weight: 500;
-		font-style: normal;
-		line-height: 1.5;
+	:global([data-theme='dark']) .card-translation {
+		--note-paper: #3a3322;
+		--note-paper-shade: #312b1c;
+		--note-label: #d9b865;
+		--note-tag: #d9b865;
+		--note-tag-ink: #2a2414;
+		--note-rule: rgb(217 184 101 / 0.22);
+		--note-shadow: rgb(0 0 0 / 0.55);
+	}
+	/* The folded bottom-right corner. */
+	.card-translation::after {
+		content: '';
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		width: 18px;
+		height: 18px;
+		background: linear-gradient(135deg, var(--note-paper-shade) 50%, color-mix(in srgb, var(--note-shadow) 60%, transparent) 50%, transparent 72%);
+		border-top-left-radius: 3px;
+		pointer-events: none;
+	}
+	.translation-mark {
+		color: var(--note-label);
+	}
+	.card-translation :global(.eyebrow) {
+		color: var(--note-label);
+	}
+	.translation-rows {
+		display: grid;
+		grid-template-columns: max-content minmax(0, 1fr) max-content;
+		column-gap: 0.875rem;
+		margin: 0.125rem 0 0 0.5rem;
+		padding: 0;
+		list-style: none;
+	}
+	/* Each row underlined across the note, so a toggle at its end reads as that row's. */
+	.translation-row {
+		display: grid;
+		grid-column: 1 / -1;
+		grid-template-columns: subgrid;
+		align-items: start;
+		padding: 0.4rem 0;
+		border-bottom: 1px solid var(--note-rule);
+	}
+	.translation-row:last-child {
+		border-bottom: 0;
+	}
+	/* A solid tag, like a label-maker strip, so each variant's name stands out. */
+	.translation-label {
+		justify-self: start;
+		margin-top: 0.2rem;
+		padding: 0.125rem 0.4rem;
+		border-radius: 3px;
+		background: var(--note-tag);
+		color: var(--note-tag-ink);
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		line-height: 1.4;
+		text-transform: uppercase;
 		white-space: nowrap;
-		border-radius: 999px;
 	}
-	@media (prefers-reduced-motion: reduce) { :global(.neo-card.attempt-card) { transition-duration: 1ms; } }
+	.translation-toggle {
+		justify-self: end;
+		padding-top: 0.1rem;
+	}
+	.vocab-span {
+		grid-column: 1 / -1;
+	}
+	.translation-text {
+		font-size: 0.9375rem;
+		line-height: 1.6;
+		overflow-wrap: anywhere;
+	}
+	.translation-text.word-for-word {
+		color: var(--muted-foreground);
+		font-style: italic;
+	}
+	.translation-alternative {
+		color: var(--muted-foreground);
+	}
+	.or-mark {
+		margin-right: 0.25rem;
+		color: var(--faint);
+		font-style: italic;
+	}
+	.pencil-note {
+		color: var(--muted-foreground);
+		font-size: 0.8125rem;
+	}
+	/* Phones: the tag and its toggle share the first line; the text goes below them. */
+	@media (max-width: 640px) {
+		.translation-rows {
+			grid-template-columns: minmax(0, 1fr) max-content;
+			margin-left: 0;
+		}
+		.translation-label {
+			grid-column: 1;
+			grid-row: 1;
+			margin-top: 0;
+		}
+		.translation-toggle {
+			grid-column: 2;
+			grid-row: 1;
+		}
+		.translation-body {
+			grid-column: 1 / -1;
+			grid-row: 2;
+			margin-top: 0.25rem;
+		}
+		.vocab-span {
+			grid-row: 3;
+		}
+	}
+
+	/* "Each word": a vocabulary list from a notebook, in up to four columns. */
+	.vocab-list {
+		columns: 4 8rem;
+		column-gap: 1.75rem;
+		margin: 0.375rem 0 0;
+		padding: 0;
+		list-style: none;
+		font-size: 0.8125rem;
+	}
+	.vocab-entry {
+		display: flex;
+		align-items: baseline;
+		gap: 0.3rem;
+		line-height: 1.75;
+		break-inside: avoid;
+	}
+	.vocab-source {
+		font-family: var(--font-serif);
+		font-weight: 600;
+	}
+	.vocab-leader {
+		flex: 1;
+		min-width: 0.75rem;
+		border-bottom: 1px dotted color-mix(in srgb, var(--faint) 70%, transparent);
+	}
+	.vocab-target {
+		color: var(--muted-foreground);
+		text-align: right;
+	}
 </style>

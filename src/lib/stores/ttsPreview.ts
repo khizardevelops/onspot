@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { get, writable } from 'svelte/store';
 import { synthesizeSpeech } from '#lib/speech/tts/service.js';
 import { getVoice, requireLanguage } from '#lib/languages/index.js';
 import { createProcessingChain, peakOf, type ProcessingChain } from '#lib/utils/audioEffects.js';
 import { appSettings, voiceTuning, type AppSettings } from './settings';
-import { openaiApiKey } from './secrets';
+import { ttsApiOptions } from './ttsConfig';
 import { stopAudio } from './audio';
 
 export type TtsPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -54,7 +56,13 @@ let inflightSelection = '';
  * or regenerates it.
  */
 function selectionKey(settings: AppSettings): string {
-	return `${settings.ttsMode}:${settings.targetLanguage}:${settings.ttsVoice}`;
+	const api =
+		settings.ttsMode === 'cloud'
+			? settings.ttsCloudProvider === 'elevenlabs'
+				? `:elevenlabs:${settings.elevenLabsModel}:${settings.elevenLabsVoiceId}`
+				: `:openai:${settings.ttsApiBaseUrl}:${settings.ttsApiModel}:${settings.ttsApiVoice}`
+			: '';
+	return `${settings.ttsMode}:${settings.targetLanguage}:${settings.ttsVoice}${api}`;
 }
 
 function currentSelection(): string {
@@ -96,7 +104,7 @@ async function loadClip(force: boolean): Promise<AudioBuffer | null> {
 				mode: settings.ttsMode,
 				languageId: language.id,
 				voice: settings.ttsVoice,
-				openaiApiKey: get(openaiApiKey) || undefined,
+				...ttsApiOptions(settings),
 				force,
 				raw: true,
 				onProgress: (progress) => {

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Check, HardDrive, Mic, X } from '@lucide/svelte';

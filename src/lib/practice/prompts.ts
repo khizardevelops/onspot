@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { IDatabaseAdapter, Prompt } from '#lib/adapters/db/index.js';
 import { requireLanguage, type LanguagePrompt } from '#lib/languages/index.js';
 

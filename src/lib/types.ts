@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 export type STTAdapterStatus = 'unloaded' | 'loading' | 'ready' | 'error';
 
 export interface ModelProgress {
@@ -8,6 +10,8 @@ export interface ModelProgress {
 
 export interface TranscribeOptions {
   language?: string;
+  /** The same audio, compressed (the take as recorded); a cloud service uploads it instead of a WAV. */
+  encodedAudio?: Blob;
   task?: 'transcribe' | 'translate';
   subsegment?: boolean;
 }

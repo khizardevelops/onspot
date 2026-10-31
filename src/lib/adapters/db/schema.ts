@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Canonical schema for both runtimes.
  *
@@ -6,7 +8,7 @@
  * append-only: bump `SCHEMA_VERSION` and add a new entry to `MIGRATIONS`.
  */
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 9;
 
 export const MIGRATIONS: Record<number, string> = {
 	1: `
@@ -118,5 +120,27 @@ export const MIGRATIONS: Record<number, string> = {
 	6: `
 		ALTER TABLE prompts ADD COLUMN language TEXT;
 		UPDATE prompts SET language = 'fr' WHERE language IS NULL;
+	`,
+
+	// Each take gets a spoken explanation (coaching in the language of
+	// instruction). It supersedes the short coaching summary, which is copied
+	// over so older takes keep theirs. `summary` and `natural_speech` are no
+	// longer read or written; the columns stay so an older app version can
+	// still open a synced database.
+	7: `
+		ALTER TABLE attempts ADD COLUMN explanation TEXT;
+		UPDATE attempts SET explanation = summary WHERE explanation IS NULL;
+	`,
+
+	// The follow-up question moved out of the explanation into its own field,
+	// with a translation the learner can reveal (JSON: { question, translation }).
+	8: `
+		ALTER TABLE attempts ADD COLUMN follow_up TEXT;
+	`,
+
+	// In-context word meanings for hover translations, fetched the first time
+	// the learner hovers a word (JSON: { [text hash]: string[] }).
+	9: `
+		ALTER TABLE attempts ADD COLUMN word_glosses TEXT;
 	`
 };

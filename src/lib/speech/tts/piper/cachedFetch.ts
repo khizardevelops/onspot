@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Cache-backed download for weights fetched outside Transformers.js.
  *
@@ -43,12 +45,17 @@ export async function cachedFetch(url: string, onProgress?: DownloadProgress): P
   // Cache Storage consumes one stream branch directly. The old path retained
   // every chunk, joined those into a second 64–77 MB allocation, and copied
   // that again into a Response—an avoidable memory spike during model load.
+  let streamedWrite: Promise<boolean> = Promise.resolve(true);
   if (cache) {
     const [readBranch, cacheBranch] = readable.tee();
     readable = readBranch;
-    void cache
-      .put(url, new Response(cacheBranch, { headers: response.headers }))
-      .catch((error) => console.warn(`[tts] could not cache ${url}:`, error));
+    streamedWrite = cache.put(url, new Response(cacheBranch, { headers: response.headers })).then(
+      () => true,
+      (error) => {
+        console.warn(`[tts] could not cache ${url} as it arrived; storing it from memory`, error);
+        return false;
+      }
+    );
   }
 
   const reader = readable.getReader();
@@ -67,8 +74,26 @@ export async function cachedFetch(url: string, onProgress?: DownloadProgress): P
     loaded += value.length;
     onProgress?.(loaded, total);
   }
+  const body = loaded === bytes.length ? bytes.buffer : bytes.slice(0, loaded).buffer;
 
-  return loaded === bytes.length ? bytes.buffer : bytes.slice(0, loaded).buffer;
+  // Stored before this returns, so "is it installed?" is answered right after a
+  // download. The streamed write can fail (Chromium refused a voice with
+  // "Cache.put() encountered a network error") or stall; the whole file is in
+  // memory by now, so it is stored from there instead.
+  if (cache && !(await settlesWithin(streamedWrite, STREAMED_WRITE_GRACE_MS))) {
+    await cache
+      .put(url, new Response(body, { headers: { 'Content-Type': response.headers.get('content-type') ?? 'application/octet-stream' } }))
+      .catch((error) => console.warn(`[tts] could not cache ${url}:`, error));
+  }
+  return body;
+}
+
+/** How long a streamed cache write may still take once the download has been read. */
+const STREAMED_WRITE_GRACE_MS = 15_000;
+
+/** The write's outcome, or false if it has not finished within `ms`. */
+function settlesWithin(write: Promise<boolean>, ms: number): Promise<boolean> {
+  return Promise.race([write, new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ms))]);
 }
 
 /** True when `url` is already stored, so the UI can say "cached". */

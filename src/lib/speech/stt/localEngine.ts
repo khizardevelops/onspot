@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { currentRuntime } from '#lib/platform/runtime.js';
 import type { LanguageDefinition } from '#lib/languages/index.js';
 import type { LocalSttEngine } from './LocalSttEngine';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Generates one `allow-<command>` permission per command (see permissions/default.toml).
 const COMMANDS: &[&str] = &[
     "model_status",

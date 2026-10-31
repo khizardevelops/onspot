@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Language-specific additions to the shared evaluation and translation
  * prompts. The shared rules are written for any language; these cover what a

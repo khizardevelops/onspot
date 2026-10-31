@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { JAPANESE_G2P_BYTES, JAPANESE_G2P_TRANSFER_BYTES, type LanguageVoice } from '#lib/languages/index.js';
 
 /**

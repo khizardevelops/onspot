@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { ModelConfig, STTAdapterStatus, ModelProgress, TranscriptionResult, TranscribeOptions } from '#lib/types.js';
 import { resampleAudioTo16kHz } from '#lib/utils/audio.js';
 

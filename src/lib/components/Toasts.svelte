@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { NeoNotificationProvider, NeoNotificationStack } from '@dvcol/neo-svelte/floating/notification';
 	import { toasts } from '#lib/stores/toast.js';
@@ -33,9 +35,9 @@
 	:global(.neo-notification-stack) {
 		z-index: 130;
 	}
-	/* Clear the composer's bottom edge and, on phones, the Feedback strip (neo adds its own gap). */
+	/* Phones: clear the bar at the bottom of the screen (neo adds its own gap). */
 	:global(.neo-notification-stack.neo-notification-stack.neo-notification-stack[data-placement='bottom']) {
-		bottom: 48px;
+		bottom: calc(96px + env(safe-area-inset-bottom));
 	}
 	@media (min-width: 641px) {
 		:global(.neo-notification-stack.neo-notification-stack.neo-notification-stack[data-placement='bottom']) {

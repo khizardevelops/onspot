@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { LanguageDefinition } from '#lib/languages/index.js';
 import type { ModelProgress } from '#lib/types.js';
 

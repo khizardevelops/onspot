@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Runtime-agnostic database implementation.
  *
@@ -6,11 +8,16 @@
  * drift apart in behaviour.
  */
 import { MIGRATIONS, SCHEMA_VERSION } from './schema';
+import { markContentChanged } from './revision';
 import type {
 	AudioAsset,
 	Correction,
 	ExamStatus,
+	FollowUp,
 	IDatabaseAdapter,
+	PhraseGloss,
+	TextGlosses,
+	WordGlosses,
 	Prompt,
 	Session,
 	Setting,
@@ -158,11 +165,13 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 			upsert('prompts', ['id', 'title', 'text', 'category', 'language', 'created_at']),
 			[prompt.id, prompt.title, prompt.text, prompt.category, prompt.language, prompt.createdAt]
 		);
+		markContentChanged();
 	}
 
 	async deletePrompt(id: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM prompts WHERE id = ?', [id]);
+		markContentChanged();
 	}
 
 	// --------------------------------------------------------------- Sessions
@@ -209,11 +218,13 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				session.updatedAt
 			]
 		);
+		markContentChanged();
 	}
 
 	async deleteSession(id: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM sessions WHERE id = ?', [id]);
+		markContentChanged();
 	}
 
 	// --------------------------------------------------------------- Attempts
@@ -248,11 +259,12 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				'prompt_text',
 				'transcript',
 				'corrected_text',
-				'natural_speech',
 				'translation',
 				'translations',
 				'tts_voice',
-				'summary',
+				'explanation',
+				'follow_up',
+				'word_glosses',
 				'duration_sec',
 				'word_count',
 				'audio_key',
@@ -266,11 +278,12 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				attempt.promptText,
 				attempt.transcript,
 				attempt.correctedText,
-				attempt.naturalSpeech,
 				attempt.translation,
 				attempt.translations ? JSON.stringify(attempt.translations) : null,
 				attempt.ttsVoice,
-				attempt.summary,
+				attempt.explanation,
+				attempt.followUp ? JSON.stringify(attempt.followUp) : null,
+				attempt.wordGlosses ? JSON.stringify(attempt.wordGlosses) : null,
 				attempt.durationSec,
 				attempt.wordCount,
 				attempt.audioKey,
@@ -278,11 +291,13 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				attempt.updatedAt
 			]
 		);
+		markContentChanged();
 	}
 
 	async deleteAttempt(id: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM attempts WHERE id = ?', [id]);
+		markContentChanged();
 	}
 
 	// ------------------------------------------------------------ Corrections
@@ -352,6 +367,7 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				]
 			}))
 		]);
+		markContentChanged();
 	}
 
 	// ------------------------------------------------------------------ Audio
@@ -366,6 +382,7 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 			   data_base64=excluded.data_base64, created_at=excluded.created_at`,
 			[asset.key, asset.attemptId, asset.mime, asset.dataBase64, asset.createdAt]
 		);
+		markContentChanged();
 	}
 
 	async getAudio(key: string): Promise<AudioAsset | null> {
@@ -382,11 +399,13 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	async deleteAudio(key: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM audio_assets WHERE key = ?', [key]);
+		markContentChanged();
 	}
 
 	async deleteAttemptAudio(attemptId: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM audio_assets WHERE attempt_id = ?', [attemptId]);
+		markContentChanged();
 	}
 
 	// --------------------------------------------------------------- Settings
@@ -406,6 +425,7 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 			 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
 			[key, value, nowIso()]
 		);
+		markContentChanged();
 	}
 
 	async listSettings(): Promise<Setting[]> {
@@ -418,6 +438,7 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	async deleteSetting(key: string): Promise<void> {
 		const db = await this.sql();
 		await db.execute('DELETE FROM settings WHERE key = ?', [key]);
+		markContentChanged();
 	}
 
 	// ----------------------------------------------------------- Sync metadata
@@ -497,19 +518,72 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 			if (statement.startsWith('--')) continue;
 			await db.execute(statement);
 		}
+		markContentChanged();
 	}
 }
 
 const ATTEMPT_SELECT = `
 	SELECT id, session_id AS sessionId, prompt_id AS promptId, prompt_text AS promptText,
-	       transcript, corrected_text AS correctedText, natural_speech AS naturalSpeech,
-	       translation, translations, tts_voice AS ttsVoice, summary, duration_sec AS durationSec,
+	       transcript, corrected_text AS correctedText,
+	       translation, translations, tts_voice AS ttsVoice, explanation, follow_up AS followUp,
+	       word_glosses AS wordGlosses, duration_sec AS durationSec,
 	       word_count AS wordCount, audio_key AS audioKey,
 	       created_at AS createdAt, updated_at AS updatedAt
 	FROM attempts`;
 
-interface AttemptRow extends Omit<Attempt, 'translations'> {
+interface AttemptRow extends Omit<Attempt, 'translations' | 'followUp' | 'wordGlosses'> {
 	translations: string | null;
+	followUp: string | null;
+	wordGlosses: string | null;
+}
+
+function isPhraseGloss(value: unknown): value is PhraseGloss {
+	const phrase = value as PhraseGloss;
+	return (
+		Number.isInteger(phrase?.start) &&
+		Number.isInteger(phrase?.end) &&
+		typeof phrase?.meaning === 'string' &&
+		(phrase?.origin === 'expression' || phrase?.origin === 'selection')
+	);
+}
+
+/**
+ * Reads the stored hover translations. Anything malformed is dropped and
+ * fetched again on hover; so is the first, word-only format (a bare list per
+ * text), which has no expressions yet.
+ */
+function parseWordGlosses(json: string | null): WordGlosses | null {
+	if (!json) return null;
+	try {
+		const parsed = JSON.parse(json) as Record<string, unknown>;
+		const texts: WordGlosses = {};
+
+		for (const [key, value] of Object.entries(parsed ?? {})) {
+			const entry = value as Partial<TextGlosses> | null;
+			const words = entry?.words;
+			if (!Array.isArray(words) || !words.every((word) => typeof word === 'string')) continue;
+
+			const phrases = Array.isArray(entry?.phrases) ? entry.phrases.filter(isPhraseGloss) : [];
+			texts[key] = { words, phrases };
+		}
+
+		return Object.keys(texts).length > 0 ? texts : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Reads the stored follow-up JSON; a malformed or empty value is treated as none. */
+function parseFollowUp(json: string | null): FollowUp | null {
+	if (!json) return null;
+	try {
+		const parsed = JSON.parse(json) as Record<string, unknown>;
+		const question = typeof parsed?.question === 'string' ? parsed.question : '';
+		const translation = typeof parsed?.translation === 'string' ? parsed.translation : '';
+		return question ? { question, translation } : null;
+	} catch {
+		return null;
+	}
 }
 
 function mapAttempt(row: AttemptRow): Attempt {
@@ -544,7 +618,12 @@ function mapAttempt(row: AttemptRow): Attempt {
 			translations = null;
 		}
 	}
-	return { ...row, translations };
+	return {
+		...row,
+		translations,
+		followUp: parseFollowUp(row.followUp),
+		wordGlosses: parseWordGlosses(row.wordGlosses)
+	};
 }
 
 const EXPORT_TABLES = [

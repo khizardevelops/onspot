@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Model-lab download cache: one Cache API bucket so a reload does not
  * re-download 190-264 MB of ggml weights. Lab-only.

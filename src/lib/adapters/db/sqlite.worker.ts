@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// <reference lib="webworker" />
 /**
  * SQLite WASM host for the web build.

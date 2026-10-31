@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * BYOK LLM providers.
  *
@@ -9,6 +11,7 @@ import type {
 	CorrectionCategory,
 	CorrectionSeverity,
 	ExamStatus,
+	FollowUp,
 	RunMode,
 	TranslationSet
 } from '../db/types';
@@ -55,7 +58,7 @@ export interface EvaluationCorrection {
 	label: string;
 	original: string;
 	replacement: string;
-	/** English translation of the suggested replacement, so the learner learns it. */
+	/** The suggested replacement's meaning in the language of instruction, so the learner learns it. */
 	replacementTranslation?: string;
 	explanation: string;
 	/** Sentence to read back through TTS for this correction. */
@@ -79,16 +82,25 @@ export interface ConnectorSuggestion {
 }
 
 export interface EvaluationResult {
-	/** The learner's transcript with the corrections applied. */
+	/**
+	 * The correct version ("Did you mean to say…?"): what the learner was trying
+	 * to say, fixed and natural but faithful to them. Equals the transcript when
+	 * there was nothing to fix.
+	 */
 	correctedText: string;
-	/** Fluent, natural spoken French version, for TTS read-back. */
-	naturalSpeech: string;
+	/**
+	 * Spoken coaching in the language of instruction, with tagged target-language
+	 * quotes (markup in `explanation.ts`). Already normalized.
+	 */
+	explanation: string;
+	/** The question that keeps the learner talking, with its translation; null if the model gave none. */
+	followUp: FollowUp | null;
 	/** Three translation styles of what the learner said. */
-	translations: TranslationSet;
+	/** Null when they were not asked for (`includeTranslations`); fetched on demand then. */
+	translations: TranslationSet | null;
 	corrections: EvaluationCorrection[];
 	vocabulary: VocabularySuggestion[];
 	connectors: ConnectorSuggestion[];
-	summary: string;
 }
 
 export interface EvaluationRequest {
@@ -98,8 +110,14 @@ export interface EvaluationRequest {
 	level: string;
 	/** Target language name, e.g. `French`. */
 	language: string;
-	/** Learner's native language name, e.g. `English`. */
+	/** The language of instruction, by its English name, e.g. `English`, `Spanish`. */
 	translationTarget: string;
+	/**
+	 * Ask for the translations of the correct version too. Only when the learner
+	 * shows them after every take: otherwise they are four or five more
+	 * renderings of the whole answer that nobody reads, fetched on demand instead.
+	 */
+	includeTranslations: boolean;
 	endpoint: LlmEndpoint;
 	/** Output token cap; defaults to the pacing-derived budget. */
 	maxTokens?: number;

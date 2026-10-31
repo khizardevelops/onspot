@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import TTSWorker from './tts.worker?worker';
 import type { ModelProgress } from '#lib/types.js';
 

@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { derived, get } from 'svelte/store';
 import type { LlmEndpoint, LlmProviderId } from '#lib/adapters/llm/index.js';
 import { getProvider } from '#lib/adapters/llm/index.js';
 import { appSettings, type AppSettings } from './settings';
-import { customApiKey, deepseekApiKey, groqApiKey } from './secrets';
+import { customApiKey, deepseekApiKey, groqApiKey, localLlmApiKey } from './secrets';
 
 function secretFor(provider: LlmProviderId) {
 	switch (provider) {
@@ -20,6 +22,16 @@ function secretFor(provider: LlmProviderId) {
  * secret store. Shared by practice evaluation and the Settings connection test.
  */
 export function resolveLlmEndpoint(settings: AppSettings): LlmEndpoint {
+	// A local server (LM Studio, llama.cpp, Ollama, ...) speaks the same
+	// OpenAI-compatible protocol; only the address and key differ.
+	if (settings.correctionMode === 'local') {
+		return {
+			baseUrl: settings.localLlmUrl,
+			apiKey: get(localLlmApiKey),
+			model: settings.localLlmModel
+		};
+	}
+
 	const provider = getProvider(settings.llmProvider);
 	const baseUrl =
 		settings.llmProvider === 'custom' ? settings.customBaseUrl : provider.baseUrl;
@@ -46,6 +58,10 @@ export function currentLlmEndpoint(): LlmEndpoint {
 export const llmConfigured = derived(
 	[appSettings, groqApiKey, deepseekApiKey],
 	([$settings, $groq, $deepseek]) => {
+		if ($settings.correctionMode === 'local') {
+			return $settings.localLlmUrl.trim() !== '' && $settings.localLlmModel.trim() !== '';
+		}
+
 		switch ($settings.llmProvider) {
 			case 'groq':
 				return $groq.trim() !== '';

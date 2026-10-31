@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // SPA mode: no server rendering, and no per-route prerender. adapter-static
 // emits a single `index.html` fallback that boots the client router, which is
 // what a client-only app wants. Setting `prerender = true` here would produce a

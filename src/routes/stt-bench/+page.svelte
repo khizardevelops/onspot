@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	/**
 	 * STT runtime bench: the product engine (Transformers.js whisper-small q4,

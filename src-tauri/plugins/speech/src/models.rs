@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Model files on disk: `<app data>/models/<file>`.
 //!
 //! A download goes to `<file>.part`, is checked against its SHA-256, and only

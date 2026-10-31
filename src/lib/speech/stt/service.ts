@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { requireLanguage } from '#lib/languages/index.js';
 import type { ModelProgress } from '#lib/types.js';
 import { GroqWhisperAdapter } from './cloud/GroqWhisperAdapter';
@@ -12,6 +14,8 @@ import type { SttModelInfo } from './LocalSttEngine';
 
 export interface TranscribeOptions {
 	audio16kMono: Float32Array;
+	/** The take as recorded (compressed); cloud transcription uploads it rather than the much larger PCM. */
+	recording?: Blob;
 	mode: 'local' | 'cloud';
 	/** Target language id; selects the model and the decoder language. */
 	languageId: string;
@@ -26,11 +30,14 @@ export async function transcribeSpeech(options: TranscribeOptions): Promise<stri
 	}
 
 	if (!options.groqApiKey) {
-		throw new Error('Cloud transcription needs a Groq API key. Add one in Settings.');
+		throw new Error('Cloud speech-to-text needs a Groq API key. Add one in Settings.');
 	}
 	const adapter = cloudAdapter(options.groqApiKey);
 	await adapter.load(options.onProgress);
-	const result = await adapter.transcribe(options.audio16kMono, { language: language.stt.code });
+	const result = await adapter.transcribe(options.audio16kMono, {
+		language: language.stt.code,
+		encodedAudio: options.recording
+	});
 	return result.text;
 }
 

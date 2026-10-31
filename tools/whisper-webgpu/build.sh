@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Builds whisper.cpp with ggml's WebGPU backend for the browser (model lab spike).
 #
 # Needs emsdk and a whisper.cpp checkout; defaults match this machine

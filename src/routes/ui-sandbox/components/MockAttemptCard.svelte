@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script module lang="ts">
 	import type { MockCorrection } from './MockTranscript.svelte';
 
@@ -417,7 +419,7 @@
 
 	{#if active}
 		<div class="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
-			<span>Read-back voice</span>
+			<span>Text-to-speech voice</span>
 			<select
 				class="h-7 rounded-md border bg-background px-2 text-xs"
 				value={voice}

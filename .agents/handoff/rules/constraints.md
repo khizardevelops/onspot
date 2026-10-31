@@ -40,9 +40,12 @@ Numbers and the exact error strings live in `docs/benchmarks/runtime.md`; the st
 - The HuggingFace token lives only in `localStorage` (`onspot.key.hf`, see `stores/secrets.ts`).
   Never commit it, never bake it into a `VITE_` variable (those are embedded in the build), never
   paste it into a chat transcript.
-- Text and audio leave the device only through a **BYOK cloud call** the user configured (Groq
-  STT, OpenAI/Groq TTS, LLM evaluation), and the UI must say so. Local Whisper and Piper stay
-  on-device. The lab's remote `Audio8` card was removed from the registry.
+- Text and audio leave the device only through a **BYOK cloud endpoint** the user configured:
+  Groq for speech-to-text, ElevenLabs or an OpenAI-compatible speech server for text-to-speech, and
+  Groq/DeepSeek/custom for the LLM. A **local** OpenAI-compatible LLM server is not a cloud call
+  (it runs on the device or the user's LAN). The Settings data-flow line and the Practice gate must
+  name the endpoint actually in use. Local Whisper and Piper stay on-device. The lab's remote
+  `Audio8` card was removed from the registry.
 
 ## Dependencies
 

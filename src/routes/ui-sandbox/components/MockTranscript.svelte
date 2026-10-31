@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script module lang="ts">
 	export type MockCorrectionCategory = 'grammar' | 'register' | 'filler' | 'style';
 

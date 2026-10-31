@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { Channel, invoke, type InvokeArgs, type InvokeOptions } from '@tauri-apps/api/core';
 import type { LanguageDefinition } from '#lib/languages/index.js';
 import type { ModelProgress } from '#lib/types.js';

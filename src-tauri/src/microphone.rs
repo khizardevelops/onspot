@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Microphone access in the Linux desktop app.
 //!
 //! The window is a WebKitGTK webview, which denies every `getUserMedia`

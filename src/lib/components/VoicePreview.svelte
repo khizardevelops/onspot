@@ -1,8 +1,11 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { getLanguage } from '#lib/languages/index.js';
 	import { appSettings } from '#lib/stores/settings.js';
-	import { openaiApiKey } from '#lib/stores/secrets.js';
+	import { elevenLabsApiKey, openaiApiKey } from '#lib/stores/secrets.js';
+	import { ttsApiRequiresKey } from '#lib/stores/ttsConfig.js';
 	import {
 		pauseVoicePreview,
 		playVoicePreview,
@@ -22,7 +25,32 @@
 	const loading = $derived($ttsPreview.status === 'loading');
 	const playing = $derived($ttsPreview.playing);
 	const local = $derived($appSettings.ttsMode === 'local');
-	const available = $derived(local || Boolean($openaiApiKey));
+	const provider = $derived($appSettings.ttsCloudProvider);
+	const apiBase = $derived(
+		provider === 'elevenlabs' ? 'https://api.elevenlabs.io/v1' : $appSettings.ttsApiBaseUrl
+	);
+	const apiModel = $derived(
+		provider === 'elevenlabs' ? $appSettings.elevenLabsModel : $appSettings.ttsApiModel
+	);
+	const apiVoice = $derived(
+		provider === 'elevenlabs' ? $appSettings.elevenLabsVoiceId : $appSettings.ttsApiVoice
+	);
+	const apiKey = $derived(provider === 'elevenlabs' ? $elevenLabsApiKey : $openaiApiKey);
+	const apiNeedsKey = $derived(ttsApiRequiresKey($appSettings));
+	const available = $derived(
+		local ||
+			(Boolean(apiBase) &&
+				Boolean(apiModel) &&
+				Boolean(apiVoice) &&
+				(!apiNeedsKey || Boolean(apiKey)))
+	);
+	const unavailableHint = $derived(
+		provider === 'elevenlabs'
+			? 'Add an ElevenLabs API key to preview the cloud voice.'
+			: apiNeedsKey
+				? 'Add an OpenAI API key to preview cloud voices.'
+				: 'Start the local speech server and set its model and voice to preview it.'
+	);
 	let regenerateOpen = $state(false);
 	closeOnBack(() => regenerateOpen, () => (regenerateOpen = false));
 
@@ -52,7 +80,7 @@
 	<p class="mt-2 text-xs leading-relaxed text-muted-foreground">
 		Generated once and cached on this device, so replaying is free.
 		{#if local}Equalizer changes are heard live while it plays; turn on Loop to keep listening.{/if}
-		{#if !available}Add an OpenAI API key to preview cloud voices.{/if}
+		{#if !available}{unavailableHint}{/if}
 	</p>
 
 	<div class="mt-4 flex flex-wrap items-center gap-2">

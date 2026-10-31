@@ -21,6 +21,10 @@
 @import '@fontsource/source-serif-4/latin-600.css';
 @import '@fontsource/jetbrains-mono/latin-400.css';
 @import '@fontsource/jetbrains-mono/latin-500.css';
+/* The paper timeline beside the attempt stack: handwriting and typewriter numbers. */
+@import '@fontsource/caveat/latin-400.css';
+@import '@fontsource/caveat/latin-700.css';
+@import '@fontsource/courier-prime/latin-700.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
@@ -29,7 +33,7 @@
  * Design tokens.
  *
  * The `--background`/`--foreground`/... block is the shadcn-svelte contract.
- * The lower block (`--rail-bg`, `--brand`, `--warn`, ...) is onspot's own
+ * The lower block (`--brand`, `--warn`, ...) is onspot's own
  * palette, taken from `prototype/app.html`. `--accent` is deliberately shadcn's
  * subtle hover surface, *not* the brand colour; the brand is `--brand`.
  */
@@ -37,7 +41,6 @@
 	/*
 	 * Colour hierarchy — each colour means one thing everywhere:
 	 *   paper      --background  the textured page (quietest)
-	 *   deep paper --rail-bg     navigation rail
 	 *   sheet      --card        content cards; the raised pill of a segmented control
 	 *   inset      --surface-2   panels and wells inside sheets (not interactive)
 	 *   control    --secondary   every neutral button, toggle and segment track (sea-glass)
@@ -69,7 +72,6 @@
 	--control-hover: #c9ddd5;
 	--control-line: #b5ccc4;
 	--on-control: #1e4a43;
-	--rail-bg: #e3dbcb;
 	--surface-2: #e6e0d4;
 	--faint: #7f7669;
 	--brand: #0f766e;
@@ -96,8 +98,6 @@
 	--shadow-sheet-hover: 0 1px 1px rgba(70, 55, 30, 0.06), 0 3px 6px rgba(70, 55, 30, 0.07), 0 12px 22px -8px rgba(70, 55, 30, 0.14), 0 24px 42px -16px rgba(70, 55, 30, 0.16);
 	--sheet-frost: color-mix(in srgb, var(--card) 74%, transparent);
 	--sheet-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-	/* The page is a sheet laid on the rail: the shadow its left edge casts. */
-	--page-edge-shadow: -10px 0 24px -14px rgba(70, 55, 30, 0.38), -1px 0 0 rgba(120, 100, 70, 0.12);
 	/* How the paper grain sits on a coloured surface (see .paper-grain). */
 	--paper-blend: multiply;
 	/* Neumorphism: a raised surface lit from the top left.
@@ -133,6 +133,8 @@
 	--key-blend: multiply;
 
 	--radius: 0.625rem;
+	/* The margin between the window edge and page content: the top bar, the attempt cards, the composer. */
+	--page-gutter: 28px;
 }
 
 [data-theme='dark'] {
@@ -160,7 +162,6 @@
 	--control-hover: #263834;
 	--control-line: #33504a;
 	--on-control: #bfe3d9;
-	--rail-bg: #0f0e0d;
 	--surface-2: #24221e;
 	--faint: #8a8276;
 	--brand: #2db3a3;
@@ -186,7 +187,6 @@
 	--shadow-sheet-hover: 0 1px 1px rgba(0, 0, 0, 0.32), 0 3px 6px rgba(0, 0, 0, 0.3), 0 12px 22px -8px rgba(0, 0, 0, 0.42), 0 24px 42px -16px rgba(0, 0, 0, 0.46);
 	--sheet-frost: color-mix(in srgb, var(--card) 72%, transparent);
 	--sheet-highlight: inset 0 1px 0 rgba(255, 245, 225, 0.06);
-	--page-edge-shadow: -12px 0 26px -14px rgba(0, 0, 0, 0.7), -1px 0 0 rgba(255, 245, 225, 0.05);
 	--paper-blend: screen;
 	--neu-raised: 9px 9px 22px rgba(0, 0, 0, 0.7), -8px -8px 20px rgba(255, 245, 225, 0.075);
 	--neu-raised-hover: 12px 12px 28px rgba(0, 0, 0, 0.75), -10px -10px 26px rgba(255, 245, 225, 0.1);
@@ -370,24 +370,29 @@ html[neo-theme-root] .neo-tabs:not(.custom-selection, .custom-selection *) .neo-
 }
 
 /*
- * Touch screens: every control is at least 44px, the size a fingertip can hit
- * reliably (Apple 44pt, Android 48dp). Desktop keeps its compact sizes; the
- * min-* values win over the components' smaller width/height.
+ * Touch screens: controls get a floor a fingertip can still hit. It is 36px,
+ * below the 44pt / 48dp platform guidance on purpose: the user found 44px
+ * buttons too big for a phone screen that has to fit the take, the prompt and
+ * the controls. Desktop keeps its compact sizes; the min-* values win over the
+ * components' smaller width/height.
  */
 @media (pointer: coarse) {
+	html[neo-theme-root] {
+		--touch-target: 36px;
+	}
 	html[neo-theme-root] :is(.card-icon-button, .icon-button, .coach-action, .filter-key, .session-action, .translate-trigger, .play-button, .segment-button, .search-option, .history-tool).neo-button {
-		min-width: 44px;
-		min-height: 44px;
+		min-width: var(--touch-target);
+		min-height: var(--touch-target);
 	}
 	/* Selected tab rows (Settings General/Advanced, Exam/Casual) and form fields. */
-	html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group { min-height: 44px; }
+	html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group { min-height: var(--touch-target); }
 	/* Tabs fill their track, so the whole key (not just its label) is the target. */
 	html[neo-theme-root] .neo-tabs .neo-tabs-group > .neo-tab { align-self: stretch; }
 	html[neo-theme-root] .neo-tabs .neo-tabs-group > .neo-tab > .neo-button.neo-tab-button { height: 100%; }
-	html[neo-theme-root] .neo-input-group.neo-input-group { min-height: 44px; }
-	html[neo-theme-root] .neo-input-group .neo-button { min-width: 40px; min-height: 40px; }
+	html[neo-theme-root] .neo-input-group.neo-input-group { min-height: 40px; }
+	html[neo-theme-root] .neo-input-group .neo-button { min-width: 34px; min-height: 34px; }
 	/* Text buttons (Download, Test connection, …); list rows and tab keys size themselves. */
-	html[neo-theme-root] .neo-button:not(.neo-list-item-button, .neo-list-item-content, .neo-tab-button) { min-height: 40px; }
+	html[neo-theme-root] .neo-button:not(.neo-list-item-button, .neo-list-item-content, .neo-tab-button) { min-height: 34px; }
 }
 
 /* Cards are sheets: frosted, lighter than the paper they sit on, with a hairline. */
@@ -413,7 +418,7 @@ html[neo-theme-root] [class*='neo-']::after {
 }
 /*
  * Keyboard focus. neo's own focus state is a 1px accent outline that reads
- * exactly like "selected" (e.g. a focused rail key looked like the current
+ * exactly like "selected" (e.g. a focused navigation key looked like the current
  * page). A distinct offset ring shows where the keyboard is; pointer clicks
  * (no :focus-visible) are unaffected.
  */
@@ -425,6 +430,46 @@ html[neo-theme-root] :is(a, button, [role='button'], [role='radio'], [role='tab'
 /* The tabs' sliding key is a keyframe animation. */
 html[neo-theme-root] .neo-tabs .neo-tab::before {
 	animation-duration: 120ms !important;
+}
+
+@media (max-width: 640px) {
+	:root {
+		--page-gutter: 12px;
+	}
+}
+
+/*
+ * Touch screens: no platform text selection. Its handles and Cut/Copy menu
+ * came up whenever the learner long-pressed words to see their meaning;
+ * transcripts select words their own way instead (`TouchWordSelection`, which
+ * uses the same query). Text fields stay selectable.
+ */
+@media (hover: none) and (pointer: coarse) {
+	html {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+	input,
+	textarea,
+	[contenteditable='true'] {
+		-webkit-user-select: text;
+		user-select: text;
+	}
+}
+
+/*
+ * Phones (and narrow windows): no scrollbars. A styled scrollbar is a solid
+ * strip that takes width from the content, and a finger needs no handle.
+ * `!important` overrides the thin scrollbars components set for themselves.
+ */
+@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+	* {
+		scrollbar-width: none !important;
+	}
+	::-webkit-scrollbar {
+		display: none;
+	}
 }
 
 @theme inline {
@@ -456,7 +501,6 @@ html[neo-theme-root] .neo-tabs .neo-tab::before {
 	--color-control-hover: var(--control-hover);
 	--color-control-line: var(--control-line);
 	--color-on-control: var(--on-control);
-	--color-rail: var(--rail-bg);
 	--color-surface-2: var(--surface-2);
 	--color-faint: var(--faint);
 	--color-brand: var(--brand);
@@ -559,6 +603,31 @@ html[neo-theme-root] .neo-tabs .neo-tab::before {
 		background-position: center;
 		background-attachment: fixed;
 		background-blend-mode: var(--paper-blend);
+	}
+
+	/*
+	 * A control written on the card in pencil rather than a raised key: small
+	 * underlined text for secondary toggles (show a translation, more
+	 * alternatives, each word).
+	 */
+	.pencil-link {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.25rem 0;
+		border: 0;
+		background: none;
+		color: var(--brand);
+		font-size: 0.75rem;
+		font-weight: 500;
+		line-height: 1.2;
+		text-decoration: underline dotted;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 3px;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.pencil-link:hover {
+		text-decoration-style: solid;
 	}
 
 	.eyebrow {

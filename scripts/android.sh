@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Android build pipeline for onspot (Tauri v2).
 #
 #   scripts/android.sh init                 generate src-tauri/gen/android (once)

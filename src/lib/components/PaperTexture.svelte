@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 <script lang="ts" module>
 	import {
 		ShaderFitOptions,
@@ -160,7 +162,7 @@
 	}
 
 	/*
-	 * A first launch needs up to six renders (page, rail and key, in both
+	 * A first launch needs up to four renders (page and key, in both
 	 * appearances). Started together they each held a WebGL context and a
 	 * synchronous read-back at once, which froze the main thread on slow or
 	 * software GPUs. Renders now run one at a time, and prewarms of the other
