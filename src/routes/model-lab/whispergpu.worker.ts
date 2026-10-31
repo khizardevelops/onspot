@@ -7,13 +7,18 @@
  *
  * The Emscripten module lives in ./vendor/whisper-webgpu/ (built locally,
  * gitignored). It must be served through Vite, not static/: static files lack
- * the COOP/COEP headers, so its pthread workers would never start.
+ * the COOP/COEP headers, so its pthread workers would never start. It is
+ * found with a glob, so a checkout without it (CI, Pages) still builds; the
+ * lab then says it is missing.
  *
  * Inference runs on this worker's thread; wgpu_init_stream and wgpu_full are
  * JSPI exports, so they return Promises. The model is streamed tensor by
  * tensor into the GPU, so the full file is never held in JS or the WASM heap.
  */
-import moduleUrl from './vendor/whisper-webgpu/whisper-webgpu.js?url';
+/** The module's URL, when it has been built into ./vendor (empty otherwise). */
+const moduleUrl = Object.values(
+	import.meta.glob<string>('./vendor/whisper-webgpu/whisper-webgpu.js', { query: '?url', import: 'default', eager: true })
+)[0];
 import { streamCached } from './modelCache';
 
 type Request =
@@ -59,6 +64,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				);
 				post({ id: request.id, type: 'progress', progress: 100, status: 'initialising' });
 				if (!module) {
+					if (!moduleUrl) throw new Error('The WebGPU whisper build is not in this checkout: run tools/whisper-webgpu/build.sh.');
 					const { default: factory } = await import(/* @vite-ignore */ moduleUrl);
 					const capture = (line: string) => {
 						log.push(line);
