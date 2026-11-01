@@ -1,5 +1,31 @@
 # Last Session
 
+## 2026-11-01 (later): logo and app icon in VectorCraft
+- **Asked:** turn the AI-generated draft logo into a mathematically exact logo and app icon, built in
+  VectorCraft (headful, so the user could watch), using its MCP.
+- **How:** the VectorCraft MCP is configured only for the `/home/khizar` project, so its tools were not
+  loaded here. Launched the app with `flatpak run ai.storyteller.vectorcraft --control 7979` and drove
+  `vectorcraft-cli mcp --connect 127.0.0.1:7979` over stdio from a small client (session scratchpad).
+  Geometry computed in Python and sent as `command_batch` steps. Gotcha: the flatpak's `/tmp` is
+  private, so file paths given to the app must be outside `/tmp`; a document swatch named "Amber"
+  already exists (non-global), so new swatches with library names get renamed ("Amber 2").
+- **Done:** see state.md "Brand" and `brand-assets/README.md`.
+- **Then asked:** why the margin around the tile (Apple's macOS template; normal on macOS, small
+  on Windows/Linux, wrong on Android/iOS). User chose the macOS master for every platform and asked
+  to use the logo in the app: done (state.md "Brand"). Then the favicon looked too small: the web
+  copy is now cropped to the tile (state.md). Then: README shows the icon (from `brand-assets/`),
+  header mark enlarged to 36px. Committed, pushed (main + feature over SSH: the https remote has no
+  credentials), tagged v0.2.0; all CI green; README icon beside the title; screenshots retaken.
+- **Then:** Flatpak "endless loop" = Bazaar UI bug after a successful install. The AppImage's
+  maximise/restore glitch = bundled old GTK on Wayland → X11 inside AppImages. Custom thin title bar
+  (WindowBar). Both uncommitted, waiting for the user's hands-on check (tasks.md).
+- **Then:** Automatic model choice (decisions.md) and the "Did you mean" Show/Hide changes
+  toggle (parallel agent). All uncommitted.
+- **Tooling that worked:** KWin scripting over `qdbus6 org.kde.KWin /Scripting` (absolute script
+  paths; `print` lands in the user journal) to maximise/restore/raise windows without focus, and
+  `spectacle -b -n -f` (captures at 2x; DP-1 0,0 and DP-2 1920,0 are 1920x1080). xdotool input is
+  blocked by KDE's Remote Control prompt.
+
 ## 2026-11-01: long takes, rate limits, packaging, many UI fixes
 - **Asked (in order):** simulate 3/5-minute takes; design for long takes (3-state fold, fixes-only
   "Did you mean", dynamic feedback width, follow-up meanings); AppImage + Flatpak; translations not

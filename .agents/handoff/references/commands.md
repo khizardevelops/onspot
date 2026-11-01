@@ -71,6 +71,12 @@ installed. After switching to a branch with different dependencies, run
   Move practice history with Settings → Storage → Export / Restore.
 - `cargo run --release -p tauri-plugin-speech --example bench -- …` (see above) measures the
   native STT engine without the app.
+- **App icons: `bun tauri icon brand-assets/app-icon-1024.png --ios-color '#151412'`.** Regenerates
+  `src-tauri/icons/` (desktop, iOS) and the Android launcher icons in `src-tauri/gen/android/`
+  from the one macOS-grid master. `--ios-color` also sets the Android adaptive background: Ink, so
+  the master's transparent margin merges with the tile (Tauri's default is white). The web favicon
+  and header mark are `static/app-icon.svg`, a copy of `brand-assets/app-icon-tile.svg` (the icon
+  with its viewBox cropped to the 824 tile, because the margin made the favicon too small).
 
 ## Cloud sync (BYOC)
 - **Google Drive:** enable the Drive API in Google Cloud and create two OAuth clients — a

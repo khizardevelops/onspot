@@ -26,6 +26,11 @@
 - That number formatting (`15h10`, `50 €`) is inflating WER rather than reflecting real
   mis-recognition. Strongly suspected, not isolated.
 
+- Which LLMs handle which language level (`AUTOMATIC_MODELS` in `adapters/llm/providers.ts`):
+  GPT-OSS 120B and DeepSeek V4 Pro for low-resourced languages, Qwen 3.8 and DeepSeek Flash for
+  mid-resourced, GPT-OSS 20B only for well-resourced. Judged from model size and one long take
+  where 20B dropped corrections; no per-language evaluation yet.
+
 ## Known false — do not re-assume
 - ~~A Node experiment tells you whether a dtype works in the browser.~~ `onnxruntime-node`
   accepts quantized builds that ORT-Web rejects.

@@ -1,5 +1,39 @@
 # Tasks
 
+## Automatic model choice + "Did you mean" changes toggle (2026-11-01)
+- [x] Automatic (default) by languages, request size, per-minute and daily limits; verified (state.md).
+- [x] Show/Hide changes in "Did you mean to say?".
+- [ ] Measure model quality per language before approving a mid/low-resourced language (the trust
+  levels in `AUTOMATIC_MODELS` are a judgement); consider Compound (70K TPM) once its JSON output
+  is checked.
+- [ ] Phone: the "Did you mean to say?" label wraps to two lines beside the two links.
+- [ ] Commit with the title bar work once the user has tried both.
+
+## Desktop title bar + AppImage resize (2026-11-01)
+- [x] Own thin title bar (WindowBar), `decorations: false`, macOS overlay traffic lights; AppImage
+  forced to X11. Verified maximise/restore on Wayland and X11 paths via KWin (see state.md).
+- [ ] User to click through the bar in the debug app (minimise, maximise/restore, close, drag,
+  double-click, edge resize) and look at light mode; then commit and ship (v0.2.1?).
+- [ ] Verify on Windows and macOS (CI builds only; no machine here).
+
+## Brand: logo and app icon (2026-11-01)
+- [x] Logo + app icon rebuilt in VectorCraft from the AI draft on a module grid (spec:
+  `brand-assets/README.md`). Exports checked in VectorCraft's renderer and in resvg.
+- [x] Wired in (2026-11-01): Tauri desktop + Android icons, favicon, header mark (macOS master on
+  every platform, by the user's choice). Verified: `bun run check` 0/0; header at 1280 light/dark
+  (tile on the 28px gutter, centred with the 32px keys, header height unchanged at 49px), favicon
+  and image load (200), no overflow at 390px; Android masks simulated from the generated layers.
+- [x] Favicon too small (user): web copy cropped to the tile (`app-icon-tile.svg`); header uses it
+  at 28px. Re-verified: check 0/0, tile on the gutter, header 49px, served viewBox cropped.
+- [x] Header mark still small (user): now 36px (the row's height; header stays 49px, centred with
+  the keys). README shows the tile icon above the title.
+- [x] Committed and pushed with the README icon beside the title and retaken Practice/History
+  screenshots; released as v0.2.0.
+- [ ] Not verified: a real Tauri build (Dock/taskbar/Flatpak icon) and an Android install.
+- [ ] Decide whether `brand-assets/` is committed (nothing committed yet).
+- [ ] Optional: horizontal lockup and a wordmark for light backgrounds ("spot" amber is too low
+  contrast on Paper; needs a deeper amber).
+
 ## Card stack + paper timeline (2026-10-31)
 - [x] Stack of index cards driven by the demo's scroll math (`cardStack.ts`), bury delay 0.35,
   tilt, depth fade; lock onto a card when scrolling stops; card on top = selected take; tall cards

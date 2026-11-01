@@ -1,5 +1,46 @@
 # Decisions
 
+### Automatic model choice replaces manual picking and the rotation setting (2026-11-01)
+User: "why tf is this even an error warning? … look at all the daily and per minute limits and
+intelligently rotate … in order of accuracy", then "the user shouldn't really have to manually
+select … auto select based on the text size, current limits, and if the target language requires
+higher frontier models". The warning came from a saved `openai/gpt-oss-safeguard-20b` (a
+classifier, 2K TPM). Decided: `llmModel: 'auto'` (Automatic, the default; a picked model pins
+that model alone; `llmRotation` removed). Candidates per provider in `providers.ts`
+(`automaticModels`): Groq most accurate first (120B > Qwen 3.8 27B > 20B: free, limit-bound),
+DeepSeek cheapest first (Flash > V4 Pro: paid per token). Each model has the least-resourced
+language level it is trusted with; a language's level is its Common Crawl share (CC-MAIN-2026-43:
+≥1 % high, ≥0.1 % medium, else low; `webTextPercent` in the registry), and a request's level is
+the lower of the studied and instruction languages, so Urdu explanations use only 120B /
+V4 Pro. `pacing.ts` takes the first candidate with room within the task's patience; Groq's
+published limits plus refusal-stated ones (Qwen 3.8 OTPM 1,000) and the day's use (live headers,
+else this device's ledger) only *steer* (models expected to lack room go last, never refused), so
+a paid plan is not throttled to free numbers. The monitor warns only when every candidate is low
+or out. Migration: a saved preset model or a non-chat model → Automatic once
+(`onspot.migration.automatic-model` marker), so a later explicit pick of 120B stays. The
+trust levels are a judgement from model size, not measured: see assumptions.md.
+
+### "Did you mean" shows or hides the changes (2026-11-01)
+User: a toggle to see "the final corrected version or the version with the mistakes correction
+visible in it". `AttemptCard` "Show changes / Hide changes" beside "Whole text / Fixes only":
+changes view (default, as before) puts the said words struck through right before each fix
+(`replacedBefore` from the `correctedPassages.ts` word diff; `.said-words`), clean view has no
+marks.
+
+### Own title bar on the desktop; the AppImage on X11 (2026-11-01)
+User: the system title bar is "too thick and ugly … a custom minimal thin window bar which will
+change colour with dark mode and light mode"; then the AppImage's maximise/restore left the page at
+its old size and resizing lagged. Reproduced with KWin scripting (maximise/restore on monitor 2,
+screen captures): the AppImage runs native Wayland with its bundled Ubuntu 22.04 GTK 3.24.33 and
+WebKitGTK, which mis-size the page after restore; the same AppImage with `GDK_BACKEND=x11`, the
+Flatpak (GNOME 51) and the host-library debug build all resize correctly. Decided:
+`display_backend.rs` sets `GDK_BACKEND=x11` only inside an AppImage (and only if unset and an X
+server exists), so the other packages keep Wayland. The title bar: `decorations: false` on
+Windows/Linux and `WindowBar.svelte` (28 px = macOS's title bar height, page paper, `--sheet-line`
+hairline, 44 px controls, Windows 11 close red); macOS keeps native traffic lights via an overlay
+title bar in `tauri.macos.conf.json` instead of imitation buttons. No app name or logo in the bar:
+the page header below already carries the mark.
+
 ### Pace LLM requests and rotate Groq models instead of failing on 429 (2026-11-01)
 User: "better error handling and also error preventing by rotating the groq models … if the prompt
 is longer then allowed tokens per limit then we need to chunk it". Groq's per-minute allowances

@@ -89,3 +89,4 @@ Thumbs.db
 
 # The .deb a local Flatpak build repackages (packaging/flatpak/app.onspot.desktop.yml)
 packaging/flatpak/onspot.deb
+brand-assets/ai-generated-logo.png
