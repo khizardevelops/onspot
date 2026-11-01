@@ -81,6 +81,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.2.1" date="2026-11-02">
+      <description>
+        <p>Installers for ARM and Intel, an own title bar, and automatic model choice.</p>
+        <ul>
+          <li>Windows, macOS and Linux installers for both x64 and ARM64, including Intel Macs and an ARM Flatpak.</li>
+          <li>A thin title bar that follows light and dark mode; the AppImage resizes correctly under Wayland.</li>
+          <li>Automatic choice of the language model by language, request size and rate limits.</li>
+          <li>Hear a selected phrase, and show or hide the corrections in "Did you mean to say?".</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-01">
       <description>
         <p>Long takes, steadier cloud and on-device speech, a faster interface and a new app icon.</p>
