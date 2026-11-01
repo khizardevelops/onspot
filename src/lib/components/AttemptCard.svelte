@@ -11,6 +11,7 @@
 		playRecording,
 		playSegment,
 		setAttemptVoice,
+		speakText,
 		ensurePhraseMeaning,
 		ensureWordGlosses,
 		followUpQuestion,
@@ -164,12 +165,13 @@
 
 	const question = $derived(followUpQuestion(attempt));
 
-	/** Hover meanings and selection translations for one of this take's texts. */
+	/** Hover meanings, selection translations and read-aloud for one of this take's texts (all in the studied language). */
 	function meaningsOf(text: string) {
 		return {
 			glosses: wordGlossesFor(attempt, text, $appSettings.instructionLanguage),
 			requestGlosses: (wordIndex: number) => ensureWordGlosses(attempt.id, text, wordIndex),
-			requestPhrase: (start: number, end: number, phrase: string) => ensurePhraseMeaning(attempt.id, text, start, end, phrase)
+			requestPhrase: (start: number, end: number, phrase: string) => ensurePhraseMeaning(attempt.id, text, start, end, phrase),
+			speak: (words: string) => void speakText(words)
 		};
 	}
 

@@ -47,6 +47,11 @@ export interface MeaningLabel {
 	isStatus: boolean;
 	/** Below a selection, so it does not cover the line above it; a word's meaning goes above. */
 	placement: 'top' | 'bottom';
+	/**
+	 * The selected words as written, to read aloud. Only a selection has them:
+	 * a hovered word goes as the pointer leaves, and a word plays when clicked.
+	 */
+	words?: string;
 }
 
 export interface TranscriptMeaningsOptions {
@@ -98,9 +103,11 @@ export class TranscriptMeanings {
 		if (!focus || activeOwner !== this.#owner) return null;
 
 		if (focus.kind === 'selection' && focus.end > focus.start) return this.#selectionLabel(focus);
+		if (focus.kind === 'word') return this.#wordLabel(focus.wordIndex, focus.anchor, 'top');
 
-		const wordIndex = focus.kind === 'word' ? focus.wordIndex : focus.start;
-		return this.#wordLabel(wordIndex, focus.anchor, focus.kind === 'selection' ? 'bottom' : 'top');
+		// One selected word: its own meaning, below it, and its word to read aloud.
+		const label = this.#wordLabel(focus.start, focus.anchor, 'bottom');
+		return label ? { ...label, words: this.#options.phraseText(focus.start, focus.end) } : null;
 	});
 
 	#wordLabel(wordIndex: number, anchor: ReferenceElement, placement: MeaningLabel['placement']): MeaningLabel | null {
@@ -138,11 +145,13 @@ export class TranscriptMeanings {
 			);
 		const fetched = this.#phrase.key === `${focus.start}-${focus.end}` ? this.#phrase : null;
 		const meaning = saved?.meaning ?? (fetched?.status === 'idle' ? fetched.meaning : '');
+		// The words can be heard while their meaning is still on its way.
+		const words = this.#options.phraseText(focus.start, focus.end);
 
-		if (meaning) return { anchor: focus.anchor, text: meaning, isStatus: false, placement: 'bottom' };
+		if (meaning) return { anchor: focus.anchor, text: meaning, isStatus: false, placement: 'bottom', words };
 
 		const status = this.#statusText(fetched?.status ?? 'loading', '');
-		return status ? { anchor: focus.anchor, text: status, isStatus: true, placement: 'bottom' } : null;
+		return status ? { anchor: focus.anchor, text: status, isStatus: true, placement: 'bottom', words } : null;
 	}
 
 	#statusText(status: Status, otherwise: string): string {
@@ -153,14 +162,39 @@ export class TranscriptMeanings {
 
 	// ------------------------------------------------------------ Events from Transcript
 
+	/** True when the word is part of the selection this text holds. */
+	holdsWord(wordIndex: number | undefined): boolean {
+		const focus = this.#focus;
+		if (focus?.kind !== 'selection' || wordIndex === undefined) return false;
+		return focus.start <= wordIndex && wordIndex <= focus.end;
+	}
+
+	/**
+	 * A click or tap on a word of the held selection: the selection is one
+	 * unit, so its meaning shows again instead of the word's.
+	 *
+	 * @returns True when the word belonged to the selection (the click is handled).
+	 */
+	reshowSelectionAt(wordIndex: number | undefined): boolean {
+		if (!this.holdsWord(wordIndex)) return false;
+		activeOwner = this.#owner;
+		return true;
+	}
+
 	/**
 	 * The pointer reached a word. Ignored while a mouse button is held (a drag
-	 * is selecting) or a selection is shown. Until the text's meanings are
-	 * fetched, the pointer has to rest there first (`HOVER_DWELL_MS`).
+	 * is selecting). While this text holds a selection, the selection is one
+	 * unit until it is put away: its words show its meaning (again, if another
+	 * text's label took over), and other words show nothing, so the pointer can
+	 * cross them on its way to the label. Until the text's meanings are fetched,
+	 * the pointer has to rest on a word first (`HOVER_DWELL_MS`).
 	 */
 	hoverWord(event: PointerEvent, wordIndex: number | undefined): void {
 		if (event.pointerType === 'touch' || event.buttons !== 0) return;
-		if (this.#focus?.kind === 'selection' && activeOwner === this.#owner) return;
+		if (this.#focus?.kind === 'selection') {
+			this.reshowSelectionAt(wordIndex);
+			return;
+		}
 
 		this.#stopHoverTimer();
 		const element = event.currentTarget as HTMLElement;

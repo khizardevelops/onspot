@@ -29,6 +29,8 @@
 		glosses: TextGlosses | null;
 		requestGlosses: (wordIndex: number) => Promise<void>;
 		requestPhrase: (start: number, end: number, phrase: string) => Promise<string>;
+		/** Reads selected words aloud, as `Transcript` takes it. */
+		speak?: (words: string) => void;
 		class?: string;
 	}
 
@@ -41,6 +43,7 @@
 		glosses,
 		requestGlosses,
 		requestPhrase,
+		speak,
 		class: className = ''
 	}: Props = $props();
 </script>
@@ -57,6 +60,7 @@
 				{glosses}
 				{requestGlosses}
 				{requestPhrase}
+				{speak}
 				class={className}
 			/>
 		</li>

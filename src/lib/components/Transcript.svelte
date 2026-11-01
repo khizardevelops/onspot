@@ -34,6 +34,8 @@
 		requestGlosses?: (wordIndex: number) => Promise<void>;
 		/** Translates a selected range of words (`start`..`end` word indexes). */
 		requestPhrase?: (start: number, end: number, phrase: string) => Promise<string>;
+		/** Reads words of this text aloud in its language; given, a selection's meaning gets a speaker button. */
+		speak?: (words: string) => void;
 		class?: string;
 	}
 
@@ -49,19 +51,28 @@
 		glosses = null,
 		requestGlosses,
 		requestPhrase,
+		speak,
 		class: className = ''
 	}: Props = $props();
 
 	let root = $state<HTMLElement | null>(null);
 	const showsMeanings = $derived(Boolean(requestGlosses));
 
+	/** The word index an element of this transcript stands for, if any. */
+	function wordIndexOf(element: Element | null): number | undefined {
+		const word = element?.closest<HTMLElement>('[data-word-index]');
+		return word && root?.contains(word) ? Number(word.dataset.wordIndex) : undefined;
+	}
+
 	// Mouse selection moves a whole word at a time; a finished selection is translated.
-	const wordDrag = new WordDragSelection(
+	// A plain click on a selected word keeps the selection (see `reshowSelectionAt`).
+	const wordDrag: WordDragSelection = new WordDragSelection(
 		() => root,
-		() => meanings.selectionFinished(root)
+		() => meanings.selectionFinished(root),
+		(word) => meanings.holdsWord(wordIndexOf(word))
 	);
 
-	const meanings = new TranscriptMeanings({
+	const meanings: TranscriptMeanings = new TranscriptMeanings({
 		glosses: () => glosses,
 		requestGlosses: (wordIndex) => requestGlosses?.(wordIndex) ?? Promise.resolve(),
 		requestPhrase: (start, end, phrase) =>
@@ -135,12 +146,24 @@
 		return touchSelection.listen(root);
 	});
 
-	// A tap anywhere puts the finger's selection away, as it would the platform's.
+	// A tap anywhere puts the finger's selection away, as it would the platform's;
+	// a tap on its meaning (the speaker button) or on its own words keeps it.
 	$effect(() => {
 		if (!markedByTouch) return;
-		const putAway = () => touchSelection.clear();
+		const putAway = (event: MouseEvent) => {
+			const target = event.target instanceof Element ? event.target : null;
+			const onMeaning = Boolean(target?.closest('.word-gloss'));
+			const onSelection = meanings.holdsWord(wordIndexOf(target));
+			if (!onMeaning && !onSelection) touchSelection.clear();
+		};
 		document.addEventListener('click', putAway, true);
 		return () => document.removeEventListener('click', putAway, true);
+	});
+
+	/** Reads the selected words aloud, when this text can be spoken and a selection is shown. */
+	const speakSelection = $derived.by(() => {
+		const words = meanings.label?.words;
+		return speak && words ? () => speak(words) : undefined;
 	});
 
 	function inHighlight(wordIndex: number | undefined): boolean {
@@ -311,6 +334,7 @@
 				onclick={(event) => {
 					event.stopPropagation();
 					if (isSelectionClick(event)) return;
+					if (showsMeanings && meanings.reshowSelectionAt(token.wordIndex)) return;
 					onSelect?.(token.correctionId as string);
 					if (showsMeanings) meanings.tapWord(event, token.wordIndex);
 				}}
@@ -331,6 +355,7 @@
 				onclick={(event) => {
 					event.stopPropagation();
 					if (isSelectionClick(event)) return;
+					if (showsMeanings && meanings.reshowSelectionAt(token.wordIndex)) return;
 					playWord(token.text);
 					if (showsMeanings) meanings.tapWord(event, token.wordIndex);
 				}}>{token.text}</span
@@ -347,6 +372,7 @@
 	detail={meanings.label?.detail}
 	isStatus={meanings.label?.isStatus ?? false}
 	placement={meanings.label?.placement ?? 'top'}
+	onSpeak={speakSelection}
 />
 
 <style>

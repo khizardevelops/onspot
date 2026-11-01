@@ -149,6 +149,7 @@ export function snapSelectionToWords(root: HTMLElement): boolean {
 export class WordDragSelection {
 	#root: () => HTMLElement | null;
 	#onFinished: () => void;
+	#keepsSelection: (word: HTMLElement) => boolean;
 	#anchor: HTMLElement | null = null;
 	#last: HTMLElement | null = null;
 	#startX = 0;
@@ -162,10 +163,12 @@ export class WordDragSelection {
 	/**
 	 * @param root The transcript element.
 	 * @param onFinished Called when a selection is complete (mouse released, double-click).
+	 * @param keepsSelection True for a word whose plain click keeps the current selection (a word inside it).
 	 */
-	constructor(root: () => HTMLElement | null, onFinished: () => void) {
+	constructor(root: () => HTMLElement | null, onFinished: () => void, keepsSelection: (word: HTMLElement) => boolean = () => false) {
 		this.#root = root;
 		this.#onFinished = onFinished;
+		this.#keepsSelection = keepsSelection;
 	}
 
 	/** The word under a point, if it belongs to this transcript. */
@@ -221,6 +224,9 @@ export class WordDragSelection {
 			this.#onFinished();
 			return;
 		}
+
+		// A plain click inside the selection keeps it: it is one unit until a click elsewhere.
+		if (this.#anchor && this.#keepsSelection(this.#anchor)) return;
 
 		// A plain click: the press prevented the browser from clearing an old selection, so clear it here.
 		const root = this.#root();
