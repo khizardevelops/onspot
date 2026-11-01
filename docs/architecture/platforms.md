@@ -5,9 +5,9 @@ desktop first, then the web SPA, then mobile.
 
 | Target | Status | Speech | Database | Cloud sync |
 |---|---|---|---|---|
-| Windows desktop | **Builds in CI**: x64 `.exe`/`.msi`, ARM64 `.exe` (cross-built, ggml with clang-cl); not run on this Linux machine | native whisper.cpp (Tauri plugin) | native SQLite (`plugin-sql`) | Google Drive + WebDAV |
+| Windows desktop | **Builds in CI**: `.exe`/`.msi` for x64 and ARM64 (ARM64 cross-built, ggml with clang-cl); not run on this Linux machine | native whisper.cpp (Tauri plugin) | native SQLite (`plugin-sql`) | Google Drive + WebDAV |
 | macOS desktop | **Builds in CI**: `.dmg` for Apple Silicon and Intel (`macos-15-intel`); not run here | native whisper.cpp | native SQLite | Google Drive + WebDAV |
-| Linux desktop | **Built and verified** (x64); ARM64 `.deb`/`.rpm`/`.AppImage` build in CI (`ubuntu-22.04-arm`), not run here | native whisper.cpp | native SQLite | Google Drive + WebDAV |
+| Linux desktop | **Built and verified** (x64); ARM64 `.deb`/`.rpm`/`.AppImage`/`.flatpak` build in CI on ARM runners, not run here | native whisper.cpp | native SQLite | Google Drive + WebDAV |
 | Web SPA | **Verified** (Chromium; Firefox for storage/restore paths) | Transformers.js Whisper in a worker | sqlite-wasm on OPFS in a worker | Google Drive (GIS) + WebDAV (needs CORS) |
 | Android | **Verified** (debug app on a phone; release APK built) | native whisper.cpp | native SQLite | WebDAV (Google Drive deferred) |
 | iOS | **Not started** | — | — | — |

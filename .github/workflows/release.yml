@@ -1,7 +1,7 @@
-# Builds the desktop bundles for x64 and ARM: Windows (.exe/.msi; ARM: .exe),
-# macOS (.dmg for Apple Silicon and Intel) and Linux (.deb/.AppImage/.rpm, and
-# an x64 .flatpak made from the .deb). Push a v* tag to publish them on a
-# GitHub Release, or run the workflow manually from the Actions tab.
+# Builds the desktop bundles for x64 and ARM64: Windows (.exe/.msi), macOS
+# (.dmg for Apple Silicon and Intel) and Linux (.deb/.AppImage/.rpm, and a
+# .flatpak made from each .deb). Push a v* tag to publish them on a GitHub
+# Release, or run the workflow manually from the Actions tab.
 name: Desktop release
 
 on:
@@ -49,11 +49,11 @@ jobs:
           - name: windows
             os: windows-latest
           # Windows on ARM is cross-built on x64: Bun has no Windows ARM build.
-          # Tauri documents only the NSIS installer for ARM64.
+          # Both installers support ARM64 (Tauri's WiX 3.14 maps aarch64 to arm64).
           - name: windows-arm
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            args: --target aarch64-pc-windows-msvc --bundles nsis
+            args: --target aarch64-pc-windows-msvc
           - name: macos
             os: macos-latest
           - name: macos-intel
@@ -104,12 +104,28 @@ jobs:
           workspaces: src-tauri -> target
           key: desktop-${{ matrix.name }}
 
-      # ggml (whisper.cpp) refuses MSVC for ARM ("use clang"); whisper-rs passes
-      # CMAKE_* variables to its CMake build, so it gets Visual Studio's clang-cl.
-      - name: Use clang for whisper.cpp on Windows ARM
+      # ggml (whisper.cpp) refuses MSVC for ARM ("use clang"), and the Visual
+      # Studio generator cannot take clang-cl here (the cmake crate adds
+      # -T host=x64). So the ARM64 cross build compiles C with clang-cl and Ninja
+      # inside the x64-to-ARM64 developer environment; ring needs clang for this
+      # target too. whisper-rs passes CMAKE_* variables on to its CMake build.
+      - name: Set up the x64-to-ARM64 MSVC environment
+        if: matrix.name == 'windows-arm'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm64
+
+      - name: Use clang-cl and Ninja for C on Windows ARM
         if: matrix.name == 'windows-arm'
         shell: bash
-        run: echo "CMAKE_GENERATOR_TOOLSET=ClangCL" >> "$GITHUB_ENV"
+        run: |
+          {
+            echo "CC_aarch64_pc_windows_msvc=clang-cl"
+            echo "CXX_aarch64_pc_windows_msvc=clang-cl"
+            echo "CMAKE_GENERATOR=Ninja"
+            echo "CMAKE_SYSTEM_NAME=Windows"
+            echo "CMAKE_SYSTEM_PROCESSOR=ARM64"
+          } >> "$GITHUB_ENV"
 
       # The AppImage bundles every GStreamer plugin installed here
       # (bundle.linux.appimage.bundleMediaFramework); WebKitGTK plays, decodes
@@ -179,16 +195,27 @@ jobs:
           files: dist/*
           generate_release_notes: true
 
-  # Repackages the Linux job's .deb as a Flatpak on the GNOME runtime
-  # (packaging/flatpak/app.onspot.desktop.yml).
+  # Repackages each Linux job's .deb as a Flatpak on the GNOME runtime
+  # (packaging/flatpak/app.onspot.desktop.yml), natively on each architecture.
   flatpak:
     needs: bundle
-    # Only the Linux bundle is needed, so a failed Windows or macOS bundle does
-    # not stop it; without the Linux .deb the download step fails.
+    # Only the Linux bundles are needed, so a failed Windows or macOS bundle does
+    # not stop it; without a Linux .deb the download step fails.
     if: ${{ !cancelled() && needs.bundle.result != 'skipped' }}
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            linux-bundle: onspot-desktop-linux
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            linux-bundle: onspot-desktop-linux-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     container:
+      # Published for amd64 and arm64; each runner pulls its own.
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
       # flatpak-builder sandboxes each build step with bubblewrap.
       options: --privileged
@@ -198,7 +225,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: onspot-desktop-linux
+          name: ${{ matrix.linux-bundle }}
           path: linux-bundles
 
       - name: Stage the .deb for the manifest
@@ -214,12 +241,13 @@ jobs:
 
           cp "${debs[0]}" packaging/flatpak/onspot.deb
           version="$(basename "${debs[0]}" | cut -d_ -f2)"
-          echo "bundle=onspot_${version}_x86_64.flatpak" >> "$GITHUB_OUTPUT"
+          echo "bundle=onspot_${version}_${{ matrix.arch }}.flatpak" >> "$GITHUB_OUTPUT"
 
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: packaging/flatpak/app.onspot.desktop.yml
           bundle: ${{ steps.stage.outputs.bundle }}
+          arch: ${{ matrix.arch }}
 
       - name: Publish to a GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')

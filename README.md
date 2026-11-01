@@ -291,9 +291,9 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: credentialless
 ```
 
-Pushing a `v*` tag — or running the **Desktop release** workflow manually — builds the Windows
-`.exe`/`.msi` (x64) and `.exe` (ARM), macOS `.dmg` (Apple Silicon and Intel), and Linux
-`.deb`/`.rpm`/`.AppImage` (x64 and ARM) plus an x64 Flatpak (`.github/workflows/release.yml`).
+Pushing a `v*` tag — or running the **Desktop release** workflow manually — builds every installer
+for x64 and ARM64: Windows `.exe`/`.msi`, macOS `.dmg` (Apple Silicon and Intel), and Linux
+`.deb`/`.rpm`/`.AppImage`/`.flatpak` (`.github/workflows/release.yml`).
 
 Google Drive sync is optional at build time. Register an OAuth client in Google Cloud, enable the
 Drive API, and set `VITE_GOOGLE_CLIENT_ID_DESKTOP` and/or `VITE_GOOGLE_CLIENT_ID_WEB` (see
