@@ -49,9 +49,10 @@
     <keyword>pronunciation</keyword>
   </keywords>
 
+  <!-- The banner behind the icon in software centres (brand-assets/README.md). -->
   <branding>
-    <color type="primary" scheme_preference="light">#0f766e</color>
-    <color type="primary" scheme_preference="dark">#2db3a3</color>
+    <color type="primary" scheme_preference="light">#ffc24d</color>
+    <color type="primary" scheme_preference="dark">#714d1d</color>
   </branding>
 
   <supports>

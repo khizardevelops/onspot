@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <title>Android adaptive foreground (108 dp)</title>
+  <defs>
+<linearGradient id="icon-beam" x1="512" y1="246" x2="512" y2="750" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffc24d" stop-opacity="0.6"/>
+      <stop offset="0.5" stop-color="#f6a531" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#f6a531" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="icon-pool" cx="0" cy="0" r="252" gradientTransform="matrix(1 0 0 0.167 512 750)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6a531" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#f6a531" stop-opacity="0.15"/>
+    </radialGradient>
+  </defs>
+<g transform="translate(54.000 54.000) scale(0.089286) translate(-512.000 -512.000)">
+<path d="M595.87 245.222 L763.611 747.667 C768.798 763.205 722.008 777.948 642.022 785.978 C562.035 794.007 461.965 794.007 381.978 785.978 C301.992 777.948 255.202 763.205 260.389 747.667 L428.13 245.222 C430.606 237.804 467.421 232 512 232 C556.579 232 593.394 237.804 595.87 245.222 Z" fill="url(#icon-beam)"/>
+      <ellipse cx="512" cy="750" rx="252" ry="42" fill="url(#icon-pool)"/>
+      <ellipse cx="512" cy="246" rx="84" ry="14" fill="#ffc24d"/>
+      <path d="M372 596 L372 596 C379.732 596 386 602.268 386 610 L386 666 C386 673.732 379.732 680 372 680 L372 680 C364.268 680 358 673.732 358 666 L358 610 C358 602.268 364.268 596 372 596 Z" fill="#ffc24d"/>
+      <path d="M442 568 L442 568 C449.732 568 456 574.268 456 582 L456 694 C456 701.732 449.732 708 442 708 L442 708 C434.268 708 428 701.732 428 694 L428 582 C428 574.268 434.268 568 442 568 Z" fill="#ffc24d"/>
+      <path d="M512 526 L512 526 C519.732 526 526 532.268 526 540 L526 736 C526 743.732 519.732 750 512 750 L512 750 C504.268 750 498 743.732 498 736 L498 540 C498 532.268 504.268 526 512 526 Z" fill="#ffc24d"/>
+      <path d="M582 568 L582 568 C589.732 568 596 574.268 596 582 L596 694 C596 701.732 589.732 708 582 708 L582 708 C574.268 708 568 701.732 568 694 L568 582 C568 574.268 574.268 568 582 568 Z" fill="#ffc24d"/>
+      <path d="M652 596 L652 596 C659.732 596 666 602.268 666 610 L666 666 C666 673.732 659.732 680 652 680 L652 680 C644.268 680 638 673.732 638 666 L638 610 C638 602.268 644.268 596 652 596 Z" fill="#ffc24d"/>
+</g>
+</svg>

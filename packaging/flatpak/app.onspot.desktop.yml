@@ -44,6 +44,8 @@ modules:
         path: app.onspot.desktop.desktop
       - type: file
         path: app.onspot.desktop.metainfo.xml
+      - type: file
+        path: ../../brand-assets/app-icon.svg
     build-commands:
       - ar -x onspot.deb data.tar.gz
       - tar -xf data.tar.gz
@@ -52,8 +54,12 @@ modules:
       # Tauri's .deb names the icons after the binary; Flatpak exports only
       # icons named after the app id. Its "256x256@2" icon is 256 px.
       - install -Dm644 usr/share/icons/hicolor/32x32/apps/onspot.png /app/share/icons/hicolor/32x32/apps/app.onspot.desktop.png
+      - install -Dm644 usr/share/icons/hicolor/64x64/apps/onspot.png /app/share/icons/hicolor/64x64/apps/app.onspot.desktop.png
       - install -Dm644 usr/share/icons/hicolor/128x128/apps/onspot.png /app/share/icons/hicolor/128x128/apps/app.onspot.desktop.png
       - install -Dm644 usr/share/icons/hicolor/256x256@2/apps/onspot.png /app/share/icons/hicolor/256x256/apps/app.onspot.desktop.png
+      - install -Dm644 usr/share/icons/hicolor/512x512/apps/onspot.png /app/share/icons/hicolor/512x512/apps/app.onspot.desktop.png
+      # The vector master, so software centres and HiDPI docks draw it sharp at any size.
+      - install -Dm644 app-icon.svg /app/share/icons/hicolor/scalable/apps/app.onspot.desktop.svg
 
       - install -Dm644 app.onspot.desktop.desktop /app/share/applications/app.onspot.desktop.desktop
       - install -Dm644 app.onspot.desktop.metainfo.xml /app/share/metainfo/app.onspot.desktop.metainfo.xml

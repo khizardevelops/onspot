@@ -12,23 +12,50 @@ A spotlight on your voice: a lamp throws a beam onto a floor, and a waveform sta
 | `app-icon-tile.svg` | The same icon cropped to its 824 tile (`viewBox="100 100 824 824"`), for the web. |
 | `logo.svg`, `logo-1024.png` | Logo: the mark above the wordmark on the same tile, as in the prototype. |
 | `construction.png` | Construction sheet: module grid, keylines, type lines, palette. |
+| `android/` | Android adaptive icon layers: the mark alone (`ic_launcher_foreground.svg`) and the themed-icon layer (`ic_launcher_monochrome.svg`). |
+| `installer/` | Installer artwork: NSIS header and sidebar, WiX banner and dialog, DMG background. |
 
 The Logo artboard keeps the wordmark's centreline strokes on the hidden layer
 *Logo wordmark centrelines (editable)*; the visible wordmark is their outlined, united copy.
 
+The `android/` and `installer/` SVGs are compositions of the masters' own paths (the mark, the
+wordmark and the icon tile, placed by transform), so they share the geometry exactly. If the mark
+or wordmark changes, copy the new paths into them.
+
 ## Where the app uses it
 
-The macOS master is used on every platform (a deliberate choice; it keeps Apple's margin everywhere):
+The macOS master is the app icon on every desktop platform (a deliberate choice; it keeps Apple's
+margin everywhere). `scripts/brand-assets.sh` renders everything below from this folder; it needs
+bun, resvg and ImageMagick 7.
 
-- **Desktop and Android icons:** `bun tauri icon brand-assets/app-icon-1024.png --ios-color '#151412'`
-  writes `src-tauri/icons/` and the Android launcher icons. The Ink colour fills the transparent
-  margin on Android (adaptive background) and iOS, so they show a dark tile, not a white plate.
+- **Desktop icons, iOS and Android's legacy icon:** `tauri icon` on `app-icon-1024.png` with
+  `--ios-color '#151412'` writes `src-tauri/icons/`. It rewrites `icon.icns` with its entries in
+  another order; if that is its only change, `git checkout` it.
+- **Android launcher (adaptive icon):** the launcher crops the 108 dp layer to its own shape and
+  shows only the middle 72 dp, so the foreground is the mark alone (m = 2.5 dp: 45 × 50 dp, the
+  same 68 % share as the macOS tile) on the Ink background. The mark's farthest points, the pool's
+  ends, sit 31.2 dp from the centre, inside the 33 dp safe circle. The monochrome layer is the same
+  mark in white for Android 13 themed icons.
+- **Installers** (`src-tauri/icons/installer/`, wired in `tauri.conf.json`):
+
+  | Image | Size | Content |
+  | --- | --- | --- |
+  | `nsis-sidebar.bmp` | 164 × 314 | Welcome and finish pages: the logo on Ink (scale 0.22) |
+  | `nsis-header.bmp` | 150 × 57 | Left of each page title: the icon (37 px) and the wordmark (x-height 11 px), "on" in Ink on white |
+  | `wix-dialog.bmp` | 493 × 312 | MSI welcome and finish: the NSIS sidebar panel, white where WiX draws text |
+  | `wix-banner.bmp` | 493 × 58 | MSI page banner: the icon (44 px) on the right, white under WiX's title |
+  | `dmg-background.png` | 660 × 400 | Paper, an Amber arrow from the app (180, 170) to Applications (480, 170), the wordmark |
+
+  NSIS and WiX read 24-bit BMPs. The setup `.exe`, its uninstaller and the MSI's entry in
+  Installed apps use `icon.ico`; the DMG's volume icon is `icon.icns`.
+- **Software centres (Flatpak metainfo):** brand colours Light `#FFC24D` and, for dark mode,
+  `#714D1D` (Amber darkened and muted in OKLCH, 0.45 / 0.08; 2.4 : 1 against the Ink tile).
 - **Web favicon and the header mark:** `static/app-icon.svg`, a copy of `app-icon-tile.svg`.
   Browsers expect a favicon to fill its box; with the macOS margin the tile was ~13 px at 16 px.
   `AppHeader.svelte` shows it at 36 px, the height of the header row.
-- **The repository README:** `app-icon-tile.svg` at 120 px above the title.
+- **The repository README:** `app-icon-tile.svg` at 52 px beside the title.
 
-Change the icon here, then re-run the command and copy the SVG again.
+Change the icon here, then re-run `scripts/brand-assets.sh` and copy the SVG again.
 
 ## Icon grid
 
