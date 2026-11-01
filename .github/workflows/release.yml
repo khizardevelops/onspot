@@ -1,7 +1,7 @@
-# Builds the desktop bundles: Windows (.exe/.msi), macOS (.dmg) and Linux
-# (.deb/.AppImage/.rpm, and a .flatpak made from the .deb). Push a v* tag to
-# publish them on a GitHub Release, or run the workflow manually from the
-# Actions tab.
+# Builds the desktop bundles for x64 and ARM: Windows (.exe/.msi; ARM: .exe),
+# macOS (.dmg for Apple Silicon and Intel) and Linux (.deb/.AppImage/.rpm, and
+# an x64 .flatpak made from the .deb). Push a v* tag to publish them on a
+# GitHub Release, or run the workflow manually from the Actions tab.
 name: Desktop release
 
 on:
@@ -48,10 +48,20 @@ jobs:
         include:
           - name: windows
             os: windows-latest
+          # Windows on ARM is cross-built on x64: Bun has no Windows ARM build.
+          # Tauri documents only the NSIS installer for ARM64.
+          - name: windows-arm
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            args: --target aarch64-pc-windows-msvc --bundles nsis
           - name: macos
             os: macos-latest
+          - name: macos-intel
+            os: macos-15-intel
           - name: linux
             os: ubuntu-22.04
+          - name: linux-arm
+            os: ubuntu-22.04-arm
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -86,11 +96,20 @@ jobs:
           cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
           key: desktop-${{ matrix.name }}
+
+      # ggml (whisper.cpp) refuses MSVC for ARM ("use clang"); whisper-rs passes
+      # CMAKE_* variables to its CMake build, so it gets Visual Studio's clang-cl.
+      - name: Use clang for whisper.cpp on Windows ARM
+        if: matrix.name == 'windows-arm'
+        shell: bash
+        run: echo "CMAKE_GENERATOR_TOOLSET=ClangCL" >> "$GITHUB_ENV"
 
       # The AppImage bundles every GStreamer plugin installed here
       # (bundle.linux.appimage.bundleMediaFramework); WebKitGTK plays, decodes
@@ -98,7 +117,7 @@ jobs:
       # Not bad: it pulls in a libreadline that breaks the host's /bin/sh when
       # the app opens a link.
       - name: Install Linux system libraries
-        if: matrix.name == 'linux'
+        if: startsWith(matrix.name, 'linux')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -111,28 +130,37 @@ jobs:
 
       # Tauri runs `beforeBuildCommand` (bun run build) itself.
       - name: Build the desktop bundle
-        run: bunx tauri build
+        run: bunx tauri build ${{ matrix.args }}
 
       # A bundled library that shadows the host's copy only breaks on distros
       # newer than this runner: in 0.1.0 the bundled libwayland-client made
       # WebKit abort on Arch's Mesa. Start the AppImage here (Ubuntu 22.04, the
       # oldest base it supports) and on rolling Arch before publishing it.
       - name: Check the AppImage
-        if: matrix.name == 'linux'
+        if: startsWith(matrix.name, 'linux')
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: |
           appimage="$(echo src-tauri/target/release/bundle/appimage/*.AppImage)"
           packaging/appimage/check.sh "$appimage"
           packaging/smoke-test.sh "$appimage"
+
+      # Arch publishes no ARM64 image, so only the x64 AppImage is started there.
+      - name: Start the AppImage on rolling Arch
+        if: matrix.name == 'linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          appimage="$(echo src-tauri/target/release/bundle/appimage/*.AppImage)"
           docker run --rm --env APPIMAGE_EXTRACT_AND_RUN --volume "$PWD:/work:ro" --workdir /work archlinux:latest \
             bash -c "pacman -Syu --noconfirm --needed mesa libglvnd wayland libx11 libxcb fontconfig freetype2 harfbuzz fribidi ttf-dejavu xorg-server-xvfb xorg-xauth > /dev/null && packaging/smoke-test.sh '$appimage'"
 
+      # A cross build (--target) writes its bundles under target/<triple>/release.
       - name: Collect artifacts
         shell: bash
         run: |
           mkdir -p dist
-          find src-tauri/target/release/bundle -type f \
+          find src-tauri/target -path '*/release/bundle/*' -type f \
             \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
             -exec cp {} dist/ \;
           ls -lh dist
