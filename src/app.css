@@ -135,6 +135,8 @@
 	--radius: 0.625rem;
 	/* The margin between the window edge and page content: the top bar, the attempt cards, the composer. */
 	--page-gutter: 28px;
+	/* The desktop app's own title bar (WindowBar): macOS's standard title bar height, where its traffic lights sit. */
+	--window-bar-height: 28px;
 }
 
 [data-theme='dark'] {

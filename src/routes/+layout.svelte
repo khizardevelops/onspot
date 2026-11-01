@@ -14,12 +14,16 @@
 	import LanguageDownloadBar from '#lib/components/LanguageDownloadBar.svelte';
 	import PaperTexture from '#lib/components/PaperTexture.svelte';
 	import NeoThemeSync from '#lib/components/NeoThemeSync.svelte';
+	import WindowBar from '#lib/components/WindowBar.svelte';
+	import { currentRuntime } from '#lib/platform/runtime.js';
 	import type { PaperTextureParams } from '@paper-design/shaders';
 	import { NeoThemeProvider } from '@dvcol/neo-svelte/providers';
 
 	let { children } = $props();
 	/* Resolved before the first render: NeoThemeProvider must start on the right theme (see NeoThemeSync). */
 	const initialTheme = theme.current;
+	/* The desktop app draws its own title bar; the browser and the phone apps have none. */
+	const hasWindowBar = currentRuntime() === 'desktop';
 
 	/*
 	 * Paper Shaders' paper texture, tuned to gently crumpled paper: soft crumple
@@ -101,8 +105,14 @@
 <!-- The provider's props must never change after mount; NeoThemeSync applies theme switches. -->
 <NeoThemeProvider theme={initialTheme} remember={false} reset={false}>
 	<NeoThemeSync theme={theme.current} />
-	<!-- Navigation lives in each page's top bar (AppHeader); the page has the whole window. -->
-	<main class="app-page paper-surface relative z-[1] h-dvh min-w-0 overflow-hidden text-foreground">
+	{#if hasWindowBar}
+		<WindowBar />
+	{/if}
+	<!-- Navigation lives in each page's top bar (AppHeader); the page has the rest of the window. -->
+	<main
+		class="app-page paper-surface relative z-[1] h-dvh min-w-0 overflow-hidden text-foreground"
+		class:under-window-bar={hasWindowBar}
+	>
 		{#key page.url.pathname}
 			<div class="page-enter h-full">
 				{@render children()}
@@ -128,6 +138,9 @@
 		inset: 0;
 		z-index: 0;
 		pointer-events: none;
+	}
+	main.under-window-bar {
+		height: calc(100dvh - var(--window-bar-height));
 	}
 	/* Phones: the bar is at the bottom, so the page itself keeps clear of the status bar. */
 	@media (max-width: 640px) {

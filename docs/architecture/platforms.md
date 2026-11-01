@@ -20,6 +20,14 @@ desktop first, then the web SPA, then mobile.
   closes the pool, overwrites the file, removes stale journals and reopens.
 - Linux adds `src-tauri/src/microphone.rs`: WebKitGTK denies `getUserMedia` unless the app handles
   its `permission-request` signal.
+- The window draws its own title bar (`components/WindowBar.svelte`, 28 px, the page's paper, so it
+  follows light and dark mode). Windows and Linux run undecorated (`decorations: false`) with the
+  bar's minimise/maximise/close; Tauri keeps a 5 px resize border on the edges. macOS keeps native
+  traffic lights over the bar (`src-tauri/tauri.macos.conf.json`: overlay title bar; JSON merge
+  replaces the whole `windows` array, so window size changes go in both files).
+- The AppImage runs on X11 (`src-tauri/src/display_backend.rs`): its bundled Ubuntu 22.04 GTK and
+  WebKitGTK mis-size the page on maximise/restore under Wayland. The Flatpak and `.deb`/`.rpm` use
+  current system libraries and stay on Wayland.
 - The trajectory is the inception's `.exe` first. This machine cannot cross-build a Windows
   binary, so `.github/workflows/release.yml` builds Windows, macOS and Linux bundles on a tag or
   manual run.

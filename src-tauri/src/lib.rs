@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #[cfg(target_os = "linux")]
+mod display_backend;
+#[cfg(target_os = "linux")]
 mod microphone;
 mod oauth;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  #[cfg(target_os = "linux")]
+  display_backend::prefer_x11_inside_appimage();
+
   tauri::Builder::default()
     .plugin(tauri_plugin_sql::Builder::default().build())
     // Settings → Storage → Export: a native Save dialog and the file write.
