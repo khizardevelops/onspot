@@ -81,6 +81,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.2.0" date="2026-11-01">
+      <description>
+        <p>Long takes, steadier cloud and on-device speech, a faster interface and a new app icon.</p>
+        <ul>
+          <li>Takes of several minutes: parts of a card fold, and "Did you mean to say?" can list only the fixes.</li>
+          <li>Groq requests are paced to each model's limits and move to another free model when one is busy.</li>
+          <li>On-device speech reads long texts in sentence pieces.</li>
+          <li>A new logo and app icon.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-01">
       <description>
         <p>First release.</p>

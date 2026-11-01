@@ -1,6 +1,6 @@
 [package]
 name = "onspot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Learn to speak French on the spot — private, offline, desktop-first."
 authors = ["onspot contributors"]
 license = "AGPL-3.0-or-later"
