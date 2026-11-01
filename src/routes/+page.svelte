@@ -872,10 +872,13 @@
 	 */
 	.feedback-bookmark .tab-paper {
 		--manila: #e8d4a4;
+		--paper-glow: rgb(255 252 240 / 0.45);
+		--paper-shadow: rgb(120 85 35 / 0.18);
 		--fold-shade: rgb(105 75 30 / 0.3);
 		--crease-light: rgb(255 250 235 / 0.45);
 		--crease-dark: rgb(110 80 30 / 0.22);
 		--pencil: #a3271b;
+		--icon-opacity: 0.75;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -886,8 +889,8 @@
 		padding-right: 3px;
 		background-color: var(--manila);
 		background-image:
-			radial-gradient(ellipse 70% 45% at 30% 22%, rgb(255 252 240 / 0.45), transparent 70%),
-			radial-gradient(ellipse 60% 40% at 70% 78%, rgb(120 85 35 / 0.18), transparent 72%),
+			radial-gradient(ellipse 70% 45% at 30% 22%, var(--paper-glow), transparent 70%),
+			radial-gradient(ellipse 60% 40% at 70% 78%, var(--paper-shadow), transparent 72%),
 			linear-gradient(112deg, transparent 44%, var(--crease-light) 47%, var(--crease-dark) 49.5%, transparent 53%),
 			linear-gradient(270deg, var(--fold-shade), transparent 7px),
 			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E"),
@@ -904,18 +907,26 @@
 	.feedback-bookmark.clean .tab-paper {
 		--pencil: #2f5f57;
 	}
+	/*
+	 * Dark: kraft card stock dark enough for light pencil, with the light and
+	 * the crease kept faint. A bright patch behind the count or the icon left
+	 * them at 2.7:1; now the worst spot is 5.8:1 (measured at 4x, 2026-11-01).
+	 */
 	:global([data-theme='dark']) .feedback-bookmark .tab-paper {
-		--manila: #7a6440;
+		--manila: #4f412b;
+		--paper-glow: rgb(255 240 210 / 0.07);
+		--paper-shadow: rgb(0 0 0 / 0.22);
 		--fold-shade: rgb(0 0 0 / 0.4);
-		--crease-light: rgb(255 240 210 / 0.18);
+		--crease-light: rgb(255 240 210 / 0.06);
 		--crease-dark: rgb(0 0 0 / 0.25);
-		--pencil: #ffd2c6;
+		--pencil: #ffd9cc;
+		--icon-opacity: 1;
 	}
 	:global([data-theme='dark']) .feedback-bookmark.clean .tab-paper {
 		--pencil: #cdeee5;
 	}
 	.feedback-bookmark .tab-paper :global(svg) {
-		opacity: 0.75;
+		opacity: var(--icon-opacity);
 	}
 	.tab-count {
 		font-family: 'Caveat', 'Comic Sans MS', cursive;
