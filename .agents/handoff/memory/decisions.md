@@ -1,5 +1,23 @@
 # Decisions
 
+### Pace LLM requests and rotate Groq models instead of failing on 429 (2026-11-01)
+User: "better error handling and also error preventing by rotating the groq models … if the prompt
+is longer then allowed tokens per limit then we need to chunk it". Groq's per-minute allowances
+refill continuously ("2 tokens over → try again in 15ms"), so `adapters/llm/pacing.ts` keeps a
+token bucket per key+model (TPM, and OTPM where stated), charges each request before sending,
+waits the moment it needs, or moves to the next model of `GROQ_ROTATION_MODELS` (120B → Qwen 3.8 →
+20B). Only limits the provider stated are paced (a paid plan must not be throttled to free limits);
+the first refusal teaches them (ledger, 24 h). Feedback waits up to 45 s for the learner's model
+(20B broke JSON and lost corrections on a long take); translations/meanings rotate after 3 s.
+Setting "When a model is busy" (`llmRotation`, Groq only). Long work is split instead of enlarged:
+evaluation in ≤260-word parts (joined: corrections in order, first note, mistakes interleaved, last
+follow-up), translations in ≤80-word parts, hover meanings per ~90-word section on demand.
+
+### Translations only when the learner asks (2026-11-01)
+User: "the translation should not be auto generated, only when the user deliberately choose to
+generate translation". The `translationMode` setting and the evaluation's `includeTranslations`
+path are removed; cards start with translation off; a shown-but-empty note offers "Translate".
+
 ### Translate what the learner meant, not what was transcribed (2026-10-31)
 User: translations should be of "Did you mean to say?", not the attempt "which can contain utter
 nonsense"; with no errors, "You said" = "Did you mean to say?". Version 3 sets mark the change;
@@ -1048,3 +1066,8 @@ only when the user answers the prompt).
   Default English; any of `INSTRUCTION_LANGUAGES` except the studied language. On-device explanation
   voices exist per instruction language (English only so far; others use cloud speech until the user
   picks voices by listening).
+- **2026-11-01: nothing hidden is built with a page, and nothing big animates layout.** Closed menus,
+  closed Settings rows and stack cards out of reach are built when needed (or when idle), and the
+  Feedback panel slides by transform with its column changing in one step, instead of animating the
+  column width (which re-laid out every word of every card each frame). Prefer transforms/opacity for
+  motion; never read layout while a page is mounting.

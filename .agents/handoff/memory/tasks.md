@@ -99,14 +99,19 @@
   calls record `reservedTokens`. Free gpt-oss: about 2 takes a minute, not 3.
 - [ ] Re-check `publishedLimits.ts` against Groq's rate-limits page periodically (dated 2026-10-30).
 
-## Cloud limits for five-minute takes (researched 2026-10-30, nothing implemented)
-- [ ] Decide how a 5-minute take is evaluated. `MAX_RECORDING_SEC` is still 60 although the README
+## Cloud limits for five-minute takes (researched 2026-10-30; mostly implemented 2026-11-01)
+- [x] Rate-limit pacing + Groq model rotation (`adapters/llm/pacing.ts`), long takes evaluated and
+  translated in parts, hover meanings per section. See state.md and decisions.md (2026-11-01).
+- [ ] `MAX_RECORDING_SEC` is still 60: raise it once long takes are confirmed end to end (the
+  simulated 3/5-minute takes in `/dev/long-takes/` exercise everything after transcription).
+- [ ] Cloud TTS of a 5-minute text in one request (below) is still open; on-device TTS now speaks
+  long texts sentence by sentence (agent work, 2026-11-01).
+- [x] (superseded) Decide how a 5-minute take is evaluated. `MAX_RECORDING_SEC` is still 60 although the README
   promises up to five minutes. At 5 min (1 200-word cap) one evaluation needs ~15k output tokens
   plus a ~1.5–2.3k-token prompt, which exceeds the free-tier 8k TPM (GPT-OSS/Qwen) and Compound's
   8 192 max completion. Options: per-segment evaluation, translations on demand only, or Dev tier.
-- [ ] Live provider limits: keep the full `/models` entries (`active`, `context_window`,
-  `max_completion_tokens`), record `x-ratelimit-*` headers, parse `Limit N, Requested M` from
-  413/429 bodies, and pre-check a request against them before sending.
+- [x] Live provider limits: `x-ratelimit-*` headers and `Limit N, Used U, Requested M` from 413/429
+  bodies (incl. OTPM) feed the pacing, which pre-checks every request. (`/models` metadata not kept.)
 - [ ] Verify with a key whether the **web** build can read Groq's `x-ratelimit-*` headers. A 401
   had `access-control-allow-origin: *` but no `access-control-expose-headers`; Tauri's HTTP plugin
   reads them regardless.
@@ -299,7 +304,10 @@ JS floor-spacer measurement with CSS if a reliable dynamic-height solution emerg
 the 44px touch-target/contrast pass, #21 drop the redundant `attempt.translation` field, #23 add
 true list virtualization if `content-visibility` proves insufficient for very long histories,
 #25 container queries, #26 axe-core/Playwright a11y + visual-regression tests.
-- [ ] macOS bundle job fails in release.yml (v0.1.0); investigate when macOS matters.
+- [x] macOS bundle job failed in release.yml (v0.1.0): whisper.cpp's ggml uses `std::filesystem`
+  (macOS 10.15+) and Tauri builds for 10.13 by default. Fixed 2026-11-01 with
+  `bundle.macOS.minimumSystemVersion: "10.15"` (Tauri sets `MACOSX_DEPLOYMENT_TARGET` from it);
+  verified by a manual release.yml run on main (see state.md).
 - [ ] Linux AppImage aborts with EGL_BAD_PARAMETER on Arch (bundled WebKit); consider dropping it or
   building it on a newer base; .deb/.rpm work.
 - [ ] Optional: default the web build (GitHub Pages) to Cloud processing, so first visitors are not

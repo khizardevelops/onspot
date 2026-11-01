@@ -5,6 +5,30 @@ Active defects that can be fixed within the current foundational technology.
 ## Fixed
 
 
+
+
+### A selection showed an expression's terse gloss (2026-11-01, user report)
+- **Symptom**: selecting "j'ai préféré" showed "preferred", not "I preferred".
+- **Cause**: the word-meaning request had marked the compound tense as an expression glossed
+  "preferred", and a selection matching an expression's range reused that gloss.
+- **Fix**: selections only reuse saved selections (`origin === 'selection'`) and are otherwise
+  translated as selected; the gloss prompt says compound tenses are not expressions and an
+  expression's meaning includes its subject.
+
+### Whitespace between Svelte tags inside `.transcript-text` renders (2026-11-01)
+- `Transcript.svelte` renders with `white-space: pre-wrap`, so a line break between sibling tags in
+  the token loop becomes a visible space before every word. Keep the loop's tags joined.
+
+### Saved translations regenerated after every restart (2026-11-01, user report)
+- **Symptom**: reopening an old session and choosing a translation "buffered": the app asked the LLM
+  again for translations it had already generated (and paid for).
+- **Cause**: `mapAttempt` (`SqlDatabaseAdapter.ts`) kept the set's `version` only when it was the
+  literal `2`; `TRANSLATION_SET_VERSION` is 3, so every set loaded versionless and
+  `translationsCurrent` called it outdated. It also dropped `instructionLanguage`. The backup
+  import (`utils/export.ts`) had the same hard-coded `2`. Saving was always fine.
+- **Fix**: both readers keep any positive integer version and the instruction language as stored.
+  Verified: generate, reload, reopen the session → shown from storage, no new request.
+
 ### Groq rejected an almost-valid JSON reply (HTTP 400 json_validate_failed)
 - **Symptom**: "openai/gpt-oss-120b request failed (HTTP 400): … json_validate_failed …" when
   generating translations; the reply in `failed_generation` was complete except for a stray `"`

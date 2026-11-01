@@ -1,5 +1,28 @@
 # Last Session
 
+## 2026-11-01: long takes, rate limits, packaging, many UI fixes
+- **Asked (in order):** simulate 3/5-minute takes; design for long takes (3-state fold, fixes-only
+  "Did you mean", dynamic feedback width, follow-up meanings); AppImage + Flatpak; translations not
+  persisting; meanings bubble without French; selection "I preferred"; Groq 429 → pacing, model
+  rotation, chunking; on-device TTS `bad_alloc` on long takes; numbered fixes list; scroll window;
+  hide translation; compact, colour-coded, aged feedback cards; no auto translations; app speed.
+- **Done by agents:** card UX (fold, `correctedPassages.ts`, `CorrectedPassages.svelte`), feedback
+  width (`narrowestWidth.ts`), packaging (Tauri CLI 2.12.4, `bundleMediaFramework`, `packaging/`
+  Flatpak + scripts, release.yml flatpak job) + recorder fallback, on-device TTS for long texts
+  (sentence pieces, streamed), UI speed (state.md "UI speed"; reviewed and re-checked here with
+  `perfreview.mjs`: panel slide, menus unmounted, oldest card built, Settings rows, desktop + phone).
+- **Then:** new README screenshots (state.md), macOS release fix (tasks.md), committed and pushed
+  `feature/language-delivery-mode` and `main` over SSH; CI watched (state.md).
+- **Before that:** the TTS agent's three findings fixed here (priority queue, idle worker shutdown, settings
+  chosen while loading) plus preparation gating/stopping and the peak ceiling (state.md).
+- **Done here:** translation-set and gloss parsing fixes in `SqlDatabaseAdapter`/`export.ts`, the
+  rest listed in state.md (2026-11-01 blocks) and decisions.md.
+- **Verified:** check 0/0 (before the last edits), mocked and live Groq runs (scripts in the
+  scratchpad: `pacingtest.mjs`, `sections.mjs`, `sectionlive.mjs`, `longlive.mjs`, `evalquality.mjs`),
+  screenshots light/dark/phone (`fbcards.mjs`, `numbered.mjs`, `hidenote.mjs`).
+- **Not verified:** Tauri/WebKitGTK and Android for today's UI; real microphone with the recorder
+  fallback; GitHub Actions run of the new flatpak job. Nothing committed.
+
 ## 2026-10-31: card stack + paper timeline
 - **Asked:** make the card scrolling look like the user's HTML demo (stack of index cards dropping
   from behind the header, delayed blur) and add its aged-paper timeline; TypeScript; keep the
