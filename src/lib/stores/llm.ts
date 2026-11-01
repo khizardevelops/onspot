@@ -2,7 +2,13 @@
 
 import { derived, get } from 'svelte/store';
 import type { LlmEndpoint, LlmProviderId } from '#lib/adapters/llm/index.js';
-import { GROQ_ROTATION_MODELS, getProvider } from '#lib/adapters/llm/index.js';
+import { AUTOMATIC_MODEL, automaticModels, getProvider } from '#lib/adapters/llm/index.js';
+import {
+	getInstructionLanguage,
+	getLanguage,
+	resourceLevelOf,
+	type LanguageResourceLevel
+} from '#lib/languages/index.js';
 import { appSettings, type AppSettings } from './settings';
 import { customApiKey, deepseekApiKey, groqApiKey, localLlmApiKey } from './secrets';
 
@@ -15,6 +21,34 @@ function secretFor(provider: LlmProviderId) {
 		default:
 			return customApiKey;
 	}
+}
+
+/**
+ * The resource level a request needs: the model reads the studied language and
+ * writes the language of instruction, so the less-resourced of the two decides.
+ */
+function languageLevelOf(settings: AppSettings): LanguageResourceLevel {
+	const studied = getLanguage(settings.targetLanguage);
+	const instruction = getInstructionLanguage(settings.instructionLanguage);
+	const leastWebText = Math.min(studied?.webTextPercent ?? Infinity, instruction.webTextPercent);
+
+	return resourceLevelOf(leastWebText);
+}
+
+/**
+ * The models a request may use, in order of preference. Automatic: the
+ * provider's models trusted with the languages in use (`automaticModels`);
+ * `pacing.ts` then takes the first with room for the request. A model chosen
+ * in Settings: that model alone.
+ */
+function modelsFor(settings: AppSettings): string[] {
+	if (settings.llmProvider === 'custom') return [settings.customModel];
+
+	const chosen = settings.llmModel;
+	if (chosen && chosen !== AUTOMATIC_MODEL) return [chosen];
+
+	const automatic = automaticModels(settings.llmProvider, languageLevelOf(settings));
+	return automatic.length > 0 ? automatic : [getProvider(settings.llmProvider).defaultModel];
 }
 
 /**
@@ -33,17 +67,14 @@ export function resolveLlmEndpoint(settings: AppSettings): LlmEndpoint {
 	}
 
 	const provider = getProvider(settings.llmProvider);
-	const baseUrl =
-		settings.llmProvider === 'custom' ? settings.customBaseUrl : provider.baseUrl;
-	const model =
-		settings.llmProvider === 'custom' ? settings.customModel : settings.llmModel || provider.defaultModel;
-	// Groq limits each model separately, so a busy model's requests can continue on another.
-	const rotates = settings.llmProvider === 'groq' && settings.llmRotation === 'rotate';
+	const baseUrl = settings.llmProvider === 'custom' ? settings.customBaseUrl : provider.baseUrl;
+	const [model, ...fallbackModels] = modelsFor(settings);
+
 	return {
 		baseUrl: baseUrl || provider.baseUrl,
 		apiKey: get(secretFor(settings.llmProvider)),
 		model,
-		fallbackModels: rotates ? GROQ_ROTATION_MODELS.filter((fallback) => fallback !== model) : []
+		fallbackModels
 	};
 }
 

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { LedgerState } from './ledger';
 import type { LimitWindow } from './rateLimits';
+
+/** Groq's API host, as usage scopes record it. */
+export const GROQ_HOST = 'api.groq.com';
 
 /**
  * Groq's published limits, per model and per organization (every key of one
@@ -57,6 +61,19 @@ const GROQ_LIMITS: Record<GroqPlan, Record<string, ModelLimits>> = {
 	}
 };
 
+/**
+ * Limits Groq states only when refusing, so its table leaves them out:
+ * Qwen 3.8 may write 1,000 reply tokens a minute on the free plan (refusals
+ * of 2026-11-01). Too few for an evaluation (3,072) or a translation (from
+ * 1,024); enough for a phrase's meaning (640).
+ */
+const GROQ_REFUSAL_LIMITS: Record<GroqPlan, Record<string, ModelLimits>> = {
+	free: {
+		'qwen/qwen3.8-27b': { OTPM: 1_000 }
+	},
+	developer: {}
+};
+
 /** Every model in Groq's published table, for the per-model usage list. */
 export const GROQ_PUBLISHED_MODELS: readonly string[] = Object.keys(GROQ_LIMITS.free);
 
@@ -69,4 +86,36 @@ export const GROQ_PUBLISHED_MODELS: readonly string[] = Object.keys(GROQ_LIMITS.
  */
 export function groqPublishedLimits(model: string, plan: GroqPlan): ModelLimits {
 	return GROQ_LIMITS[plan][model] ?? {};
+}
+
+/**
+ * What Groq is known to allow a model on a plan: its published table, plus the
+ * limits it states only in refusals.
+ *
+ * @param model Groq model id.
+ * @param plan Which plan's limits to read.
+ * @returns The limits; an empty object for a model neither source lists.
+ */
+export function groqKnownLimits(model: string, plan: GroqPlan): ModelLimits {
+	return { ...groqPublishedLimits(model, plan), ...GROQ_REFUSAL_LIMITS[plan][model] };
+}
+
+/**
+ * Which Groq plan's table applies. Live headers carry a model's daily request
+ * ceiling, and one above the Free table's means a paid plan. A browser never
+ * sees headers, so it assumes Free; a limit Groq states in a refusal still
+ * corrects each model on its own.
+ *
+ * @param state The usage ledger.
+ * @param keyId The key's id (`keyIdOf`).
+ */
+export function groqPlanOf(state: LedgerState, keyId: string): GroqPlan {
+	const readings = Object.values(state.live).filter((reading) => reading.host === GROQ_HOST && reading.keyId === keyId);
+
+	const aboveFree = readings.some((reading) => {
+		const freeRequestsPerDay = groqPublishedLimits(reading.model ?? '', 'free').RPD;
+		return Boolean(freeRequestsPerDay && reading.requests && reading.requests.limit > freeRequestsPerDay);
+	});
+
+	return aboveFree ? 'developer' : 'free';
 }

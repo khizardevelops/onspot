@@ -156,6 +156,32 @@ export interface LanguagePrompt {
 }
 
 /**
+ * How much of a language language models have read, judged by its share of
+ * the web: `high` from 1 % of Common Crawl's pages, `medium` from 0.1 %, `low`
+ * below. The less text, the weaker a smaller model is at it, so onspot gives
+ * less-resourced languages only its strongest models (`automaticModels`).
+ */
+export type LanguageResourceLevel = 'high' | 'medium' | 'low';
+
+/** From this share of Common Crawl's pages (percent), a language is well resourced. */
+const WELL_RESOURCED_WEB_PERCENT = 1;
+
+/** Below this share, a language is low resourced. */
+const LOW_RESOURCED_WEB_PERCENT = 0.1;
+
+/**
+ * The resource level of a language with this share of the web.
+ *
+ * @param webTextPercent The language's share of Common Crawl's pages, in percent.
+ * @returns `high`, `medium` or `low`.
+ */
+export function resourceLevelOf(webTextPercent: number): LanguageResourceLevel {
+	if (webTextPercent >= WELL_RESOURCED_WEB_PERCENT) return 'high';
+	if (webTextPercent >= LOW_RESOURCED_WEB_PERCENT) return 'medium';
+	return 'low';
+}
+
+/**
  * How the language is written, which decides how transcripts are split into
  * clickable words and sentences.
  *   spaced    words are separated by spaces (French)
@@ -173,6 +199,8 @@ export interface LanguageDefinition {
 	name: string;
 	/** Endonym shown under the English name, e.g. `Français`. */
 	nativeName: string;
+	/** Share of the web in this language, in percent of pages (Common Crawl CC-MAIN-2026-43). */
+	webTextPercent: number;
 	approval: LanguageApproval;
 	stt: LanguageStt;
 	voices: LanguageVoice[];
@@ -204,6 +232,7 @@ const FRENCH: LanguageDefinition = {
 	writing: 'spaced',
 	name: 'French',
 	nativeName: 'Français',
+	webTextPercent: 4.76,
 	approval: {
 		status: 'approved',
 		by: 'Human WER review + listening test (model lab)',
@@ -324,6 +353,7 @@ const JAPANESE: LanguageDefinition = {
 	writing: 'unspaced',
 	name: 'Japanese',
 	nativeName: '日本語',
+	webTextPercent: 4.89,
 	approval: JAPANESE_PENDING,
 	stt: {
 		models: WHISPER_SMALL,
@@ -406,30 +436,32 @@ export interface InstructionLanguage {
 	name: string;
 	/** Endonym, e.g. `Español`. */
 	nativeName: string;
+	/** Share of the web in this language, in percent of pages (Common Crawl CC-MAIN-2026-43). */
+	webTextPercent: number;
 }
 
 export const INSTRUCTION_LANGUAGES: readonly InstructionLanguage[] = [
-	{ id: 'en', name: 'English', nativeName: 'English' },
-	{ id: 'es', name: 'Spanish', nativeName: 'Español' },
-	{ id: 'fr', name: 'French', nativeName: 'Français' },
-	{ id: 'de', name: 'German', nativeName: 'Deutsch' },
-	{ id: 'it', name: 'Italian', nativeName: 'Italiano' },
-	{ id: 'pt', name: 'Portuguese', nativeName: 'Português' },
-	{ id: 'nl', name: 'Dutch', nativeName: 'Nederlands' },
-	{ id: 'pl', name: 'Polish', nativeName: 'Polski' },
-	{ id: 'ru', name: 'Russian', nativeName: 'Русский' },
-	{ id: 'uk', name: 'Ukrainian', nativeName: 'Українська' },
-	{ id: 'tr', name: 'Turkish', nativeName: 'Türkçe' },
-	{ id: 'ar', name: 'Arabic', nativeName: 'العربية' },
-	{ id: 'fa', name: 'Persian', nativeName: 'فارسی' },
-	{ id: 'ur', name: 'Urdu', nativeName: 'اردو' },
-	{ id: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
-	{ id: 'bn', name: 'Bengali', nativeName: 'বাংলা' },
-	{ id: 'zh', name: 'Chinese (Simplified)', nativeName: '简体中文' },
-	{ id: 'ja', name: 'Japanese', nativeName: '日本語' },
-	{ id: 'ko', name: 'Korean', nativeName: '한국어' },
-	{ id: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia' },
-	{ id: 'vi', name: 'Vietnamese', nativeName: 'Tiếng Việt' }
+	{ id: 'en', name: 'English', nativeName: 'English', webTextPercent: 42.56 },
+	{ id: 'es', name: 'Spanish', nativeName: 'Español', webTextPercent: 4.74 },
+	{ id: 'fr', name: 'French', nativeName: 'Français', webTextPercent: 4.76 },
+	{ id: 'de', name: 'German', nativeName: 'Deutsch', webTextPercent: 5.77 },
+	{ id: 'it', name: 'Italian', nativeName: 'Italiano', webTextPercent: 2.58 },
+	{ id: 'pt', name: 'Portuguese', nativeName: 'Português', webTextPercent: 2.47 },
+	{ id: 'nl', name: 'Dutch', nativeName: 'Nederlands', webTextPercent: 1.75 },
+	{ id: 'pl', name: 'Polish', nativeName: 'Polski', webTextPercent: 1.89 },
+	{ id: 'ru', name: 'Russian', nativeName: 'Русский', webTextPercent: 6.3 },
+	{ id: 'uk', name: 'Ukrainian', nativeName: 'Українська', webTextPercent: 0.79 },
+	{ id: 'tr', name: 'Turkish', nativeName: 'Türkçe', webTextPercent: 1.14 },
+	{ id: 'ar', name: 'Arabic', nativeName: 'العربية', webTextPercent: 0.67 },
+	{ id: 'fa', name: 'Persian', nativeName: 'فارسی', webTextPercent: 0.62 },
+	{ id: 'ur', name: 'Urdu', nativeName: 'اردو', webTextPercent: 0.03 },
+	{ id: 'hi', name: 'Hindi', nativeName: 'हिन्दी', webTextPercent: 0.21 },
+	{ id: 'bn', name: 'Bengali', nativeName: 'বাংলা', webTextPercent: 0.11 },
+	{ id: 'zh', name: 'Chinese (Simplified)', nativeName: '简体中文', webTextPercent: 4.37 },
+	{ id: 'ja', name: 'Japanese', nativeName: '日本語', webTextPercent: 4.89 },
+	{ id: 'ko', name: 'Korean', nativeName: '한국어', webTextPercent: 0.88 },
+	{ id: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia', webTextPercent: 1.06 },
+	{ id: 'vi', name: 'Vietnamese', nativeName: 'Tiếng Việt', webTextPercent: 0.98 }
 ];
 
 export const DEFAULT_INSTRUCTION_LANGUAGE_ID = 'en';

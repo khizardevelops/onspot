@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { get, writable } from 'svelte/store';
-import { keyIdOf, scopeKey, usageLedger, type UsageScope } from '#lib/usage/ledger.js';
+import { keyIdOf, scopeKey, totalsWithin, usageLedger, type LedgerState, type UsageScope } from '#lib/usage/ledger.js';
 import { formatReset } from '#lib/usage/format.js';
+import { GROQ_HOST, groqKnownLimits, groqPlanOf, type ModelLimits } from '#lib/usage/publishedLimits.js';
 import { hashText } from '#lib/utils/hash.js';
 import { parseRateLimitHeaders, parseRefusal } from '#lib/usage/rateLimits.js';
 import { modelLabel, providerNameFor } from './providers';
@@ -27,6 +28,13 @@ import type { ChatMessage, LlmEndpoint } from './types';
  * guessing them would slow it down for nothing; the first refusal costs no
  * tokens, is retried, and teaches the limit (the usage ledger keeps it for a
  * day).
+ *
+ * Choosing among the models (Automatic, see `automaticModels`): they arrive in
+ * order of preference, and the request goes to the first that has room for it
+ * now or within the caller's patience. Groq's published limits only steer
+ * that choice: a model the request is expected not to fit (larger than its
+ * minute's allowance) or whose daily allowance looks spent is tried after the
+ * others, never refused, so a plan with higher limits still reaches it.
  */
 
 /** Characters per token before a model's real ratio is known (French and JSON run denser than English prose). */
@@ -56,6 +64,9 @@ const ANNOUNCED_WAIT_MS = 1_000;
 
 /** A minute allowance refills over this long. */
 const MINUTE_MS = 60_000;
+
+/** Daily allowances are counted over this rolling window. */
+const DAY_MS = 24 * 60 * MINUTE_MS;
 
 /** How long a model is skipped after a refusal that gives no time to try again. */
 const RETRY_LATER_MS = {
@@ -187,8 +198,10 @@ interface ModelOption {
 	scope: UsageScope;
 	tokens: number;
 	waitMs: number;
-	/** The request alone is larger than one of the model's per-minute allowances. */
+	/** The request alone is larger than one of the model's stated per-minute allowances. */
 	tooLarge: boolean;
+	/** The request is expected to fit the model's published limits and what is left of today's. */
+	expectedRoom: boolean;
 }
 
 /** Where to send a request, and how long to wait first. */
@@ -208,6 +221,31 @@ export class RateLimitError extends Error {
 	}
 }
 
+/** The limits Groq is known to set for a model on this key's plan; none for other providers. */
+function expectedLimits(scope: UsageScope, ledger: LedgerState): ModelLimits {
+	if (scope.host !== GROQ_HOST) return {};
+	return groqKnownLimits(scope.model, groqPlanOf(ledger, scope.keyId));
+}
+
+/**
+ * Whether a request is expected to fit a model: within each per-minute
+ * allowance on its own, and within what is left of today's requests and
+ * tokens. Today's use is the live header count where the app can read it,
+ * otherwise what this device sent in the last 24 hours.
+ */
+function hasExpectedRoom(scope: UsageScope, tokens: number, maxTokens: number, ledger: LedgerState, now: number): boolean {
+	const limits = expectedLimits(scope, ledger);
+	const fitsMinute = tokens <= (limits.TPM ?? Infinity) && maxTokens <= (limits.OTPM ?? Infinity);
+
+	const sentToday = totalsWithin(ledger, scope, DAY_MS, now);
+	const liveRequests = ledger.live[scopeKey(scope)]?.requests;
+	const liveStillCurrent = liveRequests && (liveRequests.resetsAt ?? Infinity) > now;
+	const requestsLeft = liveStillCurrent ? liveRequests.remaining : (limits.RPD ?? Infinity) - sentToday.requests;
+	const tokensLeft = (limits.TPD ?? Infinity) - sentToday.tokens;
+
+	return fitsMinute && requestsLeft >= 1 && tokensLeft >= tokens;
+}
+
 function optionFor(endpoint: LlmEndpoint, model: string, messages: ChatMessage[], maxTokens: number, now: number): ModelOption {
 	const scope = scopeOf(endpoint, model);
 	const tokens = requestTokens(messages, model, maxTokens, now);
@@ -217,17 +255,18 @@ function optionFor(endpoint: LlmEndpoint, model: string, messages: ChatMessage[]
 	const skipWait = Math.max(0, (skippedUntil.get(scopeKey(scope)) ?? 0) - now);
 	const waitMs = Math.max(refillWait(allTokens, tokens, now), refillWait(replyTokens, maxTokens, now), skipWait);
 	const tooLarge = (allTokens !== null && tokens > allTokens.capacity) || (replyTokens !== null && maxTokens > replyTokens.capacity);
+	const expectedRoom = hasExpectedRoom(scope, tokens, maxTokens, get(usageLedger), now);
 
-	return { model, scope, tokens, waitMs: Math.ceil(waitMs), tooLarge };
+	return { model, scope, tokens, waitMs: Math.ceil(waitMs), tooLarge, expectedRoom };
 }
 
 /**
- * Chooses the model for a request: the first in `models` (the learner's
- * choice) when it has room now or within `patienceMs`, otherwise whichever
- * has room soonest.
+ * Chooses the model for a request: the first in order of preference that has
+ * room now or within `patienceMs`, otherwise whichever has room soonest.
+ * Models expected to have no room (`hasExpectedRoom`) come after the others.
  *
  * @param endpoint The provider and key.
- * @param models The learner's model, then the fallbacks, in order of preference.
+ * @param models The models to choose from, in order of preference.
  * @param messages The request, to size it.
  * @param maxTokens Its reply budget.
  * @param patienceMs How long a wait for the preferred model is worth before a fallback is used.
@@ -263,9 +302,10 @@ export function planRequest(
 		);
 	}
 
-	const [preferred] = fitting;
-	const soonest = fitting.reduce((best, option) => (option.waitMs < best.waitMs ? option : best));
-	const chosen = preferred.waitMs <= patienceMs ? preferred : soonest;
+	// Stable order: preference within each group.
+	const ranked = [...fitting.filter((option) => option.expectedRoom), ...fitting.filter((option) => !option.expectedRoom)];
+	const soonest = ranked.reduce((best, option) => (option.waitMs < best.waitMs ? option : best));
+	const chosen = ranked.find((option) => option.waitMs <= patienceMs) ?? soonest;
 	if (chosen.waitMs > LONGEST_WAIT_MS) {
 		throw new RateLimitError(
 			`${provider}'s limits for ${names(fitting.map((option) => option.model))} are used up for now; they reset ${formatReset(now + chosen.waitMs, now)}. Try again then, or choose another provider in Settings.`

@@ -21,9 +21,11 @@ import {
 	type UsageScope
 } from './ledger';
 import {
+	GROQ_HOST,
 	GROQ_LIMITS_CHECKED,
 	GROQ_PLAN_NAMES,
 	GROQ_PUBLISHED_MODELS,
+	groqPlanOf,
 	groqPublishedLimits,
 	type GroqPlan,
 	type ModelLimits
@@ -53,7 +55,6 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-const GROQ_HOST = 'api.groq.com';
 const OPENAI_HOST = 'api.openai.com';
 const ELEVENLABS_HOST = 'api.elevenlabs.io';
 
@@ -131,7 +132,7 @@ export interface ModelUsage extends UsageView {
 	model: string;
 	/** A readable name, e.g. "GPT-OSS 120B"; the id when there is none. */
 	label: string;
-	/** True for the model the current setup sends its calls to. */
+	/** True for the models the current setup sends its calls to (several with Automatic). */
 	inUse: boolean;
 }
 
@@ -455,23 +456,6 @@ function meterWarnings(provider: string, meters: UsageMeter[], now: number): Usa
 	return warnings;
 }
 
-/**
- * Which Groq plan's table applies. Live headers carry a model's daily request
- * ceiling, and one above the Free table's means a paid plan. A browser never
- * sees headers, so it assumes Free; a limit Groq states in a refusal still
- * corrects each model on its own.
- */
-function groqPlanOf(state: LedgerState, keyId: string): GroqPlan {
-	const readings = Object.values(state.live).filter((reading) => reading.host === GROQ_HOST && reading.keyId === keyId);
-
-	const aboveFree = readings.some((reading) => {
-		const freeRequestsPerDay = groqPublishedLimits(reading.model ?? '', 'free').RPD;
-		return Boolean(freeRequestsPerDay && reading.requests && reading.requests.limit > freeRequestsPerDay);
-	});
-
-	return aboveFree ? 'developer' : 'free';
-}
-
 const WHISPER_LABELS: Record<string, string> = {
 	'whisper-large-v3': 'Whisper Large v3',
 	'whisper-large-v3-turbo': 'Whisper Large v3 Turbo'
@@ -486,9 +470,9 @@ function groqModelLabel(model: string): string {
 /**
  * The Groq chat models worth comparing, in a stable order: the app's own list,
  * then the rest of Groq's published table, then anything this key has called.
- * The model in use is always included, even when it is in none of them.
+ * The models in use are always included, even when they are in none of them.
  */
-function groqChatModels(inUse: string, state: LedgerState, keyId: string): string[] {
+function groqChatModels(inUse: readonly string[], state: LedgerState, keyId: string): string[] {
 	const curated = getModelOptions('groq').map((option) => option.id);
 	const published = GROQ_PUBLISHED_MODELS.filter(isChatModel);
 	const called = state.calls
@@ -496,7 +480,8 @@ function groqChatModels(inUse: string, state: LedgerState, keyId: string): strin
 		.map((call) => call.model);
 
 	const models = [...new Set([...curated, ...published, ...called])];
-	return models.includes(inUse) ? models : [inUse, ...models];
+	const missing = inUse.filter((model) => !models.includes(model));
+	return [...missing, ...models];
 }
 
 function webHeaderNote(plan: GroqPlan): string {
@@ -538,7 +523,7 @@ function chatTakeEstimate(model: string, meters: UsageMeter[], take: TakeTokens)
 			text: `Groq sets aside about ${formatCount(take.reserved)} tokens for each take, but this model allows only ${allowed} a minute, so takes are refused.`,
 			warning: {
 				level: 'error',
-				message: `Groq ${model} allows ${allowed} tokens a minute, less than one take needs. Choose another model in Settings → LLM.`
+				message: `Groq ${model} allows ${allowed} tokens a minute, less than one take needs. Choose Automatic in Settings → LLM.`
 			}
 		};
 	}
@@ -620,9 +605,28 @@ function groqModelUsage(model: string, kind: GroqModelKind, inUse: boolean, cont
 	return { model, label: groqModelLabel(model), inUse, meters, estimate: estimate.text, notes, warnings };
 }
 
-/** A Groq step: the model in use supplies the service's own figures, every model is listed. */
+/**
+ * Warnings for the models requests may go to. One model (chosen in Settings):
+ * its own. Several (Automatic): one model running low is no news while
+ * another has room, so only a problem they all share is reported.
+ */
+function candidateWarnings(candidates: ModelUsage[]): UsageWarning[] {
+	if (candidates.length <= 1) return candidates[0]?.warnings ?? [];
+
+	const names = candidates.map((model) => model.label).join(', ');
+	const allOut = candidates.every((model) => model.warnings.some((warning) => warning.level === 'error'));
+	if (allOut) return [{ level: 'error', message: `Groq: ${names} are all out of room for now. Feedback waits until one refills.` }];
+
+	const allLow = candidates.every((model) => model.warnings.length > 0);
+	if (allLow) return [{ level: 'warning', message: `Groq: little room left today on ${names}.` }];
+
+	return [];
+}
+
+/** A Groq step: the preferred model in use supplies the service's own figures, every model is listed. */
 function groqService(capability: Capability, models: ModelUsage[], plan: GroqPlan): ServiceUsage {
-	const current = models.find((model) => model.inUse) ?? models[0];
+	const candidates = models.filter((model) => model.inUse);
+	const current = candidates[0] ?? models[0];
 
 	return {
 		capability,
@@ -633,7 +637,7 @@ function groqService(capability: Capability, models: ModelUsage[], plan: GroqPla
 		meters: current.meters,
 		estimate: current.estimate,
 		notes: current.notes,
-		warnings: current.warnings,
+		warnings: candidateWarnings(candidates),
 		balance: null,
 		dashboard: { label: 'Groq limits', url: 'https://console.groq.com/settings/limits' },
 		loading: false,
@@ -642,12 +646,13 @@ function groqService(capability: Capability, models: ModelUsage[], plan: GroqPla
 }
 
 function groqChatService(settings: AppSettings, apiKey: string, state: LedgerState, now: number): ServiceUsage {
-	const inUse = resolveLlmEndpoint(settings).model;
+	const endpoint = resolveLlmEndpoint(settings);
+	const inUse = [endpoint.model, ...(endpoint.fallbackModels ?? [])];
 	const keyId = keyIdOf(apiKey);
 	const context: GroqContext = { state, keyId, plan: groqPlanOf(state, keyId), now };
 
 	const models = groqChatModels(inUse, state, keyId).map((model) =>
-		groqModelUsage(model, 'chat', model === inUse, context)
+		groqModelUsage(model, 'chat', inUse.includes(model), context)
 	);
 	return groqService('LLM', models, context.plan);
 }

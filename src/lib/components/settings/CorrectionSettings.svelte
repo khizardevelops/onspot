@@ -9,10 +9,12 @@
 		groqApiKey,
 		localLlmApiKey
 	} from '#lib/stores/secrets.js';
-	import { currentLlmEndpoint } from '#lib/stores/llm.js';
+	import { currentLlmEndpoint, resolveLlmEndpoint } from '#lib/stores/llm.js';
 	import {
+		AUTOMATIC_MODEL,
 		LLM_PROVIDERS,
 		getModelOptions,
+		modelLabel,
 		getProvider,
 		listModels,
 		testConnection,
@@ -57,10 +59,21 @@
 		);
 	});
 
+	/** The models Automatic would use for the current languages, preferred first, e.g. "GPT-OSS 120B, Qwen 3.8 27B". */
+	const automaticModelNames = $derived.by(() => {
+		const automatic = resolveLlmEndpoint({ ...$appSettings, llmModel: AUTOMATIC_MODEL });
+		return [automatic.model, ...(automatic.fallbackModels ?? [])].map(modelLabel).join(', ');
+	});
+
 	const modelOptions = $derived.by(() => {
+		const automatic = {
+			id: AUTOMATIC_MODEL,
+			label: 'Automatic',
+			note: `Chooses from ${automaticModelNames} for each request, by your languages, the text's size and each model's limits`
+		};
 		const base = getModelOptions($appSettings.llmProvider);
-		const known = new Set(base.map((option) => option.id));
-		const options = [...base];
+		const known = new Set([AUTOMATIC_MODEL, ...base.map((option) => option.id)]);
+		const options = [automatic, ...base];
 
 		const current = $appSettings.llmModel;
 		if (current && !known.has(current)) {
@@ -91,7 +104,7 @@
 		testOk = null;
 		testMessage = '';
 		if (provider !== 'custom') {
-			setSetting('llmModel', getProvider(provider).defaultModel);
+			setSetting('llmModel', AUTOMATIC_MODEL);
 		}
 	}
 
@@ -360,25 +373,6 @@
 			</SettingRow>
 		{/if}
 
-		{#if $appSettings.llmProvider === 'groq'}
-			<SettingRow
-				label="When a model is busy"
-				for="llmRotation"
-				hint="Groq limits how much each model takes a minute. Another model keeps feedback coming without a pause."
-			>
-				<SettingSelect
-					id="llmRotation"
-					label="When a model is busy"
-					options={[
-						{ value: 'rotate', label: 'Continue with another Groq model', description: 'GPT-OSS 120B, Qwen 3.8 27B, GPT-OSS 20B' },
-						{ value: 'wait', label: 'Wait for this model', description: 'Up to a minute when its limit is reached' }
-					]}
-					value={$appSettings.llmRotation}
-					onchange={(value) => setSetting('llmRotation', value as 'rotate' | 'wait')}
-					class="@md/field-group:w-80"
-				/>
-			</SettingRow>
-		{/if}
 	</div>
 
 	<NeoCard class="info-item my-4" rounded elevation={-1} spacing="var(--info-spacing)" width="100%">

@@ -39,13 +39,10 @@ Ideas and planned work. Bugs live in [`bugs.md`](./bugs.md).
 
 ## UX
 
-- [ ] **Automatic Groq free-model rotation.**
-  The app should pick and rotate between Groq free models automatically, based on:
-  - priority
-  - per-language linguistic ability
-  - tokens per day
-  - tokens per minute
-
 ## Done
 
+- [x] **Automatic model choice** (2026-11-01): Settings → LLM → Model "Automatic" (the default)
+  picks per request from the provider's models in order of accuracy (Groq) or cost (DeepSeek),
+  keeps less-resourced languages on the strongest model (Common Crawl share), and steers by
+  tokens and requests per minute and per day (`adapters/llm/providers.ts`, `pacing.ts`).
 - [x] Paper-textured background and matching textured cards, to give a learning vibe.

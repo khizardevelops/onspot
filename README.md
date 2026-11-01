@@ -180,9 +180,9 @@ device without asking**. There is no onspot server in the middle.
 2. **Speak** about the topic in your target language. True story, made-up story or wild
    exaggeration: it doesn't matter, as long as you keep talking and aim for accuracy. Your audio
    is transcribed **on your device** by Whisper.
-3. **Get marked.** The transcript, never your audio, is sent to the language model you chose,
-   which returns corrections, the correct version of what you meant, a spoken explanation and
-   translations.
+3. **Get marked.** The transcript, never your audio, is sent to the language-model provider you
+   chose; onspot picks its most accurate model with room for your languages. It returns
+   corrections, the correct version of what you meant, a spoken explanation and translations.
 4. **Listen.** The explanation plays straight away; replay what you said or the correct version
    whenever you like.
 5. **Go again.** Each take slides into place in your timeline, so you can compare attempts.

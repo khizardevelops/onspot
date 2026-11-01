@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { LanguageResourceLevel } from '#lib/languages/index.js';
 import type { LlmModelOption, LlmProviderConfig, LlmProviderId } from './types';
 
 /**
@@ -65,7 +66,7 @@ export const LLM_PROVIDERS: Record<LlmProviderId, LlmProviderConfig> = {
  */
 export const LLM_MODELS: Record<LlmProviderId, LlmModelOption[]> = {
 	groq: [
-		{ id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Default, best quality' },
+		{ id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Best quality' },
 		{ id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Faster' },
 		{ id: 'groq/compound', label: 'Compound', note: '8x rate limit (70k TPM)' },
 		{ id: 'groq/compound-mini', label: 'Compound Mini', note: '8x rate limit (70k TPM)' },
@@ -79,15 +80,62 @@ export const LLM_MODELS: Record<LlmProviderId, LlmModelOption[]> = {
 	custom: []
 };
 
+/** The `llmModel` setting that lets onspot choose the model for each request. */
+export const AUTOMATIC_MODEL = 'auto';
+
+/** A model onspot may choose by itself, and the least-resourced languages it is trusted with. */
+interface AutomaticModel {
+	id: LlmModelId;
+	/** `low`: any language; `medium`: not low-resourced ones; `high`: well-resourced ones only. */
+	leastResourced: LanguageResourceLevel;
+}
+
 /**
- * The Groq models a request may move between when one is out of room, best
- * first. Each has its own allowance under Groq's rate limits (8,000 tokens a
- * minute on the free plan), so rotating multiplies what fits in a minute.
- * All three follow onspot's JSON prompts (checked 2026-11-01 on a free key:
- * phrase meanings and word glosses, JSON mode). A model a key cannot use is
- * skipped after its first 404.
+ * The models Automatic chooses from, per provider, in the order it prefers them.
+ *
+ * Groq: most accurate first. Its free allowances are per model (8,000 tokens a
+ * minute each), so moving down the list multiplies what fits in a minute;
+ * `pacing.ts` takes the first one with room. All three follow onspot's JSON
+ * prompts (checked 2026-11-01 on a free key). GPT-OSS 20B dropped corrections
+ * on a long take, so it comes last and only for well-resourced languages; GPT-OSS
+ * 120B is Groq's strongest model and the only one for low-resourced languages.
+ * Qwen 3.8 is allowed 1,000 reply tokens a minute, so it serves short replies.
+ *
+ * DeepSeek: cheapest first, because every token is paid for. V4 Pro takes the
+ * languages Flash is not trusted with, and Flash's requests when Flash fails.
+ *
+ * Which model handles which level is a judgement from model size, not yet a
+ * measurement: revisit it with an evaluation per language when one is approved.
  */
-export const GROQ_ROTATION_MODELS: readonly LlmModelId[] = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+const AUTOMATIC_MODELS: Record<LlmProviderId, readonly AutomaticModel[]> = {
+	groq: [
+		{ id: 'openai/gpt-oss-120b', leastResourced: 'low' },
+		{ id: 'qwen/qwen3.8-27b', leastResourced: 'medium' },
+		{ id: 'openai/gpt-oss-20b', leastResourced: 'high' }
+	],
+	deepseek: [
+		{ id: 'deepseek-flash', leastResourced: 'medium' },
+		{ id: 'deepseek-v4-pro', leastResourced: 'low' }
+	],
+	custom: []
+};
+
+/** Resource levels from most to least text. */
+const RESOURCE_LEVELS: readonly LanguageResourceLevel[] = ['high', 'medium', 'low'];
+
+/**
+ * The models Automatic may use for a provider and a language level, in order of preference.
+ *
+ * @param provider The configured LLM provider.
+ * @param level The resource level of the least-resourced language the request involves.
+ * @returns Model ids, preferred first; empty for a provider Automatic does not cover (custom).
+ */
+export function automaticModels(provider: LlmProviderId, level: LanguageResourceLevel): string[] {
+	const levelRank = RESOURCE_LEVELS.indexOf(level);
+	const trusted = (model: AutomaticModel) => RESOURCE_LEVELS.indexOf(model.leastResourced) >= levelRank;
+
+	return (AUTOMATIC_MODELS[provider] ?? []).filter(trusted).map((model) => model.id);
+}
 
 export function getProvider(id: LlmProviderId): LlmProviderConfig {
 	return LLM_PROVIDERS[id] ?? LLM_PROVIDERS.custom;

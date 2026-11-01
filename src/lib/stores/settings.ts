@@ -4,7 +4,7 @@ import { writable } from 'svelte/store';
 import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import type { RunMode } from '#lib/adapters/db/index.js';
 import type { LlmModelId, LlmProviderId } from '#lib/adapters/llm/index.js';
-import { getProvider } from '#lib/adapters/llm/index.js';
+import { AUTOMATIC_MODEL, getProvider, isChatModel } from '#lib/adapters/llm/index.js';
 import {
 	OFFERED_LANGUAGES,
 	DEFAULT_INSTRUCTION_LANGUAGE_ID,
@@ -50,13 +50,12 @@ export interface AppSettings {
 	ttsApiModel: string;
 	ttsApiVoice: string;
 	llmProvider: LlmProviderId;
-	/** Selected model for the non-custom providers (enum-backed dropdown). */
-	llmModel: LlmModelId;
 	/**
-	 * When the Groq model is out of room under Groq's rate limits: continue
-	 * with another Groq model (`GROQ_ROTATION_MODELS`), or wait for this one.
+	 * The model for Groq and DeepSeek: `AUTOMATIC_MODEL` lets onspot choose per
+	 * request (by the languages, the request's size and each model's limits);
+	 * a model id pins that model.
 	 */
-	llmRotation: 'rotate' | 'wait';
+	llmModel: LlmModelId;
 	/** Base URL for the custom OpenAI-compatible provider. */
 	customBaseUrl: string;
 	/** Model name for the custom provider (free text). */
@@ -102,8 +101,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	ttsApiModel: 'gpt-4o-mini-tts',
 	ttsApiVoice: 'alloy',
 	llmProvider: 'groq',
-	llmModel: getProvider('groq').defaultModel,
-	llmRotation: 'rotate',
+	llmModel: AUTOMATIC_MODEL,
 	customBaseUrl: '',
 	customModel: '',
 	explanationVoice: '',
@@ -119,6 +117,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const FIELD_PREFIX = 'onspot.setting.';
 
+/**
+ * Present once a database's saved model has been moved to Automatic. Without
+ * it, the provider's preset model counts as never chosen; with it, a learner
+ * who later picks that same model keeps it.
+ */
+const AUTOMATIC_MODEL_MIGRATION_KEY = 'onspot.migration.automatic-model';
+
 /** CEFR levels offered in Settings. */
 export const LEVELS = ['A2', 'B1', 'B2', 'C1'] as const;
 
@@ -131,7 +136,6 @@ const CHOICES = {
 	ttsCloudProvider: ['elevenlabs', 'openai'],
 	correctionMode: ['cloud', 'local'],
 	llmProvider: ['groq', 'deepseek', 'custom'],
-	llmRotation: ['rotate', 'wait'],
 	syncProvider: ['off', 'google-drive', 'webdav']
 } as const satisfies Partial<Record<keyof AppSettings, readonly string[]>>;
 const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
@@ -261,6 +265,13 @@ export async function initSettings(): Promise<void> {
 	if (!getVoice(loaded.targetLanguage, loaded.ttsVoice)) {
 		loaded.ttsVoice = getLanguage(loaded.targetLanguage)?.defaultVoice ?? DEFAULT_SETTINGS.ttsVoice;
 	}
+	// Before Automatic, every learner had a model saved: the provider's preset
+	// unless they changed it, and the preset was never a choice. A non-chat
+	// model (a classifier such as gpt-oss-safeguard) can never evaluate a take.
+	const migratedToAutomatic = rows.some((row) => row.key === AUTOMATIC_MODEL_MIGRATION_KEY);
+	const savedPreset = !migratedToAutomatic && loaded.llmModel === getProvider(loaded.llmProvider).defaultModel;
+	const movedToAutomatic = savedPreset || !isChatModel(loaded.llmModel);
+	if (movedToAutomatic) loaded.llmModel = AUTOMATIC_MODEL;
 	// The old default ElevenLabs voice is now a paid Voice Library voice, so every
 	// take would fail with HTTP 402 on the free plan; it was never a learner's pick.
 	if (loaded.elevenLabsVoiceId === RETIRED_DEFAULT_ELEVENLABS_VOICE_ID) {
@@ -293,7 +304,15 @@ export async function initSettings(): Promise<void> {
 	hydrated = true;
 	settingsReady.set(true);
 
-	if (chosenWhileLoading.length > 0) await persistChosenWhileLoading(loaded, chosenWhileLoading);
+	// The move to Automatic is written now: the subscriber only writes later changes.
+	const fieldsToWrite: (keyof AppSettings)[] = movedToAutomatic ? [...chosenWhileLoading, 'llmModel'] : chosenWhileLoading;
+	if (fieldsToWrite.length > 0) await persistChosenWhileLoading(loaded, fieldsToWrite);
+	if (!migratedToAutomatic) {
+		// Unrecorded, the move only repeats on the next start; it must not fail the start.
+		await db.setSetting(AUTOMATIC_MODEL_MIGRATION_KEY, 'done').catch((error: unknown) => {
+			console.error('[settings] could not record the move to Automatic', error);
+		});
+	}
 }
 
 export const appSettings = {
