@@ -10,6 +10,9 @@
 	 * showing only its excerpt, so word indexes stay those of the whole text:
 	 * hover meanings and selections share the whole text's meanings, and a
 	 * selection stays inside the passage it started in.
+	 *
+	 * Without the change marks (`changedWords`, `removedBefore`,
+	 * `replacedBefore`) the passages read as the clean correct version.
 	 */
 	import type { TextGlosses } from '#lib/adapters/db/index.js';
 	import type { Passage } from '#lib/utils/correctedPassages.js';
@@ -19,8 +22,9 @@
 		/** The whole correct version. */
 		text: string;
 		passages: Passage[];
-		changedWords: ReadonlySet<number>;
-		removedBefore: ReadonlyMap<number, string>;
+		changedWords?: ReadonlySet<number>;
+		removedBefore?: ReadonlyMap<number, string>;
+		replacedBefore?: ReadonlyMap<number, string>;
 		/** Word meanings of the whole correct version, as `Transcript` takes them. */
 		glosses: TextGlosses | null;
 		requestGlosses: (wordIndex: number) => Promise<void>;
@@ -33,6 +37,7 @@
 		passages,
 		changedWords,
 		removedBefore,
+		replacedBefore,
 		glosses,
 		requestGlosses,
 		requestPhrase,
@@ -48,6 +53,7 @@
 				excerpt={passage}
 				{changedWords}
 				{removedBefore}
+				{replacedBefore}
 				{glosses}
 				{requestGlosses}
 				{requestPhrase}

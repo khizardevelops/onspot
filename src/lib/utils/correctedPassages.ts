@@ -63,6 +63,11 @@ export interface CorrectedPassages {
 	 * itself means "after the last word".
 	 */
 	removedBefore: Map<number, string>;
+	/**
+	 * Words the learner said that a fix replaces, as said, by the index of the
+	 * fix's first word: "j'ai" before "je suis" in "je suis allé".
+	 */
+	replacedBefore: Map<number, string>;
 	/** True when one passage is the whole text: nothing would be left out. */
 	coversWholeText: boolean;
 }
@@ -77,10 +82,10 @@ export interface CorrectedPassages {
 export function correctedPassages(said: string, corrected: string): CorrectedPassages {
 	const correctWords = wordTokens(corrected);
 	if (correctWords.length === 0) {
-		return { passages: [], changedWords: new Set(), removedBefore: new Map(), coversWholeText: false };
+		return { passages: [], changedWords: new Set(), removedBefore: new Map(), replacedBefore: new Map(), coversWholeText: false };
 	}
 
-	const { changedWords, removedBefore, changedRanges } = compareWords(said, wordTokens(said), correctWords);
+	const { changedWords, removedBefore, replacedBefore, changedRanges } = compareWords(said, wordTokens(said), correctWords);
 
 	const sentences = unitsOf(sentenceSpans(corrected), correctWords);
 	const sentenceOfWord = indexWordsByUnit(sentences);
@@ -94,7 +99,13 @@ export function correctedPassages(said: string, corrected: string): CorrectedPas
 	const lastWord = correctWords.length - 1;
 	const coversWholeText = joinedRanges.length === 1 && joinedRanges[0].start === 0 && joinedRanges[0].end === lastWord;
 
-	return { passages, changedWords, removedBefore, coversWholeText };
+	return { passages, changedWords, removedBefore, replacedBefore, coversWholeText };
+}
+
+/** Adds words said at a position to a map of them, after any already there. */
+function appendSaid(saidByWord: Map<number, string>, wordIndex: number, saidText: string): void {
+	const before = saidByWord.get(wordIndex);
+	saidByWord.set(wordIndex, before ? `${before} ${saidText}` : saidText);
 }
 
 /** The word tokens of a text, numbered as the transcript view and the word meanings number them. */
@@ -112,8 +123,9 @@ const SENTENCE_END = /[.!?…。！？]/;
  * @param saidWords Its word tokens.
  * @param correctWords The correct version's word tokens.
  * @returns The correct version's words that differ, where words were dropped,
- *   and each change as a range of the correct version's words (dropped words
- *   as the word beside the gap, in the sentence they were said in).
+ *   which words each fix replaced, and each change as a range of the correct
+ *   version's words (dropped words as the word beside the gap, in the
+ *   sentence they were said in).
  */
 function compareWords(said: string, saidWords: TextToken[], correctWords: TextToken[]) {
 	const differences = diffArrays(
@@ -123,10 +135,14 @@ function compareWords(said: string, saidWords: TextToken[], correctWords: TextTo
 
 	const changedWords = new Set<number>();
 	const removedBefore = new Map<number, string>();
+	const replacedBefore = new Map<number, string>();
 	const changedRanges: WordRange[] = [];
 	const lastWord = correctWords.length - 1;
 	let saidIndex = 0;
 	let correctIndex = 0;
+
+	/** The text of `count` said words from `saidIndex`, with what stood between them. */
+	const saidTextOf = (count: number) => said.slice(saidWords[saidIndex].start, saidWords[saidIndex + count - 1].end);
 
 	for (const [position, difference] of differences.entries()) {
 		if (difference.added) {
@@ -139,11 +155,18 @@ function compareWords(said: string, saidWords: TextToken[], correctWords: TextTo
 		}
 
 		if (difference.removed) {
-			// Words said in place of others are marked through the words that replace them.
-			const isReplaced = Boolean(differences[position + 1]?.added || differences[position - 1]?.added);
-			if (!isReplaced) {
-				const dropped = said.slice(saidWords[saidIndex].start, saidWords[saidIndex + difference.count - 1].end);
-				removedBefore.set(correctIndex, [removedBefore.get(correctIndex), dropped].filter(Boolean).join(' '));
+			const saidText = saidTextOf(difference.count);
+
+			// Words said in place of others stand before the fix that replaces
+			// them; its words are already marked as the change.
+			const isReplacedByNext = Boolean(differences[position + 1]?.added);
+			const isReplacedByPrevious = !isReplacedByNext && Boolean(differences[position - 1]?.added);
+			if (isReplacedByNext) appendSaid(replacedBefore, correctIndex, saidText);
+			if (isReplacedByPrevious) appendSaid(replacedBefore, correctIndex - differences[position - 1].count, saidText);
+
+			const isDropped = !isReplacedByNext && !isReplacedByPrevious;
+			if (isDropped) {
+				appendSaid(removedBefore, correctIndex, saidText);
 
 				// "… merci. Ouais, franchement" belongs with "Franchement", not with "merci".
 				const textBeforeDropped = saidIndex === 0 ? '' : said.slice(saidWords[saidIndex - 1].end, saidWords[saidIndex].start);
@@ -163,7 +186,7 @@ function compareWords(said: string, saidWords: TextToken[], correctWords: TextTo
 		correctIndex += difference.count;
 	}
 
-	return { changedWords, removedBefore, changedRanges };
+	return { changedWords, removedBefore, replacedBefore, changedRanges };
 }
 
 /** Pairs each span (sentence or clause) with the words inside it; spans without words are dropped. */

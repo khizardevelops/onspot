@@ -146,6 +146,22 @@
 	let showWholeCorrection = $state(false);
 	const showsParts = $derived(canShowParts && !showWholeCorrection);
 
+	/*
+	 * With its changes shown (the default), the correct version marks each fix
+	 * and strikes through what it replaces or drops; hidden, it is the clean
+	 * text to say. Either way, whole or as the fixed parts.
+	 */
+	let showCorrectionChanges = $state(true);
+	const correctionMarks = $derived(
+		showCorrectionChanges && correctedParts
+			? {
+					changedWords: correctedParts.changedWords,
+					removedBefore: correctedParts.removedBefore,
+					replacedBefore: correctedParts.replacedBefore
+				}
+			: {}
+	);
+
 	const question = $derived(followUpQuestion(attempt));
 
 	/** Hover meanings and selection translations for one of this take's texts. */
@@ -442,6 +458,14 @@
 					peekHeight={textPeekHeight}
 				>
 					{#snippet actions()}
+						<button
+							type="button"
+							class="pencil-link view-toggle"
+							aria-label={showCorrectionChanges ? 'Show the clean correct version' : 'Show what changed from what you said'}
+							onclick={() => (showCorrectionChanges = !showCorrectionChanges)}
+						>
+							{showCorrectionChanges ? 'Hide changes' : 'Show changes'}
+						</button>
 						{#if canShowParts}
 							<button
 								type="button"
@@ -459,15 +483,13 @@
 							<CorrectedPassages
 								text={attempt.correctedText}
 								passages={correctedParts.passages}
-								changedWords={correctedParts.changedWords}
-								removedBefore={correctedParts.removedBefore}
+								{...correctionMarks}
 								{...meaningsOf(attempt.correctedText)}
 							/>
 						{:else}
 							<Transcript
 								text={attempt.correctedText}
-								changedWords={correctedParts.changedWords}
-								removedBefore={correctedParts.removedBefore}
+								{...correctionMarks}
 								{...meaningsOf(attempt.correctedText)}
 								class="block break-words [text-wrap:pretty]"
 							/>
@@ -691,7 +713,11 @@
 	}
 	:global(.neo-card.attempt-card .neo-button.translate-trigger:not(.on)) { color: var(--muted-foreground); }
 	:global(.neo-card.attempt-card .neo-button.retry-button) { height: 28px; padding: 0 10px; font-size: 0.75rem; }
-	/* "Whole text" / "Fixes only": a pencil toggle a fingertip can still hit. */
+	/* Two pencil links side by side must read as two, not one phrase. */
+	.view-toggle + .view-toggle {
+		margin-left: 0.5rem;
+	}
+	/* "Hide changes" / "Show changes" and "Whole text" / "Fixes only": pencil toggles a fingertip can still hit. */
 	@media (pointer: coarse) {
 		.view-toggle {
 			min-height: var(--touch-target);

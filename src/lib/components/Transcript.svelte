@@ -21,6 +21,8 @@
 		changedWords?: ReadonlySet<number>;
 		/** Words the correct version drops, as said, by the word index they stood before (the word count: after the last word). */
 		removedBefore?: ReadonlyMap<number, string>;
+		/** Words a fix replaces, as said, by the index of the fix's first word. */
+		replacedBefore?: ReadonlyMap<number, string>;
 		corrections?: Correction[];
 		/** Correction highlighted in the feedback panel, if any. */
 		activeCorrectionId?: string | null;
@@ -40,6 +42,7 @@
 		excerpt,
 		changedWords,
 		removedBefore,
+		replacedBefore,
 		corrections = [],
 		activeCorrectionId = null,
 		onSelect,
@@ -253,9 +256,17 @@
 		return Boolean(before && after && isChanged(before) && isChanged(after));
 	}
 
-	/** The words dropped right before this word, if any. */
-	function droppedBefore(token: Token): string | undefined {
-		return token.wordIndex === undefined ? undefined : removedBefore?.get(token.wordIndex);
+	/**
+	 * What the learner said right before this word that the correct version
+	 * does not keep: words it drops, then the words this fix replaces.
+	 */
+	function saidBefore(token: Token): string | undefined {
+		if (token.wordIndex === undefined) return undefined;
+
+		const dropped = removedBefore?.get(token.wordIndex);
+		const replaced = replacedBefore?.get(token.wordIndex);
+		const said = [dropped, replaced].filter(Boolean).join(' ');
+		return said || undefined;
 	}
 
 	/** The words dropped after this one, the last of the text. */
@@ -276,10 +287,10 @@
 >
 	{#each shown.tokens as token, offset (shown.from + offset)}
 		{@const index = shown.from + offset}
-		{@const dropped = droppedBefore(token)}
+		{@const struck = saidBefore(token)}
 		{@const droppedAtEnd = droppedAfter(token)}
 		<!-- No whitespace between the tags here: the text keeps it (pre-wrap), so a line break would add a space. -->
-		{#if dropped}<del class="dropped-words">{dropped}</del>{' '}{/if}{#if token.word && token.correctionId}
+		{#if struck}<del class="said-words">{struck}</del>{' '}{/if}{#if token.word && token.correctionId}
 			<button
 				type="button"
 				data-word-index={token.wordIndex}
@@ -325,7 +336,7 @@
 				}}>{token.text}</span
 			>
 		{:else}<span class:marked={isMarked(index)} class:changed-gap={isInsideChange(index)}>{token.text}</span>{/if}{#if droppedAtEnd}{' '}<del
-				class="dropped-words">{droppedAtEnd}</del
+				class="said-words">{droppedAtEnd}</del
 			>{/if}
 	{/each}
 </span>
@@ -431,11 +442,12 @@
 	}
 
 	/*
-	 * Words the correct version drops, with nothing in their place: shown
-	 * where they were said, struck through, small and quiet, so the passage
-	 * says what to leave out (a bare mark left the learner guessing what).
+	 * Words the learner said that the correct version does not keep, dropped
+	 * or replaced by the fix after them: shown where they were said, struck
+	 * through, small and quiet, so the passage says what changed (a bare mark
+	 * left the learner guessing what).
 	 */
-	.dropped-words {
+	.said-words {
 		font-size: 0.88em;
 		color: color-mix(in srgb, var(--error) 80%, var(--muted-foreground));
 		text-decoration: line-through;
