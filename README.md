@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="brand-assets/app-icon-tile.svg" width="120" height="120" alt="onspot app icon: a spotlight shining on a sound wave">
-
-# onspot
+# <img src="brand-assets/app-icon-tile.svg" width="52" height="52" align="absmiddle" alt="onspot app icon: a spotlight shining on a sound wave"> onspot
 
 ### The language learning app that makes you *speak*, then coaches you like a teacher.
 
