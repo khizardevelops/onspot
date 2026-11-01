@@ -74,6 +74,11 @@ learner's settings loaded) and stops at the next piece when no longer allowed (`
 `processPcm` caps clips at -1 dBFS (`PEAK_CEILING`): the compressor-based limiter let stored
 clips peak ~1.2; now ~0.85–0.88.
 
+**Pushed 2026-11-01 (user request):** `main` = `feature/language-delivery-mode` at 73cda9e. CI all
+green: GitHub Pages (build + deploy), Android APK, and a manual Desktop release run on main
+(41289629260: verify, Linux incl. the AppImage checks on Ubuntu and Arch, macOS with the 10.15
+minimum, Windows, Flatpak). No tag, so nothing was published; the next `v*` tag publishes all of it.
+
 **README screenshots (2026-11-01, user request):** `docs/screenshots/` holds practice, phone (two
 screens side by side, transparent gap) and History, dark and light; the old-UI French and Japanese
 shots were removed. Made from real takes through the app (on-device French voice reading French with
