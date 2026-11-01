@@ -12,8 +12,17 @@
 	 * Where the page caps its width (`--feedback-max-width`, desktop Practice),
 	 * the panel reports how narrow it can be without its toolbar or cards laying
 	 * out differently (`contentWidth`), so the page can give the takes the rest.
+	 *
+	 * Below desktop the panel is a sheet from the bottom of the screen, and on
+	 * touch screens it is swiped like one: down from its grip or toolbar (or from
+	 * the list once it is scrolled to the top) to close it, down on the stats to
+	 * put them away, and sideways across the cards for the next or previous
+	 * severity filter.
 	 */
 	import { quickCollapse } from '#lib/neo.js';
+	import { SwipeToDismiss } from '#lib/gestures/swipeToDismiss.js';
+	import { SwipeBetweenTabs, type TabStep } from '#lib/gestures/swipeBetweenTabs.js';
+	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 	import { untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
@@ -66,6 +75,8 @@
 		 * maximum (phones and tablets, where the panel spans the window).
 		 */
 		contentWidth?: number | null;
+		/** How far a swipe has taken the sheet towards closing, 0 to 1, so the page can fade what is behind it. */
+		onSwipeProgress?: (progress: number) => void;
 	}
 
 	let {
@@ -74,7 +85,8 @@
 		activeCorrectionId = null,
 		stats,
 		onSelectCorrection,
-		contentWidth = $bindable(null)
+		contentWidth = $bindable(null),
+		onSwipeProgress
 	}: Props = $props();
 	let filter = $state<Filter>('all');
 	let expandedId = $state<string | null>(null);
@@ -263,6 +275,59 @@
 		return mustGrow || shrinkIsWorthwhile ? neededWidth : contentWidth;
 	}
 
+	/*
+	 * Swipes (touch screens). The panel is a sheet below desktop, in step with
+	 * the Practice page's layout; on desktop it is a sidebar with its own close
+	 * button and bookmark.
+	 */
+	const SHEET_LAYOUT_QUERY = '(max-width: 1023px)';
+
+	let statsSheet = $state<HTMLElement>();
+
+	$effect(() => {
+		if (!shell) return;
+		const sheetSwipe = new SwipeToDismiss({
+			direction: 'down',
+			surface: () => shell,
+			scroller: () => list,
+			enabled: () => open && matchMedia(SHEET_LAYOUT_QUERY).matches,
+			onDismiss: () => (open = false),
+			onProgress: (progress) => onSwipeProgress?.(progress)
+		});
+		return sheetSwipe.listen(shell);
+	});
+
+	$effect(() => {
+		if (!statsSheet) return;
+		const statsSwipe = new SwipeToDismiss({
+			direction: 'down',
+			surface: () => statsSheet,
+			enabled: () => statsOpen,
+			onDismiss: () => (statsOpen = false)
+		});
+		return statsSwipe.listen(statsSheet);
+	});
+
+	$effect(() => {
+		if (!list) return;
+		const filterSwipe = new SwipeBetweenTabs(stepSeverityFilter, () => (attempt?.corrections.length ?? 0) > 0);
+		return filterSwipe.listen(list);
+	});
+
+	/** The next or previous severity filter; from a by-type filter, back to all feedback. */
+	function stepSeverityFilter(step: TabStep): void {
+		const index = SEVERITY_FILTERS.findIndex((option) => option.id === filter);
+		if (index === -1) {
+			filter = 'all';
+			return;
+		}
+		const next = SEVERITY_FILTERS[index + step];
+		if (next) filter = next.id;
+	}
+
+	// Android Back puts the stats away before it closes the panel.
+	closeOnBack(() => statsOpen, () => (statsOpen = false));
+
 	/** The header's name opens the filter by type (grammar, register, …). */
 	const filterItems = $derived<NeoMenuItem[]>([
 		{ value: 'all', label: 'All feedback', after: filterCount, divider: { bottom: true } },
@@ -318,6 +383,8 @@
 			actions, all the same height on one line.
 		-->
 		<header class="feedback-paper" data-keep-layout>
+			<!-- The sheet's grip (below desktop): swiping down from it, or anywhere on the toolbar, closes the sheet. -->
+			<span class="sheet-grip" aria-hidden="true"></span>
 			<PopMenu items={filterItems} bind:open={filterMenuOpen} placement="bottom-start" onSelect={onFilterSelect} rounded>
 				<button type="button" class="filter-name" aria-label={`Showing ${FILTER_LABEL[filter]}. Filter by type`} aria-expanded={filterMenuOpen}>
 					<ListFilter class="filter-name-icon size-4 shrink-0" />
@@ -478,7 +545,7 @@
 		</div>
 
 		<!-- Takes no room until asked for; then it slides up over the bottom of the list. -->
-		<section id="session-stats" class="stats-sheet" class:open={statsOpen} aria-label="Session stats" inert={!statsOpen}>
+		<section id="session-stats" class="stats-sheet" class:open={statsOpen} aria-label="Session stats" inert={!statsOpen} bind:this={statsSheet}>
 			<div class="stats-header">
 				<span>Session stats</span>
 				<button type="button" class="stats-close" aria-label="Hide session stats" onclick={() => (statsOpen = false)}>
@@ -637,6 +704,27 @@
 	@media (pointer: coarse) {
 		.feedback-paper {
 			--toolbar-height: var(--touch-target, 36px);
+		}
+	}
+
+	/* The sheet's grip, drawn like the stats sheet's; only where the panel is a sheet. */
+	.sheet-grip {
+		display: none;
+	}
+	@media (max-width: 1023px) {
+		.feedback-paper {
+			padding-top: 1rem;
+		}
+		.sheet-grip {
+			display: block;
+			position: absolute;
+			top: 6px;
+			left: 50%;
+			width: 36px;
+			height: 4px;
+			border-radius: 3px;
+			background-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+			transform: translateX(-50%);
 		}
 	}
 
@@ -879,6 +967,8 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
+		/* Pulling down at the top swipes the sheet; it must not also scroll the page behind it. */
+		overscroll-behavior: contain;
 		padding: 0.5rem 0.875rem 1.5rem var(--content-start);
 		scrollbar-width: thin;
 		transition: padding-bottom 0.3s ease;

@@ -107,6 +107,8 @@
 	let feedbackContentWidth = $state<number | null>(null);
 	/** That width as the `--feedback-content-width` the grid and the bookmark are sized by (none: the maximum). */
 	const feedbackContentWidthStyle = $derived(feedbackContentWidth === null ? undefined : `${feedbackContentWidth}px`);
+	/** How far a swipe has taken the Feedback sheet towards closing (0 to 1); the shade behind it fades with it. */
+	let feedbackSwipeProgress = $state(0);
 	/** The session's paper timeline; on phones it opens from a button in the top bar. */
 	let timelineOpen = $state(false);
 	/** Phone layout: Feedback and the timeline open from the top bar, and the mode moves into the session menu. */
@@ -544,9 +546,15 @@
 
 	</section>
 
-	<!-- Phones: Feedback opens as a sheet over the page; tapping outside closes it. -->
+	<!-- Phones: Feedback opens as a sheet over the page; tapping outside or swiping it down closes it, and the shade lifts as it goes. -->
 	{#if coachOpen}
-		<button type="button" class="coach-scrim" aria-label="Close feedback" onclick={() => (coachOpen = false)}></button>
+		<button
+			type="button"
+			class="coach-scrim"
+			aria-label="Close feedback"
+			style:opacity={1 - feedbackSwipeProgress}
+			onclick={() => (coachOpen = false)}
+		></button>
 	{/if}
 	<FeedbackPanel
 		attempt={active}
@@ -555,6 +563,7 @@
 		bind:open={coachOpen}
 		bind:contentWidth={feedbackContentWidth}
 		onSelectCorrection={selectCorrection}
+		onSwipeProgress={(progress) => (feedbackSwipeProgress = progress)}
 	/>
 
 	<!--

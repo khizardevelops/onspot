@@ -13,8 +13,10 @@
  * Touch screens have no platform text selection at all (app.css turns it
  * off: its handles and Cut/Copy menu got in the way). There a long press and
  * drag selects words the app's own way (`TouchWordSelection`), reported as a
- * word range rather than made in the document.
+ * word range rather than made in the document. A finger that moves past the
+ * touch slop before the long press is scrolling, not selecting.
  */
+import { TOUCH_SCREEN_QUERY, TOUCH_SLOP_PX } from '#lib/gestures/touch.js';
 
 /** The transcript renders every word with its index in this attribute. */
 const WORD_SELECTOR = '[data-word-index]';
@@ -22,14 +24,8 @@ const WORD_SELECTOR = '[data-word-index]';
 /** Movement that turns a press into a drag, so a plain click still plays the word. */
 const DRAG_THRESHOLD_PX = 4;
 
-/** Touch screens, where the platform's own text selection is turned off (keep in step with app.css). */
-export const TOUCH_SCREEN_QUERY = '(hover: none) and (pointer: coarse)';
-
 /** How long a finger rests on a word before it starts selecting: Android's long-press timeout. */
 const LONG_PRESS_MS = 400;
-
-/** A finger that moves this far before the long press is scrolling, not selecting. */
-const TOUCH_SLOP_PX = 10;
 
 /** Words `start`..`end` by index, first to last. */
 export interface WordRange {

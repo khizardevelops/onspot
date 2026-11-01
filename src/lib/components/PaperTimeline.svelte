@@ -21,10 +21,12 @@
 	 * brings its card to the top of the stack.
 	 *
 	 * Touch has no hover: the first tap opens the paper, a tap on a take jumps to
-	 * it and closes it, and a tap anywhere else closes it. On phones there is no
-	 * strip at all: a button in the top bar opens the paper (`open` is bindable,
-	 * and that button carries `data-timeline-toggle`).
+	 * it and closes it, and a tap anywhere else (or a swipe towards the edge it
+	 * is taped to) closes it. On phones there is no strip at all: a button in
+	 * the top bar opens the paper (`open` is bindable, and that button carries
+	 * `data-timeline-toggle`).
 	 */
+	import { SwipeToDismiss } from '#lib/gestures/swipeToDismiss.js';
 
 	interface Props {
 		entries: TimelineEntry[];
@@ -48,6 +50,8 @@
 
 	let paper = $state<HTMLElement | null>(null);
 	let sheet = $state<HTMLElement | null>(null);
+	/** What slides: the paper with its tape and shadow. */
+	let lift = $state<HTMLElement | null>(null);
 	/** The current tap opened the paper, so the click it ends with must not also jump. */
 	let openingTap = false;
 
@@ -99,6 +103,18 @@
 		};
 	});
 
+	// The opened paper swipes back to the right-hand edge it is taped to (touch screens).
+	$effect(() => {
+		if (!sheet) return;
+		const edgeSwipe = new SwipeToDismiss({
+			direction: 'right',
+			surface: () => lift,
+			enabled: () => open,
+			onDismiss: () => (open = false)
+		});
+		return edgeSwipe.listen(sheet);
+	});
+
 	/*
 	 * The paper's height and scroll offset, kept as they change (a resize
 	 * observer and its scroll events). Reading them back from the element
@@ -144,7 +160,7 @@
 	<!-- The sheet is the hover area and never moves; only the lift inside it slides out. -->
 	<!-- svelte-ignore a11y_no_static_element_interactions (taps only open the paper; the takes are buttons) -->
 	<div class="timeline-sheet" class:open bind:this={sheet} onpointerdown={pressSheet}>
-		<div class="timeline-lift">
+		<div class="timeline-lift" bind:this={lift}>
 			<div
 				class="timeline-paper"
 				bind:this={paper}

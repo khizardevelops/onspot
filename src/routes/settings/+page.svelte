@@ -13,6 +13,7 @@
 	import UsageMonitor from '#lib/components/settings/UsageMonitor.svelte';
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
 	import AppHeader from '#lib/components/AppHeader.svelte';
+	import { SwipeBetweenTabs, type TabStep } from '#lib/gestures/swipeBetweenTabs.js';
 	import type { ProcessingTarget } from '#lib/stores/processing.js';
 
 	type TabId = 'learning' | 'usage' | 'data';
@@ -76,20 +77,43 @@
 		tab = nextTab;
 		focusTarget = null;
 	}
+
+	/*
+	 * Touch screens: a swipe sideways across the page shows the next or previous
+	 * tab. When the tabs have scrolled out of sight, the page returns to them, so
+	 * it is clear which tab is showing.
+	 */
+	let scroller = $state<HTMLElement>();
+	let tabsRow = $state<HTMLElement>();
+
+	$effect(() => {
+		if (!scroller) return;
+		const tabSwipe = new SwipeBetweenTabs(stepTab);
+		return tabSwipe.listen(scroller);
+	});
+
+	function stepTab(step: TabStep): void {
+		const next = TAB_IDS[TAB_IDS.indexOf(tab) + step];
+		if (!next) return;
+		selectTab(next);
+		if (scroller && tabsRow && tabsRow.getBoundingClientRect().top < scroller.getBoundingClientRect().top) {
+			scroller.scrollTo({ top: 0 });
+		}
+	}
 </script>
 
 <svelte:head><title>Settings · onspot</title></svelte:head>
 
 <div class="flex h-full flex-col">
 	<AppHeader title="Settings" />
-	<div class="min-h-0 flex-1 overflow-y-auto">
+	<div class="min-h-0 flex-1 overflow-y-auto" bind:this={scroller}>
 		<div class="mx-auto max-w-[760px] px-4 pt-6 pb-16 sm:px-8 sm:pt-8">
 			<p class="mb-8 max-w-xl text-sm leading-relaxed text-muted-foreground">
 				Choose Local or Cloud for speech-to-text, the LLM and text-to-speech. Keys stay in this
 				browser and are never written to the synced database.
 			</p>
 
-			<div class="settings-tabs mb-8">
+			<div class="settings-tabs mb-8" bind:this={tabsRow}>
 				<NeoTabs
 					active={tab}
 					onchange={(next) => selectTab(next === undefined ? undefined : String(next))}

@@ -16,6 +16,7 @@
 	import NeoThemeSync from '#lib/components/NeoThemeSync.svelte';
 	import WindowBar from '#lib/components/WindowBar.svelte';
 	import { currentRuntime } from '#lib/platform/runtime.js';
+	import { trackPageHistory } from '#lib/navigation/back.svelte.js';
 	import type { PaperTextureParams } from '@paper-design/shaders';
 	import { NeoThemeProvider } from '@dvcol/neo-svelte/providers';
 
@@ -24,6 +25,8 @@
 	const initialTheme = theme.current;
 	/* The desktop app draws its own title bar; the browser and the phone apps have none. */
 	const hasWindowBar = currentRuntime() === 'desktop';
+	/* Back (the header's and Android's) returns to the previous onspot page, or to Practice when there is none. */
+	trackPageHistory();
 
 	/*
 	 * Paper Shaders' paper texture, tuned to gently crumpled paper: soft crumple

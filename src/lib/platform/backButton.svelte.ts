@@ -9,6 +9,9 @@
  * (which suspends that default) and Back closes the topmost open thing. When
  * nothing is open the listener is removed and Android's normal behaviour
  * (previous page, then leave the app) returns. No-op on web and desktop.
+ *
+ * The same stack serves the header's Back button on every platform
+ * (`navigation/back.svelte.ts`), so both close the same thing first.
  */
 import { onBackButtonPress } from '@tauri-apps/api/app';
 import type { PluginListener } from '@tauri-apps/api/core';
@@ -16,13 +19,19 @@ import { currentRuntime } from './runtime';
 
 const isAndroidApp = currentRuntime() === 'android';
 
-const stack: Array<() => void> = [];
+/** Something Back can close, while it is open. */
+interface BackEntry {
+	isOpen: () => boolean;
+	close: () => void;
+}
+
+const stack: BackEntry[] = [];
 let listener: Promise<PluginListener> | null = null;
 
 function sync(): void {
 	if (!isAndroidApp) return;
 	if (stack.length && !listener) {
-		listener = onBackButtonPress(() => stack.at(-1)?.()).catch((error) => {
+		listener = onBackButtonPress(() => closeTopmost()).catch((error) => {
 			console.warn('[back] could not listen for the Back button', error);
 			listener = null;
 			return { unregister: async () => undefined } as unknown as PluginListener;
@@ -34,12 +43,28 @@ function sync(): void {
 	}
 }
 
-/** Pushes a close handler; returns a function that removes it. */
-export function pushBackHandler(close: () => void): () => void {
-	stack.push(close);
+/**
+ * Closes the most recently opened thing that is still open.
+ *
+ * An entry stays on the stack until its component has updated, so one that
+ * closed a moment ago (a menu a tap outside just put away) is skipped.
+ *
+ * @returns False when nothing was open.
+ */
+export function closeTopmost(): boolean {
+	const entry = stack.findLast((candidate) => candidate.isOpen());
+	if (!entry) return false;
+	entry.close();
+	return true;
+}
+
+/** Pushes something Back can close; returns a function that removes it. */
+export function pushBackHandler(isOpen: () => boolean, close: () => void): () => void {
+	const entry: BackEntry = { isOpen, close };
+	stack.push(entry);
 	sync();
 	return () => {
-		const index = stack.lastIndexOf(close);
+		const index = stack.lastIndexOf(entry);
 		if (index !== -1) stack.splice(index, 1);
 		sync();
 	};
@@ -52,6 +77,6 @@ export function pushBackHandler(close: () => void): () => void {
 export function closeOnBack(isOpen: () => boolean, close: () => void): void {
 	$effect(() => {
 		if (!isOpen()) return;
-		return pushBackHandler(close);
+		return pushBackHandler(isOpen, close);
 	});
 }

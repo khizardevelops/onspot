@@ -14,6 +14,7 @@
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import { ArrowLeft, ChevronRight } from '@lucide/svelte';
 	import AppHeader from '#lib/components/AppHeader.svelte';
+	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 
 	let data = $state<InsightsData | null>(null);
 	let loading = $state(true);
@@ -82,6 +83,9 @@
 		selectedKey = key;
 		scroller?.scrollTo({ top: 0 });
 	}
+
+	// Back (Android's, or the header's) leaves an open pattern for the list before it leaves the page.
+	closeOnBack(() => selected !== null, () => select(null));
 
 	const CATEGORY_LABEL: Record<string, string> = {
 		grammar: 'Grammar',

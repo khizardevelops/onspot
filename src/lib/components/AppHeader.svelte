@@ -15,6 +15,10 @@
 	 * Whenever the bar is narrow (phones, or a window shared with the Feedback
 	 * panel), the navigation folds into one menu so the page keeps the room.
 	 * On phones the bar sits at the bottom of the screen, under the thumb.
+	 *
+	 * Every page but Practice starts its heading with a Back button: the
+	 * previous onspot page, or Practice when there is none (see
+	 * `navigation/back.svelte.ts`; Android's Back does the same).
 	 */
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -22,13 +26,14 @@
 	import { asset } from '$app/paths';
 	import { page } from '$app/state';
 	import { quickTooltip } from '#lib/neo.js';
+	import { goBack, onPractice } from '#lib/navigation/back.svelte.js';
 	import { newSession } from '#lib/stores/practice.js';
 	import { theme, toggleTheme } from '#lib/stores/theme.svelte.js';
 	import PopMenu from '#lib/components/PopMenu.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
 	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
-	import { BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
+	import { ArrowLeft, BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
 
 	interface Props {
 		/** The page's name, shown as its heading. */
@@ -134,6 +139,14 @@
 
 		<span class="nav-divider shrink-0" aria-hidden="true"></span>
 
+		{#if !onPractice()}
+			<NeoTooltip tooltip="Back" placement="bottom" {...quickTooltip}>
+				<NeoButton aria-label="Back" class="back-key" rounded elevation={2} onclick={goBack}>
+					{#snippet icon()}<ArrowLeft size={16} strokeWidth={1.8} />{/snippet}
+				</NeoButton>
+			</NeoTooltip>
+		{/if}
+
 		<div class="min-w-0 flex-1">
 			{#if heading}
 				{@render heading()}
@@ -220,6 +233,19 @@
 	}
 	.app-nav :global(.neo-button.nav-key.current *) {
 		color: var(--primary);
+	}
+
+	/* Back is a key like the navigation's, before the page's heading. */
+	.app-header-row :global(.neo-button.back-key) {
+		flex-shrink: 0;
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		justify-content: center;
+		color: var(--muted-foreground);
+	}
+	.app-header-row :global(.neo-button.back-key:hover) {
+		color: var(--foreground);
 	}
 
 	.app-menu {
