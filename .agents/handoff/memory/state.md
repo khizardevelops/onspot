@@ -2,7 +2,40 @@
 
 ## Current State
 
-**Automatic model choice (2026-11-01, uncommitted):** Settings → LLM → Model defaults to
+**Every installer for x64 and ARM64 (2026-11-01, feature branch 94f072e..5b1ca79, not on main):**
+release.yml builds `windows` + `windows-arm` (.exe/.msi; ARM cross-built on windows-latest),
+`macos` (Apple Silicon) + `macos-intel` (macos-15-intel), `linux` + `linux-arm` (ubuntu-22.04-arm:
+.deb/.rpm/.AppImage with the AppImage checks; the Arch start is x64 only), and a Flatpak matrix
+(x86_64 on ubuntu-latest, aarch64 on ubuntu-24.04-arm). Windows ARM C toolchain: ggml refuses MSVC
+on ARM, and the VS generator rejected ClangCL (cmake crate adds -T host=x64), so it uses
+msvc-dev-cmd amd64_arm64 + `CC/CXX_aarch64_pc_windows_msvc=clang-cl`, `CMAKE_GENERATOR=Ninja`,
+`CMAKE_SYSTEM_NAME/PROCESSOR`, and `CXXFLAGS_aarch64_pc_windows_msvc=/EHsc` (Ninja drops CMake's
+MSVC defaults). Verified: run 41335725335 all 9 jobs green, artifacts onspot_0.2.0_{x64,arm64}
+-setup.exe / _en-US.msi, _{aarch64,x64}.dmg, _{amd64,arm64}.deb, -1.{x86_64,aarch64}.rpm,
+_{amd64,aarch64}.AppImage, _{x86_64,aarch64}.flatpak. Not run on real ARM/Intel hardware.
+
+**Hear a selection (2026-11-01, uncommitted):** a selection's meaning bubble (`WordGloss`) has a
+speaker button that reads the selected words aloud with `speakText` (target voice). Only the
+studied-language tracks pass `speak` (`AttemptCard.meaningsOf` → `Transcript`/`CorrectedPassages`);
+`MeaningLabel.words` carries the selection as written. The button keeps the selection (mouse:
+`mousedown` preventDefault; touch: taps inside `.word-gloss` don't put the finger's selection
+away). Verified: desktop drag-select → ElevenLabs request "allé à la plage", selection kept;
+phone long-press select → "mes amis. Il" played, selection kept; light and dark.
+A held selection is one unit until put away (user, 2026-11-01): hovering its words shows its meaning
+(again, after the other track's label took over), other words of that text show nothing, and a
+click/tap on its words keeps it and shows its meaning without playing a word
+(`TranscriptMeanings.holdsWord`/`reshowSelectionAt`, `WordDragSelection` `keepsSelection`, the
+touch put-away skips its words). Speaker is a 13 px icon in a 20 px button (36 px invisible tap
+area on touch), so the bubble is only as wide as the meaning plus the icon. Verified desktop and
+phone step by step (unit-check.mjs in the old readme-shots scratch folder).
+The selection's bubble takes the pointer (`holds-pointer`) with an invisible bridge over the 6 px
+gap on the side it opened, and pressing it keeps the selection (mousedown preventDefault on the
+bubble), so the pointer can travel from the words to the speaker (checked in Chromium and Firefox
+by a 1 px mouse walk; could not reproduce a despawn in either before the change).
+Feedback bookmark, dark mode: darker kraft (`#4f412b`), faint glow/crease, icon at full opacity;
+worst-spot contrast 2.7:1 → 5.8:1 (pixels at 4x, glyph edges excluded). Light unchanged.
+
+**Automatic model choice (2026-11-01, committed 699079b):** Settings → LLM → Model defaults to
 Automatic (`AUTOMATIC_MODEL = 'auto'`); `stores/llm.ts` resolves it to `automaticModels(provider,
 level)` (fallbacks = the rest), `pacing.ts` picks by preference + room (`hasExpectedRoom`:
 known Groq limits for the detected plan, live/ledger daily use). `groqPlanOf`/`GROQ_HOST`/
@@ -14,7 +47,7 @@ reload); one real Groq call through Automatic (120B, 102 tokens); no banner; Set
 390 px. "Did you mean" Show/Hide changes toggle done by a parallel agent (verified light/dark,
 1280/390, all four states).
 
-**Desktop title bar + AppImage resize fix (2026-11-01, uncommitted):** the system title bar is off
+**Desktop title bar + AppImage resize fix (2026-11-01, committed 30d0070):** the system title bar is off
 on Windows/Linux (`decorations: false`); `components/WindowBar.svelte` (only when `currentRuntime()`
 is `desktop`) is a 28 px bar of page paper with minimise/maximise-restore/close, a drag region and
 double-click to maximise; `main.under-window-bar` is `100dvh - --window-bar-height`. macOS:

@@ -1,5 +1,10 @@
 # Tasks
 
+## Every installer on x64 and ARM64 (2026-11-01)
+- [x] release.yml: Intel Mac, ARM Linux (+ Flatpak), ARM Windows (.exe + .msi); test run green.
+- [ ] Merge to main and tag a release so the new installers are published (user to decide).
+- [ ] Try the ARM and Intel builds on real hardware (none here).
+
 ## Automatic model choice + "Did you mean" changes toggle (2026-11-01)
 - [x] Automatic (default) by languages, request size, per-minute and daily limits; verified (state.md).
 - [x] Show/Hide changes in "Did you mean to say?".
@@ -7,7 +12,12 @@
   levels in `AUTOMATIC_MODELS` are a judgement); consider Compound (70K TPM) once its JSON output
   is checked.
 - [ ] Phone: the "Did you mean to say?" label wraps to two lines beside the two links.
-- [ ] Commit with the title bar work once the user has tried both.
+- [x] Committed and pushed (30d0070..2742281); no tag yet.
+- [x] Speaker button in a selection's meaning bubble (uncommitted; verified desktop + phone).
+- [x] A held selection behaves as one unit for hover, click and tap; smaller speaker (uncommitted).
+- [x] Pointer bridge from a selection to its bubble; readable dark-mode Feedback bookmark (uncommitted).
+- [ ] User saw the selection bubble vanish while moving down to it; not reproduced in Chromium or
+  Firefox. If it still happens, find out where (browser or desktop app/WebKitGTK).
 
 ## Desktop title bar + AppImage resize (2026-11-01)
 - [x] Own thin title bar (WindowBar), `decorations: false`, macOS overlay traffic lights; AppImage

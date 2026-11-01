@@ -20,7 +20,8 @@
   maximise/restore glitch = bundled old GTK on Wayland → X11 inside AppImages. Custom thin title bar
   (WindowBar). Both uncommitted, waiting for the user's hands-on check (tasks.md).
 - **Then:** Automatic model choice (decisions.md) and the "Did you mean" Show/Hide changes
-  toggle (parallel agent). All uncommitted.
+  toggle (parallel agent); committed and pushed with the title bar. Then a speaker button in the
+  selection meaning bubble (uncommitted).
 - **Tooling that worked:** KWin scripting over `qdbus6 org.kde.KWin /Scripting` (absolute script
   paths; `print` lands in the user journal) to maximise/restore/raise windows without focus, and
   `spectacle -b -n -f` (captures at 2x; DP-1 0,0 and DP-2 1920,0 are 1920x1080). xdotool input is
