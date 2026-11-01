@@ -2,11 +2,14 @@
 
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { get } from 'svelte/store';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { practice, setActiveAttempt } from '#lib/stores/practice.js';
 	import AttemptCard from './AttemptCard.svelte';
 	import PaperTimeline, { type TimelineEntry } from './PaperTimeline.svelte';
 	import {
 		cardPose,
+		isWithinReach,
 		lockedCard,
 		restingOn,
 		restsOn,
@@ -29,6 +32,11 @@
 	 * Takes run up to five minutes, so a card can be taller than the stage: it
 	 * is capped to the stage and, while it rests on top, scrolls inside itself;
 	 * the stack only moves on once the card has been read to its end.
+	 *
+	 * Only the cards within reach of the top of the pile are built with the
+	 * page; the rest, out of sight deeper down, are built one per idle moment
+	 * after it has shown (see `builtCards`), so opening a long session does not
+	 * wait for every take in it.
 	 */
 
 	interface Props {
@@ -55,9 +63,16 @@
 	const MOVE_BASE_MS = 240;
 	const MOVE_PER_CARD_MS = 45;
 	const MOVE_MAX_MS = 650;
+	/** The newest card rests at the very top of the scroll (see `stackPosition`). */
+	const NEWEST_SCROLL_TOP = 0;
+	/** Out-of-sight cards are built when the browser is idle, waiting at most this long for it. */
+	const IDLE_TIMEOUT_MS = 1000;
+	/** Where there is no idle callback, the next card is built after this pause instead. */
+	const IDLE_FALLBACK_DELAY_MS = 50;
 
 	let stage = $state<HTMLDivElement | null>(null);
-	let stack = $state<StackPosition>(restingOn(0));
+	/** The stack starts on the newest take, so the cards around it are the ones built first. */
+	let stack = $state<StackPosition>(restingOn(Math.max(0, get(practice).attempts.length - 1)));
 	/** The card the stack last locked onto: where a scroll gesture started. */
 	let restedOn = 0;
 	/** A finger or mouse button is on the stage: the stack must not move under it. */
@@ -72,6 +87,56 @@
 	let reducedMotion = false;
 
 	const poses = $derived(attempts.map((_, index) => cardPose(index, stack)));
+
+	// ------------------------------------------------------------ Building the cards
+
+	/** Takes whose card has been built; a built card stays built. */
+	const builtCards = new SvelteSet<string>();
+	let idleBuild: number | ReturnType<typeof setTimeout> | null = null;
+
+	/** Runs `callback` when the browser is idle (WebKitGTK has no requestIdleCallback; a short timer stands in). */
+	function whenIdle(callback: () => void): number | ReturnType<typeof setTimeout> {
+		if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback, { timeout: IDLE_TIMEOUT_MS });
+		return setTimeout(callback, IDLE_FALLBACK_DELAY_MS);
+	}
+
+	/** Stops building the remaining cards (the stack is going away). */
+	function cancelIdleBuild() {
+		if (idleBuild === null) return;
+		if (typeof cancelIdleCallback === 'function') cancelIdleCallback(idleBuild as number);
+		else clearTimeout(idleBuild);
+		idleBuild = null;
+	}
+
+	/** The take whose card is not built yet that is nearest the top of the pile. */
+	function nearestUnbuiltCard(): string | undefined {
+		let nearest: { id: string; distance: number } | undefined;
+		attempts.forEach((attempt, index) => {
+			if (builtCards.has(attempt.id)) return;
+			const distance = Math.abs(index - stack.closestIndex);
+			if (!nearest || distance < nearest.distance) nearest = { id: attempt.id, distance };
+		});
+		return nearest?.id;
+	}
+
+	/** Builds the cards still missing, one per idle moment, nearest the top first. */
+	function buildRemainingCardsWhenIdle() {
+		if (idleBuild !== null) return;
+		idleBuild = whenIdle(() => {
+			idleBuild = null;
+			const next = nearestUnbuiltCard();
+			if (next === undefined) return;
+			builtCards.add(next);
+			buildRemainingCardsWhenIdle();
+		});
+	}
+
+	// Cards coming within reach are built at once (and stay built).
+	$effect(() => {
+		attempts.forEach((attempt, index) => {
+			if (isWithinReach(index, stack)) builtCards.add(attempt.id);
+		});
+	});
 
 	const timelineEntries = $derived<TimelineEntry[]>(
 		attempts.map((attempt, index) => ({ id: attempt.id, take: index + 1, text: attempt.transcript }))
@@ -220,6 +285,11 @@
 		return Math.min(MOVE_MAX_MS, MOVE_BASE_MS + MOVE_PER_CARD_MS * Math.abs(cards));
 	}
 
+	/** Scrolls the stage back to the newest card, if another session had left it lower (one frame later, once laid out). */
+	function scrollToNewest() {
+		if (stage && stage.scrollTop !== NEWEST_SCROLL_TOP) stage.scrollTop = NEWEST_SCROLL_TOP;
+	}
+
 	/**
 	 * Puts the newest take on top: dropped onto the pile when it was just
 	 * recorded, at once when a session opens.
@@ -231,10 +301,12 @@
 
 		if (!drop || newestIndex === 0) {
 			cancelAnimatedScroll();
-			stage.scrollTop = scrollTopForCard(newestIndex, attempts.length, scrollRange());
-			updateStack();
+			// The newest card rests at the top of the scroll, so nothing here has to be measured:
+			// reading the stage's size now would force a layout of every card while the page is still being built.
+			stack = restingOn(newestIndex);
 			restedOn = newestIndex;
 			setActiveAttempt(attempts[newestIndex].id);
+			requestAnimationFrame(scrollToNewest);
 			return;
 		}
 
@@ -281,18 +353,23 @@
 
 		knownSessionId = $practice.sessionId;
 		knownLastAttemptId = attempts.at(-1)?.id ?? null;
-		void showNewest(false).then(() => (initialized = true));
+		void showNewest(false).then(() => {
+			initialized = true;
+			buildRemainingCardsWhenIdle();
+		});
 
 		return () => {
 			reducedMotionQuery.removeEventListener('change', handleMotionPreference);
 			resizeObserver.disconnect();
 			for (const type of releaseEvents) window.removeEventListener(type, release);
 			cancelAnimatedScroll();
+			cancelIdleBuild();
 			if (settleTimer) clearTimeout(settleTimer);
 		};
 	});
 
-	$effect(() => {
+	// Before the cards render: another session's cards are built around its newest take, not around the old position.
+	$effect.pre(() => {
 		const sessionId = $practice.sessionId;
 		const lastAttemptId = attempts.at(-1)?.id ?? null;
 		if (!initialized) return;
@@ -300,7 +377,9 @@
 		if (sessionId !== knownSessionId) {
 			knownSessionId = sessionId;
 			knownLastAttemptId = lastAttemptId;
-			void showNewest(false);
+			builtCards.clear();
+			stack = restingOn(Math.max(0, attempts.length - 1));
+			void showNewest(false).then(buildRemainingCardsWhenIdle);
 			return;
 		}
 
@@ -329,6 +408,7 @@
 				{#each attempts as attempt, index (attempt.id)}
 					{@const pose = poses[index]}
 					{@const onTop = index === stack.closestIndex}
+					{@const built = builtCards.has(attempt.id) || isWithinReach(index, stack)}
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 					<div
 						data-attempt-id={attempt.id}
@@ -357,13 +437,15 @@
 						<span class="card-tape" class:leans-right={index % 2 === 1} aria-hidden="true"></span>
 						<!-- Only the card on top can be read and used; the pile below just shows. -->
 						<div class="stack-card-body" class:resting={restsOn(stack, index)} inert={!onTop}>
-							<AttemptCard
-								{attempt}
-								index={index + 1}
-								active={attempt.id === $practice.activeAttemptId}
-								{activeCorrectionId}
-								{onSelectCorrection}
-							/>
+							{#if built}
+								<AttemptCard
+									{attempt}
+									index={index + 1}
+									active={attempt.id === $practice.activeAttemptId}
+									{activeCorrectionId}
+									{onSelectCorrection}
+								/>
+							{/if}
 						</div>
 					</div>
 				{/each}

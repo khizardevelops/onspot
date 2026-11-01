@@ -2,7 +2,16 @@
 
 import { chatCompletion, stripThinking } from './client';
 import { repairJson } from './jsonRepair';
-import { buildEvaluationMessages, isCategory, isExamStatus, isSeverity } from './prompt';
+import {
+	buildEvaluationMessages,
+	isCategory,
+	isExamStatus,
+	isSeverity,
+	MAX_VOCABULARY_SUGGESTIONS,
+	type EvaluationPart
+} from './prompt';
+import { EXPLANATION_MAX_MISTAKES } from './explanation';
+import { sentenceChunks } from '#lib/utils/textChunks.js';
 import {
 	composeExplanation,
 	formatExplanation,
@@ -13,7 +22,6 @@ import {
 } from './explanation';
 import { sameWords } from '#lib/utils/words.js';
 import { MAX_EVALUATION_TOKENS } from '../../config';
-import { TRANSLATION_SET_VERSION, type TranslationSet } from '../db/types';
 import type {
 	ConnectorSuggestion,
 	EvaluationCorrection,
@@ -161,27 +169,6 @@ export function normalizeEvaluation(raw: unknown, transcript: string, language?:
 		? r.connectors.map(mapConnector).filter((c): c is ConnectorSuggestion => c !== null)
 		: [];
 
-	const rawTranslations = (r.translations ?? {}) as Record<string, unknown>;
-	// Backwards compatibility: an older response may carry a single `translation`.
-	const idiomatic = asString(rawTranslations.idiomatic) || asString(r.translation);
-	const literal = asString(rawTranslations.literal);
-	const wordForWord = asString(rawTranslations.wordForWord);
-	// None when they were not asked for. An incomplete set stays readable, but
-	// versionless, so choosing a translation view repairs it with the dedicated prompt.
-	const translations: TranslationSet | null = !idiomatic
-		? null
-		: {
-				version: literal && wordForWord ? TRANSLATION_SET_VERSION : undefined,
-				idiomatic,
-				idiomaticVariants: asStringArray(rawTranslations.idiomaticVariants)
-					.map((value) => value.trim())
-					.filter((value, index, values) => value && value !== idiomatic && values.indexOf(value) === index)
-					.slice(0, 2),
-				literal: literal || idiomatic,
-				wordForWord: wordForWord || idiomatic,
-				wordBreakdown: []
-			};
-
 	const correctedText = asString(r.correctedText).trim() || transcript;
 	const { explanation, followUp } = explanationAndFollowUp(r.explanation, r.followUp);
 
@@ -208,7 +195,6 @@ export function normalizeEvaluation(raw: unknown, transcript: string, language?:
 		correctedText,
 		explanation,
 		followUp,
-		translations,
 		corrections,
 		vocabulary,
 		connectors
@@ -216,8 +202,28 @@ export function normalizeEvaluation(raw: unknown, transcript: string, language?:
 }
 
 /**
+ * Words of a take checked in one request. The reply holds the whole correct
+ * version and every correction, so a longer take (a five-minute answer is
+ * about 700 words) would not fit `MAX_EVALUATION_TOKENS`; it is checked in
+ * parts of whole sentences instead, sent together and paced by the
+ * rate-limit pacing. The shared instructions are the same for every part, so
+ * the provider serves them from its cache.
+ */
+const EVALUATION_PART_WORDS = 260;
+
+/**
+ * How long feedback waits for the learner's own model before a fallback
+ * takes it: long enough for any per-minute allowance to refill. The fallbacks
+ * are weaker at this job (GPT-OSS 20B missed corrections and broke its JSON
+ * on a long take, 2026-11-01), so they only step in when the learner's model
+ * is out for longer, e.g. its daily allowance is used up.
+ */
+const EVALUATION_PATIENCE_MS = 45_000;
+
+/**
  * Sends a transcript to the configured LLM and returns a structured evaluation.
- * Throws with a readable message on transport, auth or parse failure.
+ * A long take is checked in parts (`EVALUATION_PART_WORDS`) whose replies are
+ * joined into one. Throws with a readable message on transport, auth or parse failure.
  */
 export async function evaluateAttempt(request: EvaluationRequest): Promise<EvaluationResult> {
 	// Silence (or a mic that captured nothing) transcribes to "". Sending that
@@ -225,10 +231,58 @@ export async function evaluateAttempt(request: EvaluationRequest): Promise<Evalu
 	if (!request.transcript.trim()) {
 		throw new Error('No speech was recognised in that take. Check your microphone and try again.');
 	}
-	const raw = await chatCompletion(request.endpoint, buildEvaluationMessages(request), {
-		json: true,
-		maxTokens: request.maxTokens ?? MAX_EVALUATION_TOKENS,
-		signal: request.signal
-	});
-	return normalizeEvaluation(extractJson(raw), request.transcript, request.language);
+
+	const parts = sentenceChunks(request.transcript, EVALUATION_PART_WORDS).map((span) =>
+		request.transcript.slice(span.start, span.end)
+	);
+	const ask = async (transcript: string, part?: EvaluationPart) => {
+		const raw = await chatCompletion(request.endpoint, buildEvaluationMessages({ ...request, transcript }, part), {
+			json: true,
+			maxTokens: request.maxTokens ?? MAX_EVALUATION_TOKENS,
+			signal: request.signal,
+			patienceMs: EVALUATION_PATIENCE_MS
+		});
+		return extractJson(raw);
+	};
+
+	if (parts.length <= 1) return normalizeEvaluation(await ask(request.transcript), request.transcript, request.language);
+
+	const replies = await Promise.all(parts.map((transcript, index) => ask(transcript, { number: index + 1, count: parts.length })));
+	return normalizeEvaluation(joinPartReplies(replies, parts), request.transcript, request.language);
+}
+
+/** Takes one item from each list in turn: the first of every list, then the second, and so on. */
+function interleave<T>(lists: T[][]): T[] {
+	const longest = Math.max(0, ...lists.map((list) => list.length));
+	return Array.from({ length: longest }, (_, position) =>
+		lists.flatMap((list) => (position < list.length ? [list[position]] : []))
+	).flat();
+}
+
+/**
+ * Joins the raw replies for the parts of a long take into the reply for the
+ * whole: the correct versions and corrections in order, the opening note of
+ * the first part, the explanation's mistakes taken from every part in turn
+ * (so they span the take), and the follow-up question of the last part.
+ *
+ * @param replies The parsed reply of each part, in order.
+ * @param parts Each part's transcript, standing in for a part whose reply lacks a correct version.
+ */
+function joinPartReplies(replies: unknown[], parts: string[]): Record<string, unknown> {
+	const records = replies.map((reply) => (reply && typeof reply === 'object' ? (reply as Record<string, unknown>) : {}));
+	const listOf = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+	const explanations = records.map((record) => (record.explanation ?? {}) as Record<string, unknown>);
+
+	return {
+		spokenLanguage: records.map((record) => asString(record.spokenLanguage)).find(Boolean) ?? '',
+		correctedText: records.map((record, index) => asString(record.correctedText).trim() || parts[index]).join(' '),
+		explanation: {
+			note: explanations.map((explanation) => asString(explanation.note)).find(Boolean) ?? '',
+			mistakes: interleave(explanations.map((explanation) => listOf(explanation.mistakes))).slice(0, EXPLANATION_MAX_MISTAKES)
+		},
+		followUp: [...records].reverse().find((record) => record.followUp)?.followUp ?? null,
+		corrections: records.flatMap((record) => listOf(record.corrections)),
+		vocabulary: interleave(records.map((record) => listOf(record.vocabulary))).slice(0, MAX_VOCABULARY_SUGGESTIONS),
+		connectors: records.flatMap((record) => listOf(record.connectors))
+	};
 }

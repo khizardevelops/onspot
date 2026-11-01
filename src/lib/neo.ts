@@ -48,8 +48,20 @@ export const onScreen: UseFloatingOptions = {
 	]
 };
 
-/** Menus open on click only (see PopMenu). Their overlay uses neo's CSS fade, capped in app.css. */
-export const quickMenu = { openOnHover: false, openOnFocus: false, openOnClick: true } as const;
+/**
+ * Menus open on click only (see PopMenu), and exist only while open. NeoMenu
+ * keeps a closed menu in the page by default, hidden: every take card carried
+ * three (21 on a six-take Practice page), each a full list of neo items that
+ * floating-ui also positioned while the page was being built, so every
+ * position read forced a layout in the middle of mounting.
+ */
+export const quickMenu = {
+	openOnHover: false,
+	openOnFocus: false,
+	openOnClick: true,
+	unmountOnClose: true,
+	...quickPop
+} as const;
 
 /**
  * Submenus (e.g. Read-back voice). NeoMenu hands its own tooltip settings down

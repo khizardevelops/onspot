@@ -7,13 +7,16 @@
 	 * question. The question's translation stays hidden until the learner asks
 	 * for it, so they try to understand it in the target language first.
 	 * Highlighted spans are in the target language, so they carry its `lang` and
-	 * the serif face the app uses for target-language text.
+	 * the serif face the app uses for target-language text. The question's words
+	 * show their meanings and can be selected like a transcript's.
 	 */
+	import type { ComponentProps } from 'svelte';
 	import { quickCollapse } from '#lib/neo.js';
-	import { separateFollowUp, type FollowUp } from '#lib/adapters/llm/index.js';
+	import { separateFollowUp } from '#lib/adapters/llm/index.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { Loader2, Pause, Volume2 } from '@lucide/svelte';
+	import Transcript from './Transcript.svelte';
 
 	/** Playback of the follow-up question on its own, so it can be heard again without the whole explanation. */
 	interface FollowUpAudio {
@@ -22,20 +25,36 @@
 		onToggle: () => void;
 	}
 
+	/** Where the question's word meanings come from, as `Transcript` takes them. */
+	type QuestionMeanings = Pick<ComponentProps<typeof Transcript>, 'glosses' | 'requestGlosses' | 'requestPhrase'>;
+
 	interface Props {
-		/** Explanation markup (see `adapters/llm/explanation.ts`). */
+		/** Explanation markup (see `adapters/llm/explanation.ts`); an older take's `<ask>` question is left out of it. */
 		markup: string;
-		/** The follow-up question and its translation; older takes carry the question in `markup`. */
-		followUp: FollowUp | null;
+		/** The follow-up question in the target language (see `followUpQuestion`), or empty. */
+		question: string;
+		/** The question in the language of instruction, revealed on request; empty when there is none. */
+		translation: string;
 		/** BCP 47 locale of the target language, e.g. `fr`. */
 		targetLocale: string;
 		/** Name of the language of instruction, e.g. `English`, for the reveal button. */
 		instructionLanguage: string;
 		followUpAudio?: FollowUpAudio;
+		/** Hover meanings and selection translations for the question; without them it is plain text. */
+		questionMeanings?: QuestionMeanings;
 		class?: string;
 	}
 
-	let { markup, followUp, targetLocale, instructionLanguage, followUpAudio, class: className = '' }: Props = $props();
+	let {
+		markup,
+		question,
+		translation,
+		targetLocale,
+		instructionLanguage,
+		followUpAudio,
+		questionMeanings,
+		class: className = ''
+	}: Props = $props();
 
 	const followUpButtonLabel = $derived.by(() => {
 		if (followUpAudio?.loading) return 'Preparing the follow-up question';
@@ -43,8 +62,6 @@
 	});
 
 	const explanation = $derived(separateFollowUp(markup));
-	const question = $derived(followUp?.question || explanation.askedQuestion);
-	const translation = $derived(followUp?.translation ?? '');
 
 	let showTranslation = $state(false);
 </script>
@@ -88,7 +105,9 @@
 					</button>
 				{/if}
 			</div>
-			<p class="follow-up-question {className}" lang={targetLocale}>{question}</p>
+			<p class="follow-up-question {className}" lang={targetLocale}>
+				{#if questionMeanings}<Transcript text={question} {...questionMeanings} />{:else}{question}{/if}
+			</p>
 			{#if translation}
 				<NeoCollapse transition={quickCollapse} open={showTranslation}>
 					<p class="follow-up-translation {className}" dir="auto">{translation}</p>

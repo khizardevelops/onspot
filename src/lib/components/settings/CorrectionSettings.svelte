@@ -359,6 +359,26 @@
 				{/snippet}
 			</SettingRow>
 		{/if}
+
+		{#if $appSettings.llmProvider === 'groq'}
+			<SettingRow
+				label="When a model is busy"
+				for="llmRotation"
+				hint="Groq limits how much each model takes a minute. Another model keeps feedback coming without a pause."
+			>
+				<SettingSelect
+					id="llmRotation"
+					label="When a model is busy"
+					options={[
+						{ value: 'rotate', label: 'Continue with another Groq model', description: 'GPT-OSS 120B, Qwen 3.8 27B, GPT-OSS 20B' },
+						{ value: 'wait', label: 'Wait for this model', description: 'Up to a minute when its limit is reached' }
+					]}
+					value={$appSettings.llmRotation}
+					onchange={(value) => setSetting('llmRotation', value as 'rotate' | 'wait')}
+					class="@md/field-group:w-80"
+				/>
+			</SettingRow>
+		{/if}
 	</div>
 
 	<NeoCard class="info-item my-4" rounded elevation={-1} spacing="var(--info-spacing)" width="100%">

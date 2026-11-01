@@ -14,6 +14,7 @@ import type {
 	Correction,
 	ExamStatus,
 	FollowUp,
+	GlossedRange,
 	IDatabaseAdapter,
 	PhraseGloss,
 	TextGlosses,
@@ -564,13 +565,20 @@ function parseWordGlosses(json: string | null): WordGlosses | null {
 			if (!Array.isArray(words) || !words.every((word) => typeof word === 'string')) continue;
 
 			const phrases = Array.isArray(entry?.phrases) ? entry.phrases.filter(isPhraseGloss) : [];
-			texts[key] = { words, phrases };
+			// Kept as stored: without them, meanings fetched a section at a time would read as the whole text's.
+			const sections = Array.isArray(entry?.sections) ? entry.sections.filter(isGlossedRange) : undefined;
+			texts[key] = sections ? { words, phrases, sections } : { words, phrases };
 		}
 
 		return Object.keys(texts).length > 0 ? texts : null;
 	} catch {
 		return null;
 	}
+}
+
+function isGlossedRange(value: unknown): value is GlossedRange {
+	const range = value as Partial<GlossedRange> | null;
+	return Number.isInteger(range?.start) && Number.isInteger(range?.end) && range!.start! <= range!.end!;
 }
 
 /** Reads the stored follow-up JSON; a malformed or empty value is treated as none. */
@@ -592,8 +600,12 @@ function mapAttempt(row: AttemptRow): Attempt {
 		try {
 			const parsed = JSON.parse(row.translations);
 			const idiomatic = String(parsed?.idiomatic ?? '');
+			// Kept as stored: the card regenerates a set whose version or language is not the current one,
+			// so dropping either here made every saved set look outdated after a restart.
+			const version = Number(parsed?.version);
 			translations = {
-				...(parsed?.version === 2 ? { version: 2 as const } : {}),
+				...(Number.isInteger(version) && version > 0 ? { version } : {}),
+				...(typeof parsed?.instructionLanguage === 'string' ? { instructionLanguage: parsed.instructionLanguage } : {}),
 				idiomatic,
 				idiomaticVariants: Array.isArray(parsed?.idiomaticVariants)
 					? parsed.idiomaticVariants

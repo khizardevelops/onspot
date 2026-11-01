@@ -31,10 +31,14 @@ The model each engine downloads is declared per language in `src/lib/languages/i
 
 ```
 tts/
-  service.ts   what the app calls; caches rendered audio in the database
-  voices.ts    the voice list per language
-  piper/       Piper and piper-plus voices in a Web Worker (eSpeak / OpenJTalk G2P)
-  cloud/       OpenAI, bring-your-own-key
+  service.ts            what the app calls; caches rendered audio in the database
+  voices.ts             the voice list per language
+  textPieces.ts         cuts a text too long for one voice run into sentence-sized pieces
+  speechPieces.ts       speaks pieces one at a time and joins them (long texts, explanations)
+  explanationSpeech.ts  an explanation's two voices, on top of speechPieces
+  streamingPlayback.ts  plays a clip while it is still being made or downloaded
+  piper/                Piper and piper-plus voices in a Web Worker (eSpeak / OpenJTalk G2P)
+  cloud/                OpenAI, bring-your-own-key
 ```
 
 TTS has one on-device engine, so it has no engine interface yet. When a second one arrives

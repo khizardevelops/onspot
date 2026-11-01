@@ -237,6 +237,25 @@ export function createProcessingChain(
 	};
 }
 
+/**
+ * The highest a processed clip may peak: -1 dBFS, leaving room for Opus,
+ * whose decoded peaks run a little above the original. The chain's limiter
+ * is the browser's compressor, which is not a hard ceiling (Chromium also
+ * adds automatic make-up gain): stored clips decoded with peaks around 1.2,
+ * so loud syllables clipped.
+ */
+const PEAK_CEILING = 0.89;
+
+/** Scales a clip down evenly, keeping its dynamics, when it peaks above `PEAK_CEILING`. */
+function keepUnderCeiling(samples: Float32Array): Float32Array {
+	const peak = peakOf(samples);
+	if (peak <= PEAK_CEILING) return samples;
+
+	const gain = PEAK_CEILING / peak;
+	for (let index = 0; index < samples.length; index++) samples[index] *= gain;
+	return samples;
+}
+
 /** Largest absolute sample, used for peak normalization. */
 export function peakOf(audio: Float32Array): number {
 	let peak = 0;
@@ -249,9 +268,10 @@ export function peakOf(audio: Float32Array): number {
 
 /**
  * Renders the voice's processing chain over raw TTS PCM in an
- * `OfflineAudioContext`, so the browser's own DSP does the work. Returns the
- * input untouched when there is nothing to apply or the browser cannot render
- * offline audio (the read-back must still play).
+ * `OfflineAudioContext`, so the browser's own DSP does the work, and keeps
+ * the result under `PEAK_CEILING`. Returns the input untouched when there is
+ * nothing to apply or the browser cannot render offline audio (the read-back
+ * must still play).
  */
 export async function processPcm(
 	audio: Float32Array,
@@ -275,7 +295,7 @@ export async function processPcm(
 
 		source.start();
 		const rendered = await context.startRendering();
-		return rendered.getChannelData(0);
+		return keepUnderCeiling(rendered.getChannelData(0));
 	} catch (error) {
 		console.warn('[tts] audio profile failed; using raw model output', error);
 		return audio;

@@ -286,6 +286,8 @@ const WINDOWS: Record<LimitWindow, WindowSpec> = {
 	RPM: { label: 'Requests per minute', unit: 'requests', spanMs: MINUTE_MS, span: 'per minute', period: 'this minute', measure: (totals) => totals.requests },
 	RPD: { label: 'Requests today', unit: 'requests', spanMs: DAY_MS, span: 'rolling 24 hours', period: 'today', measure: (totals) => totals.requests },
 	TPM: { label: 'Tokens per minute', unit: 'tokens', spanMs: MINUTE_MS, span: 'per minute', period: 'this minute', measure: (totals) => totals.tokens },
+	// Reply tokens are not counted apart from prompts; all tokens are an upper bound (not shown in the monitor's lists).
+	OTPM: { label: 'Reply tokens per minute', unit: 'tokens', spanMs: MINUTE_MS, span: 'per minute', period: 'this minute', measure: (totals) => totals.tokens },
 	TPD: { label: 'Tokens today', unit: 'tokens', spanMs: DAY_MS, span: 'rolling 24 hours', period: 'today', measure: (totals) => totals.tokens },
 	ASH: { label: 'Audio this hour', unit: 'seconds', spanMs: HOUR_MS, span: 'rolling hour', period: 'this hour', measure: (totals) => totals.audioSeconds },
 	ASD: { label: 'Audio today', unit: 'seconds', spanMs: DAY_MS, span: 'rolling 24 hours', period: 'today', measure: (totals) => totals.audioSeconds }

@@ -258,8 +258,11 @@ function translation(value: unknown): TranslationSet | null {
 			.map((item) => ({ source: string(item.source), target: string(item.target) }))
 			.filter((item) => item.source && item.target)
 		: [];
+	// Version and language kept as exported, or restored translations would all look outdated.
+	const version = Number(value.version);
 	return {
-		...(value.version === 2 ? { version: 2 as const } : {}),
+		...(Number.isInteger(version) && version > 0 ? { version } : {}),
+		...(typeof value.instructionLanguage === 'string' ? { instructionLanguage: value.instructionLanguage } : {}),
 		idiomatic,
 		idiomaticVariants: variants,
 		literal: string(value.literal),

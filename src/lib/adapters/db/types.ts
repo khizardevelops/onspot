@@ -94,10 +94,22 @@ export interface PhraseGloss {
 	origin: 'expression' | 'selection';
 }
 
+/** A range of a text's word tokens (`glossWords` indexes), `end` inclusive. */
+export interface GlossedRange {
+	start: number;
+	end: number;
+}
+
 /** One text's hover translations: a meaning per word token, and its phrases. */
 export interface TextGlosses {
 	words: string[];
 	phrases: PhraseGloss[];
+	/**
+	 * The sections (`glossSections`) whose meanings have been fetched; `words`
+	 * is blank outside them. Absent on meanings fetched whole, before
+	 * sections: those cover every word.
+	 */
+	sections?: GlossedRange[];
 }
 
 /**

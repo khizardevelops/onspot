@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { ChatMessage, EvaluationRequest } from './types';
-import { TRANSLATION_SCHEMA, translationRules } from './translationPrompt';
 import { evaluationGuidance, levelNote } from './languageGuidance';
 import { EXPLANATION_MAX_MISTAKES } from './explanation';
 
 const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
 const SEVERITIES = ['error', 'warning', 'suggestion'] as const;
 const EXAM_STATUSES = ['strictly-avoid', 'avoid', 'use-sparingly', 'allowed'] as const;
+
+/** Vocabulary upgrades suggested for one take, at most. */
+export const MAX_VOCABULARY_SUGGESTIONS = 3;
 
 /**
  * The spoken explanation is read aloud after every take, so it must stay
@@ -17,10 +19,7 @@ const EXAM_STATUSES = ['strictly-avoid', 'avoid', 'use-sparingly', 'allowed'] as
 const EXPLANATION_MAX_LINE_WORDS = 25;
 const EXPLANATION_MAX_NOTE_WORDS = 15;
 
-function schemaFor(language: string, translationTarget: string, includeTranslations: boolean): string {
-	const translations = includeTranslations
-		? `\n  "translations": ${TRANSLATION_SCHEMA}, // of "correctedText", never of the raw transcript`
-		: '';
+function schemaFor(language: string, translationTarget: string): string {
 	return `{
   "spokenLanguage": string,       // the language the learner mainly spoke, named in English, e.g. "${language}", "English"
   "correctedText": string,        // "Did you mean to say…?": what the learner was trying to say, in correct, natural ${language}
@@ -31,7 +30,7 @@ function schemaFor(language: string, translationTarget: string, includeTranslati
   "followUp": {                   // the question that keeps them talking (see Explanation rules)
     "question": string,           // in ${language}
     "translation": string         // the same question in ${translationTarget}
-  },${translations}
+  },
   "corrections": [
     {
       "category": "grammar" | "register" | "filler" | "style",
@@ -83,10 +82,7 @@ function explanationRulesFor(language: string, translationTarget: string): strin
   "followUp": { "question": "Vous y retournez cet été ?", "translation": "Are you going back this summer?" }`;
 }
 
-function rulesFor(language: string, translationTarget: string, includeTranslations: boolean): string {
-	const translations = includeTranslations
-		? `\n- "translations" translate "correctedText" (what the learner meant, said correctly), never the raw transcript, which may be broken or nonsense. When there was nothing to fix, that is the transcript itself.\n${translationRules({ language, translationTarget })}`
-		: '';
+function rulesFor(language: string, translationTarget: string): string {
 	return `Rules:
 - The transcript comes from speech recognition. Ignore obvious transcription artefacts (misheard proper nouns, missing punctuation) unless they change the meaning; do not "correct" the recogniser's mistakes as if they were the learner's.
 - Only correct what the learner actually said. Never invent context or content.
@@ -96,13 +92,13 @@ function rulesFor(language: string, translationTarget: string, includeTranslatio
 - grammar → severity "error". register and filler issues → "warning". optional polish → "suggestion".
 - For register/filler corrections, set "examStatus" and give "formalAlternatives" where a formal connector exists.
 - Connectors: prefer connectors that are appropriate for spoken ${language} and, in exam mode, formal. Do not suggest written-only connectors the learner cannot say.
-- Vocabulary: suggest at most 3 upgrades that a fluent speaker would plausibly use. If there is nothing worth changing, return [].
+- Vocabulary: suggest at most ${MAX_VOCABULARY_SUGGESTIONS} upgrades that a fluent speaker would plausibly use. If there is nothing worth changing, return [].
 - Corrections must use "original" exactly as it appears in the transcript.
 - If a word or phrase should be omitted, put it in "original" and set "replacement" to the empty string. Do not use arrows, dashes, "remove", or explanatory text as a replacement.
 - Make "label" name the concrete learning issue. Do not repeat its category or severity (bad: "Register inappropriate"; good: "Greeting used for someone else").
 - A correction must change something: its "replacement" never has the same words as its "original". Something that is only unclear is not a correction.
 - When the learner made no mistakes, return an empty "corrections" array and say so in "explanation.note".
-- Write every correction "explanation", "replacementTranslation", "why", "note" and "line" field in ${translationTarget}; keep "correctedText", suggested replacements and "say" in ${language}.${translations}
+- Write every correction "explanation", "replacementTranslation", "why", "note" and "line" field in ${translationTarget}; keep "correctedText", suggested replacements and "say" in ${language}.
 - Every correction with a non-empty "replacement" must include "replacementTranslation": the ${translationTarget} meaning of the suggested replacement.
 - Return ONLY the JSON object. No markdown, no commentary outside it.${
 		evaluationGuidance(language, translationTarget) ? `\n\n${evaluationGuidance(language, translationTarget)}` : ''
@@ -117,8 +113,14 @@ function rulesFor(language: string, translationTarget: string, includeTranslatio
  * price and leaves it out of rate limits; DeepSeek far below that), so only
  * the short tail is paid in full.
  */
-export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage[] {
-	const { language, translationTarget, includeTranslations } = request;
+/** Which part of a long take a request checks (see `evaluateAttempt`), 1-based. */
+export interface EvaluationPart {
+	number: number;
+	count: number;
+}
+
+export function buildEvaluationMessages(request: EvaluationRequest, part?: EvaluationPart): ChatMessage[] {
+	const { language, translationTarget } = request;
 	const toneNote =
 		request.mode === 'exam'
 			? `This is EXAM practice: prioritise formal, correct ${language} suitable for the exam.`
@@ -127,8 +129,8 @@ export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage
 	const system = [
 		`You are a patient ${language} speaking coach for a ${translationTarget}-speaking learner. The user message gives their level, the kind of practice and the prompt they answered.`,
 		`Analyse the spoken ${language} transcript they produced and respond with JSON matching this schema:`,
-		schemaFor(language, translationTarget, includeTranslations),
-		rulesFor(language, translationTarget, includeTranslations),
+		schemaFor(language, translationTarget),
+		rulesFor(language, translationTarget),
 		explanationRulesFor(language, translationTarget)
 	].join('\n\n');
 
@@ -136,6 +138,8 @@ export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage
 		`The learner is at CEFR level ${request.level}${levelNote(language, request.level)}.`,
 		toneNote,
 		`They were given this prompt: "${request.prompt}".`,
+		'',
+		...(part ? ['', partNote(part)] : []),
 		'',
 		'Transcript of the learner speaking:',
 		'"""',
@@ -147,6 +151,16 @@ export function buildEvaluationMessages(request: EvaluationRequest): ChatMessage
 		{ role: 'system', content: system },
 		{ role: 'user', content: user }
 	];
+}
+
+/**
+ * Tells the model it sees one part of a longer answer. The parts' replies
+ * are joined: correct versions and corrections in order, the first part's
+ * note, mistakes taken from every part, the last part's follow-up question.
+ */
+function partNote({ number, count }: EvaluationPart): string {
+	const followUp = number === count ? 'Ask the follow-up question about the answer as a whole, as far as you can see it.' : 'The follow-up question of this part is not used; keep it short.';
+	return `This transcript is part ${number} of ${count} of one longer answer; the other parts are checked separately. Check and correct only this part: "correctedText" and "corrections" cover this part alone. In the explanation, pick this part's most useful mistakes. ${followUp}`;
 }
 
 export function isCategory(value: unknown): value is (typeof CATEGORIES)[number] {

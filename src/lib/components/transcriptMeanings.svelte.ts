@@ -2,7 +2,7 @@
 
 import type { ReferenceElement, VirtualElement } from '@floating-ui/dom';
 import type { PhraseGloss, TextGlosses } from '#lib/adapters/db/index.js';
-import { hasWordMeanings } from '#lib/adapters/llm/glossary.js';
+import { hasMeaningAt } from '#lib/adapters/llm/glossary.js';
 import { rangeOfWords, selectedWordRange, snapSelectionToWords } from './wordSelection';
 
 /**
@@ -41,7 +41,7 @@ type Focus =
 export interface MeaningLabel {
 	anchor: ReferenceElement;
 	text: string;
-	/** A second, quieter line: the hovered word's own meaning when the label shows its expression. */
+	/** A second, quieter line: the hovered word's own meaning, when the label shows its expression and it differs. */
 	detail?: string;
 	/** A status ("Translating…") rather than a meaning; shown quieter. */
 	isStatus: boolean;
@@ -52,8 +52,8 @@ export interface MeaningLabel {
 export interface TranscriptMeaningsOptions {
 	/** The text's word meanings and phrases, or null until fetched. */
 	glosses: () => TextGlosses | null;
-	/** Fetches the word meanings and expressions of the whole take. */
-	requestGlosses: () => Promise<void>;
+	/** Fetches the word meanings and expressions around a word (its section of the text). */
+	requestGlosses: (wordIndex: number) => Promise<void>;
 	/** Translates a selected range; resolves with its meaning. */
 	requestPhrase: (start: number, end: number, phrase: string) => Promise<string>;
 	/** Words `start`..`end` (inclusive) exactly as they are written. */
@@ -109,25 +109,33 @@ export class TranscriptMeanings {
 		const meaning = glosses?.words[wordIndex];
 
 		// The expression is what the words mean together; the word's own meaning
-		// stays on a second line, so grouping never hides what a word means.
+		// stays on a second line when it says something else, so grouping never
+		// hides what a word means. Only meanings: the words themselves are right
+		// under the pointer (and highlighted), so repeating them wastes the room.
 		const expression = this.#expressionAt(wordIndex);
 		if (expression) {
-			const phrase = this.#options.phraseText(expression.start, expression.end);
-			const word = this.#options.phraseText(wordIndex, wordIndex);
-			const detail = meaning ? `${word}: ${meaning}` : undefined;
-			return { anchor, text: `${phrase}: ${expression.meaning}`, detail, isStatus: false, placement };
+			const sameMeaning = meaning?.trim().toLowerCase() === expression.meaning.trim().toLowerCase();
+			const detail = meaning && !sameMeaning ? meaning : undefined;
+			return { anchor, text: expression.meaning, detail, isStatus: false, placement };
 		}
 
 		if (meaning) return { anchor, text: meaning, isStatus: false, placement };
 
-		const status = this.#statusText(this.#glossStatus, hasWordMeanings(glosses) ? 'No translation for this word' : '');
+		const status = this.#statusText(this.#glossStatus, hasMeaningAt(glosses, wordIndex) ? 'No translation for this word' : '');
 		return status ? { anchor, text: status, isStatus: true, placement } : null;
 	}
 
+	/**
+	 * A selection is translated as the learner selected it, never answered with
+	 * an expression's hover gloss: those are terse ("j'ai préféré" glossed as
+	 * "preferred" where the learner expects "I preferred").
+	 */
 	#selectionLabel(focus: Extract<Focus, { kind: 'selection' }>): MeaningLabel | null {
 		const saved = this.#options
 			.glosses()
-			?.phrases.find((phrase) => phrase.start === focus.start && phrase.end === focus.end);
+			?.phrases.find(
+				(phrase) => phrase.origin === 'selection' && phrase.start === focus.start && phrase.end === focus.end
+			);
 		const fetched = this.#phrase.key === `${focus.start}-${focus.end}` ? this.#phrase : null;
 		const meaning = saved?.meaning ?? (fetched?.status === 'idle' ? fetched.meaning : '');
 
@@ -156,7 +164,7 @@ export class TranscriptMeanings {
 
 		this.#stopHoverTimer();
 		const element = event.currentTarget as HTMLElement;
-		if (hasWordMeanings(this.#options.glosses())) {
+		if (wordIndex !== undefined && hasMeaningAt(this.#options.glosses(), wordIndex)) {
 			this.#showWord(element, wordIndex);
 			return;
 		}
@@ -167,6 +175,18 @@ export class TranscriptMeanings {
 	leaveWord(event: PointerEvent): void {
 		if (event.pointerType === 'touch') return;
 		this.#stopHoverTimer();
+		if (this.#focus?.kind === 'word') this.#focus = null;
+	}
+
+	/**
+	 * The text scrolled. A word's meaning goes: the word moved away from the
+	 * pointer (or the finger that tapped it), and the word that comes to rest
+	 * under the pointer shows its own once scrolling stops. A selection's
+	 * meaning stays and follows its words.
+	 */
+	textScrolled(): void {
+		this.#stopHoverTimer();
+		if (this.#tapTimer) clearTimeout(this.#tapTimer);
 		if (this.#focus?.kind === 'word') this.#focus = null;
 	}
 
@@ -230,7 +250,7 @@ export class TranscriptMeanings {
 
 		this.#focus = { kind: 'word', wordIndex, anchor: element };
 		activeOwner = this.#owner;
-		void this.#loadGlosses();
+		void this.#loadGlosses(wordIndex);
 	}
 
 	/** Maps the selection to the words it touches; a selection outside this text clears the label. */
@@ -253,17 +273,17 @@ export class TranscriptMeanings {
 	#selectWords(start: number, end: number, anchor: VirtualElement): void {
 		this.#focus = { kind: 'selection', start, end, anchor };
 		activeOwner = this.#owner;
-		if (start === end) void this.#loadGlosses();
+		if (start === end) void this.#loadGlosses(start);
 		else void this.#loadPhrase(start, end);
 	}
 
-	/** Fetches this text's word meanings once; a failure is retried on the next hover. */
-	async #loadGlosses(): Promise<void> {
-		if (hasWordMeanings(this.#options.glosses()) || this.#glossStatus === 'loading') return;
+	/** Fetches the meanings around a word once; a failure is retried on the next hover. */
+	async #loadGlosses(wordIndex: number): Promise<void> {
+		if (hasMeaningAt(this.#options.glosses(), wordIndex)) return;
 
 		this.#glossStatus = 'loading';
 		try {
-			await this.#options.requestGlosses();
+			await this.#options.requestGlosses(wordIndex);
 			this.#glossStatus = 'idle';
 		} catch (error) {
 			console.warn('[transcript] word meanings could not be fetched', error);

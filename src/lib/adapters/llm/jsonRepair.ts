@@ -17,6 +17,16 @@ const STRAY_QUOTE_BETWEEN_CLOSERS = /([\]}])\s*"(?=\s*[\]}])/g;
 /** A comma right before a closing bracket: `[1, 2,]`, `{"a": 1,}`. */
 const TRAILING_COMMA = /,(?=\s*[\]}])/g;
 
+/**
+ * A key whose closing quote slid past its colon, right after an opening
+ * brace or a comma: `{"source:".",` for `{"source":".",` (GPT-OSS, on a
+ * breakdown entry for a lone full stop).
+ */
+const COLON_INSIDE_KEY = /([{,]\s*)"(\w+):"/g;
+
+/** A value of one punctuation mark missing its closing quote: `"target":".}` for `"target":"."}` (same entries). */
+const UNCLOSED_MARK_VALUE = /:"([^\w\s"\\])(?=[}\]])/g;
+
 function parses(text: string): boolean {
 	try {
 		JSON.parse(text);
@@ -36,6 +46,10 @@ function parses(text: string): boolean {
 export function repairJson(text: string): string | null {
 	if (parses(text)) return text;
 
-	const repaired = text.replace(STRAY_QUOTE_BETWEEN_CLOSERS, '$1').replace(TRAILING_COMMA, '');
+	const repaired = text
+		.replace(STRAY_QUOTE_BETWEEN_CLOSERS, '$1')
+		.replace(TRAILING_COMMA, '')
+		.replace(COLON_INSIDE_KEY, '$1"$2":"')
+		.replace(UNCLOSED_MARK_VALUE, ':"$1"');
 	return parses(repaired) ? repaired : null;
 }

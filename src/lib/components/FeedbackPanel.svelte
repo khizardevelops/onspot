@@ -8,6 +8,10 @@
 	 * Closed, the panel slides away (it stays rendered, inert, so it can slide
 	 * out whole) and the Practice page's bookmark ribbon opens it again (on
 	 * phones, a button in the top bar).
+	 *
+	 * Where the page caps its width (`--feedback-max-width`, desktop Practice),
+	 * the panel reports how narrow it can be without its toolbar or cards laying
+	 * out differently (`contentWidth`), so the page can give the takes the rest.
 	 */
 	import { quickCollapse } from '#lib/neo.js';
 	import { untrack } from 'svelte';
@@ -18,6 +22,7 @@
 	import { speakText } from '#lib/stores/practice.js';
 	import { correctionTitle, isDeletion, isInsertion } from '#lib/utils/corrections.js';
 	import { parseExplanation } from '#lib/adapters/llm/index.js';
+	import { narrowestWidthKeepingLayout } from '#lib/utils/narrowestWidth.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
@@ -55,9 +60,22 @@
 		activeCorrectionId?: string | null;
 		stats: SessionStats;
 		onSelectCorrection?: (attemptId: string, correctionId: string) => void;
+		/**
+		 * The narrowest width in px at which the toolbar and the cards showing lay
+		 * out as they do at the page's maximum width; null where the page sets no
+		 * maximum (phones and tablets, where the panel spans the window).
+		 */
+		contentWidth?: number | null;
 	}
 
-	let { attempt, open = $bindable(true), activeCorrectionId = null, stats, onSelectCorrection }: Props = $props();
+	let {
+		attempt,
+		open = $bindable(true),
+		activeCorrectionId = null,
+		stats,
+		onSelectCorrection,
+		contentWidth = $bindable(null)
+	}: Props = $props();
 	let filter = $state<Filter>('all');
 	let expandedId = $state<string | null>(null);
 	let knownAttemptId = $state<string | null>(null);
@@ -161,6 +179,90 @@
 		);
 	});
 
+	/*
+	 * Sizing to the content. The page caps the panel at `--feedback-max-width`;
+	 * the panel works out how much of that its toolbar and cards actually use.
+	 * Elements marked `data-keep-layout` must lay out exactly as they do at the
+	 * full width (see narrowestWidth.ts). Expanded details are prose that
+	 * reflows freely, so they are not marked: opening one never resizes the panel.
+	 */
+	const MAX_WIDTH_PROPERTY = '--feedback-max-width';
+	/** A narrower panel is only worth a resize when it frees this much room; growing is never held back. */
+	const MIN_WORTHWHILE_SHRINK_PX = 12;
+
+	let shell = $state<HTMLElement>();
+	let list = $state<HTMLElement>();
+
+	$effect(() => {
+		if (!shell || !list) return;
+		const panel = shell;
+		const scroller = list;
+		let frame = 0;
+
+		// Changes come in bursts (a filter swaps the label and several cards): measure once per frame.
+		const scheduleMeasure = (): void => {
+			if (frame) return;
+			frame = requestAnimationFrame(() => {
+				frame = 0;
+				contentWidth = measureContentWidth(panel, scroller);
+			});
+		};
+
+		// Cards in or out, the filter's name, a translation arriving. Trial widths
+		// are style changes, which this does not watch, so measuring never re-triggers it.
+		const contentObserver = new MutationObserver(scheduleMeasure);
+		contentObserver.observe(panel, { childList: true, subtree: true, characterData: true });
+		// The maximum follows the window, and text changes width when a web font arrives.
+		window.addEventListener('resize', scheduleMeasure);
+		document.fonts.addEventListener('loadingdone', scheduleMeasure);
+		scheduleMeasure();
+
+		return () => {
+			cancelAnimationFrame(frame);
+			contentObserver.disconnect();
+			window.removeEventListener('resize', scheduleMeasure);
+			document.fonts.removeEventListener('loadingdone', scheduleMeasure);
+		};
+	});
+
+	/**
+	 * How narrow the panel should be now: the narrowest width that keeps the
+	 * layout, made a little sticky so that small changes do not set it sliding.
+	 *
+	 * @param panel The panel itself, laid out at trial widths.
+	 * @param scroller The card list, whose scroll position must survive the trials.
+	 * @returns A width in px, or null when the page does not cap the panel's width.
+	 */
+	function measureContentWidth(panel: HTMLElement, scroller: HTMLElement): number | null {
+		const pageCapsWidth = getComputedStyle(panel).getPropertyValue(MAX_WIDTH_PROPERTY) !== '';
+		if (!pageCapsWidth) return null;
+
+		// No take selected: Practice is still loading the saved session, or a new
+		// one has just begun. Keep the width, so the panel does not slide in for
+		// the placeholder and back out a moment later; the next take decides.
+		if (!attempt) return contentWidth;
+
+		// A card still fading out after a filter change is leaving; it no longer counts.
+		const showingIds = new Set(corrections.map((correction) => correction.id));
+		const isStaying = (element: HTMLElement): boolean => {
+			const card = element.closest<HTMLElement>('[data-correction-id]');
+			return !card || showingIds.has(card.dataset.correctionId ?? '');
+		};
+		const watched = [...panel.querySelectorAll<HTMLElement>('[data-keep-layout]')].filter(isStaying);
+
+		const neededWidth = narrowestWidthKeepingLayout({
+			box: panel,
+			maxWidth: `var(${MAX_WIDTH_PROPERTY})`,
+			watched,
+			scrollers: [scroller]
+		});
+
+		if (contentWidth === null) return neededWidth;
+		const mustGrow = neededWidth > contentWidth;
+		const shrinkIsWorthwhile = contentWidth - neededWidth >= MIN_WORTHWHILE_SHRINK_PX;
+		return mustGrow || shrinkIsWorthwhile ? neededWidth : contentWidth;
+	}
+
 	/** The header's name opens the filter by type (grammar, register, …). */
 	const filterItems = $derived<NeoMenuItem[]>([
 		{ value: 'all', label: 'All feedback', after: filterCount, divider: { bottom: true } },
@@ -203,7 +305,9 @@
 {/snippet}
 
 <aside
+	bind:this={shell}
 	class="feedback-shell relative flex min-h-0 flex-col overflow-hidden border-t lg:border-t-0 lg:border-l"
+	style:--feedback-content-width={contentWidth === null ? undefined : `${contentWidth}px`}
 	data-state={open ? 'open' : 'closed'}
 	inert={!open}
 >
@@ -213,11 +317,11 @@
 			on the left; on the right, the severity filter and the panel's two
 			actions, all the same height on one line.
 		-->
-		<header class="feedback-paper">
+		<header class="feedback-paper" data-keep-layout>
 			<PopMenu items={filterItems} bind:open={filterMenuOpen} placement="bottom-start" onSelect={onFilterSelect} rounded>
 				<button type="button" class="filter-name" aria-label={`Showing ${FILTER_LABEL[filter]}. Filter by type`} aria-expanded={filterMenuOpen}>
 					<ListFilter class="filter-name-icon size-4 shrink-0" />
-					{#key filter}<span class="filter-name-label truncate" in:fade={{ duration: 150 }}>{FILTER_LABEL[filter]}</span>{/key}
+					{#key filter}<span class="filter-name-label truncate" data-keep-layout in:fade={{ duration: 150 }}>{FILTER_LABEL[filter]}</span>{/key}
 					<ChevronDown class="size-3.5 shrink-0 opacity-60" />
 				</button>
 			</PopMenu>
@@ -278,21 +382,21 @@
 			</div>
 		</header>
 
-		<div class="feedback-list" class:stats-room={statsOpen}>
+		<div class="feedback-list" class:stats-room={statsOpen} bind:this={list}>
 			{#if !attempt}
-				<div class="list-note" in:fade={{ duration: 240 }}>
+				<div class="list-note" data-keep-layout in:fade={{ duration: 240 }}>
 					<MessageSquareText class="size-5" />
 					<p class="font-medium text-foreground">Feedback lives here</p>
 					<p>Select an attempt after your first recording.</p>
 				</div>
 			{:else if attempt.corrections.length === 0}
-				<div class="list-note" in:fade={{ duration: 280 }}>
+				<div class="list-note" data-keep-layout in:fade={{ duration: 280 }}>
 					<span class="clean-mark grid place-items-center"><Check class="size-5" /></span>
 					<p class="font-medium text-foreground">Clean take</p>
 					<p>Nothing needs correcting.</p>
 				</div>
 			{:else if corrections.length === 0}
-				<p class="list-note" in:fade={{ duration: 180 }}>Nothing in this filter.</p>
+				<p class="list-note" data-keep-layout in:fade={{ duration: 180 }}>Nothing in this filter.</p>
 			{:else}
 				<ul class="feedback-cards">
 					{#each corrections as correction (correction.id)}
@@ -303,16 +407,18 @@
 							in:fly={{ y: 8, duration: 220 }}
 							out:fade={{ duration: 120 }}
 							class="feedback-card"
+							data-severity={correction.severity}
 							class:expanded
 							class:linked={correction.id === activeCorrectionId}
 						>
-							<button type="button" class="card-summary" aria-expanded={expanded} onclick={() => select(correction, !expanded)}>
-								<span class="card-tags">
+							<button type="button" class="card-summary" data-keep-layout aria-expanded={expanded} onclick={() => select(correction, !expanded)}>
+								<!-- One row: title, category, chevron; the title wraps under itself. The card's paper shows its severity. -->
+								<span class="card-heading">
+									<span class="sr-only">{SEVERITY_LABEL[correction.severity]}:</span>
+									<span class="card-title">{correctionTitle(correction)}</span>
 									<span class="tag">{CATEGORY_LABEL[correction.category] ?? correction.category}</span>
-									<span class="severity" data-severity={correction.severity}>{SEVERITY_LABEL[correction.severity]}</span>
 									<ChevronDown class="card-chevron size-4" />
 								</span>
-								<span class="card-title">{correctionTitle(correction)}</span>
 
 								<!-- One line: what was said, struck through, then what to say. -->
 								<span class="correction-line">
@@ -381,7 +487,7 @@
 			</div>
 			<div class="stats-row">
 				{#each STATS as stat (stat.label)}
-					<div class="stat-card">
+					<div class="stat-card" data-keep-layout>
 						<span class="stat-label">{stat.label}</span>
 						<span class="stat-value" class:alert={stat.alert}>{stat.value}</span>
 					</div>
@@ -399,6 +505,19 @@
 		--notebook: var(--background);
 		--pinned-paper: #fcfaf5;
 		--card-paper: #ffffff;
+		/*
+		 * Index stock gone a little yellow with age, and one aged stock per
+		 * severity: equally light and barely tinted, but with hues far apart
+		 * (rose, straw, sage), so errors and warnings never read alike.
+		 */
+		--index-stock: #faf3e2;
+		--error-stock: oklch(0.935 0.02 12);
+		--warning-stock: oklch(0.945 0.026 90);
+		--suggestion-stock: oklch(0.94 0.017 155);
+		--index-hairline: rgb(120 95 60 / 0.16);
+		--index-edge: rgb(150 105 45 / 0.16);
+		--index-wear: rgb(140 100 50 / 0.12);
+		--foxing: rgb(165 115 55 / 0.07);
 		--ink: var(--foreground);
 		--ruled-blue: rgb(43 91 132 / 0.26);
 		--margin-red: rgb(229 168 161 / 0.75);
@@ -422,6 +541,14 @@
 	:global([data-theme='dark']) .feedback-shell {
 		--pinned-paper: #24211c;
 		--card-paper: #2b2823;
+		--index-stock: #28231b;
+		--error-stock: oklch(0.285 0.018 15);
+		--warning-stock: oklch(0.295 0.02 85);
+		--suggestion-stock: oklch(0.285 0.015 160);
+		--index-hairline: rgb(255 240 215 / 0.07);
+		--index-edge: rgb(0 0 0 / 0.38);
+		--index-wear: rgb(0 0 0 / 0.25);
+		--foxing: rgb(200 160 100 / 0.05);
 		--ruled-blue: rgb(140 170 210 / 0.12);
 		--margin-red: rgb(229 140 130 / 0.38);
 		--binder-hole: #0d0c0a;
@@ -524,6 +651,8 @@
 		min-width: 0;
 		height: var(--toolbar-height);
 		padding: 0 1px 0 0;
+		/* Room for the tape's torn right end, so it stops short of the filter track when the panel is snug. */
+		margin-right: 4px;
 		isolation: isolate;
 		border: 0;
 		background: none;
@@ -685,10 +814,12 @@
 	/*
 	 * A narrow desktop panel (1024px windows): the filter's name gives way to
 	 * its icon, and below 300px the segments tighten and the divider goes, so
-	 * the toolbar never crowds or truncates.
+	 * the toolbar never crowds or truncates. The whole toolbar with its longest
+	 * name ("All feedback", Source Serif 4) measured 345.2px, hence 346px:
+	 * the panel sizes itself to its content, so it often sits right at this edge.
 	 */
 	@media (min-width: 641px) {
-		@container (width < 340px) {
+		@container (width < 346px) {
 			.filter-name :global(.filter-name-icon) {
 				display: block;
 			}
@@ -761,18 +892,48 @@
 		padding: 0;
 		list-style: none;
 	}
+	/*
+	 * Compact, so a long take's corrections fit more to a screen; the tape still
+	 * shows between cards. Each card is the take cards' paper (their stock and
+	 * paper texture), aged: yellowed, browned and worn at the edges, with a
+	 * couple of faint foxing spots, and corners not quite evenly cut. Its stock
+	 * is its severity's: rose for errors, straw for warnings, sage for
+	 * suggestions, matching the filter tabs' colours.
+	 */
 	.feedback-card {
+		--severity-ink: var(--muted-foreground);
+		--severity-paper: var(--index-stock);
+		--paper-depth:
+			inset 0 0 0 1px var(--index-hairline), inset 0 0 3px 1px var(--index-wear), inset 0 0 26px var(--index-edge);
+		--foxing-spots:
+			radial-gradient(circle at 88% 18%, var(--foxing), transparent 22%),
+			radial-gradient(ellipse 30% 45% at 6% 92%, var(--foxing), transparent 70%);
 		position: relative;
-		margin: 0.875rem 0;
-		border-radius: 4px;
-		background-color: var(--card-paper);
-		box-shadow: var(--card-shadow);
+		margin: 0.625rem 0;
+		border-radius: 3px 5px 4px 6px;
+		background-color: var(--severity-paper);
+		background-image: var(--foxing-spots), var(--paper-key, none);
+		background-size: auto, auto, cover;
+		background-blend-mode: var(--key-blend);
+		box-shadow: var(--paper-depth), var(--card-shadow);
 		transition:
 			box-shadow 0.2s ease,
 			transform 0.2s ease;
 	}
+	.feedback-card[data-severity='error'] {
+		--severity-ink: var(--error);
+		--severity-paper: var(--error-stock);
+	}
+	.feedback-card[data-severity='warning'] {
+		--severity-ink: var(--warn);
+		--severity-paper: var(--warning-stock);
+	}
+	.feedback-card[data-severity='suggestion'] {
+		--severity-ink: var(--brand);
+		--severity-paper: var(--suggestion-stock);
+	}
 	.feedback-card.expanded {
-		box-shadow: var(--card-shadow-lifted);
+		box-shadow: var(--paper-depth), var(--card-shadow-lifted);
 		transform: translateY(-2px);
 	}
 	/* The correction picked in the transcript. */
@@ -784,17 +945,23 @@
 	.feedback-card::before {
 		content: '';
 		position: absolute;
-		top: -11px;
+		top: -8px;
 		left: 50%;
 		z-index: 1;
-		width: 64px;
-		height: 22px;
+		width: 48px;
+		height: 15px;
 		border-right: 1px solid rgb(0 0 0 / 0.05);
 		border-left: 1px solid rgb(255 255 255 / 0.4);
 		background-color: var(--tape);
 		box-shadow: 0 2px 4px rgb(0 0 0 / 0.08);
 		transform: translateX(-50%) rotate(-2deg);
 		pointer-events: none;
+	}
+	.feedback-card:nth-child(even) {
+		--foxing-spots:
+			radial-gradient(circle at 12% 24%, var(--foxing), transparent 18%),
+			radial-gradient(ellipse 35% 40% at 94% 86%, var(--foxing), transparent 70%);
+		border-radius: 5px 3px 6px 4px;
 	}
 	.feedback-card:nth-child(even)::before {
 		left: 40%;
@@ -804,26 +971,32 @@
 	.card-summary {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.125rem;
 		width: 100%;
-		padding: 0.75rem 0.875rem;
+		padding: 0.5rem 0.75rem 0.5625rem;
 		border: 0;
 		background: transparent;
 		color: var(--ink);
 		text-align: left;
 		cursor: pointer;
 	}
-	.card-tags {
+	.card-heading {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+		align-items: flex-start;
+		gap: 0.375rem;
 	}
-	.card-tags :global(.card-chevron) {
-		margin-left: auto;
+	/* Tag and chevron stay on the title's first line, however far the title wraps. */
+	.card-heading > .tag,
+	.card-heading :global(.card-chevron) {
+		flex-shrink: 0;
+		margin-top: 0.1875rem;
+	}
+	.card-heading :global(.card-chevron) {
+		margin-top: 0.0625rem;
 		color: var(--muted-foreground);
 		transition: transform 0.3s ease;
 	}
-	.feedback-card.expanded .card-tags :global(.card-chevron) {
+	.feedback-card.expanded .card-heading :global(.card-chevron) {
 		transform: rotate(180deg);
 	}
 	.tag {
@@ -844,33 +1017,10 @@
 		background-color: var(--good-soft);
 		color: var(--good);
 	}
-	.severity {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-		font-size: 9px;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-	.severity::before {
-		content: '';
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background-color: currentColor;
-	}
-	.severity[data-severity='error'] {
-		color: var(--error);
-	}
-	.severity[data-severity='warning'] {
-		color: var(--warn);
-	}
-	.severity[data-severity='suggestion'] {
-		color: var(--brand);
-	}
 	.card-title {
-		font-size: 0.9375rem;
+		flex: 1;
+		min-width: 0;
+		font-size: 0.875rem;
 		font-weight: 700;
 		line-height: 1.3;
 	}
@@ -878,8 +1028,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.875rem;
+		gap: 0.3125rem;
+		font-size: 0.8125rem;
 		line-height: 1.3;
 	}
 	.wrong-text {
@@ -899,7 +1049,8 @@
 		padding: 0.75rem 0.875rem;
 		border-top: 1px solid color-mix(in srgb, var(--muted-foreground) 15%, transparent);
 		border-radius: 0 0 4px 4px;
-		background-color: color-mix(in srgb, var(--notebook) 35%, var(--card-paper));
+		/* The same stock, a shade deeper, like the card's lower half. */
+		background-color: color-mix(in srgb, var(--severity-ink) 5%, var(--severity-paper));
 		color: var(--muted-foreground);
 		font-size: 0.8125rem;
 		line-height: 1.45;

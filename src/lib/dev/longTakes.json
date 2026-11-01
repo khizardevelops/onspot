@@ -1,0 +1,266 @@
+[
+ {
+  "title": "Un voyage marquant",
+  "prompt": "Parlez d'un voyage qui vous a marqué.",
+  "durationSec": 180,
+  "transcript": "Alors, euh, je vais vous parler d'un voyage qui m'a vraiment marqué. L'année dernière, j'ai allé au Portugal avec ma famille pendant deux semaines. On est partis au mois de juillet, juste après la fin des examens. Le premier jour, nous sommes arrivés à Lisbonne très tard dans la nuit, et tout le monde était fatigué. L'hôtel était petit mais très charmant, avec une terrasse qui donnait sur toute la ville. Le matin, on prenait le petit-déjeuner dehors et on regardait les bateaux sur le fleuve. Ce qui m'a frappé, c'est la lumière : elle est différente de chez nous, plus douce et plus dorée. Nous avons visité beaucoup des monuments, comme la tour de Belém et le monastère des Hiéronymites. Mon frère voulait tout photographier, donc on avançait très lentement. Un jour, on a pris le tram vingt-huit, qui traverse les vieux quartiers de la ville. Il était plein de touristes, et il faisait très chaud dedans. Après, on a mangé des pastéis de nata dans une petite pâtisserie, et c'était le meilleur dessert que j'ai jamais mangé. La deuxième semaine, on est allés dans Porto, dans le nord du pays. Le voyage en train a duré presque trois heures, mais le paysage était magnifique. À Porto, nous sommes restés dans un appartement tout près de la rivière. Le soir, on se promenait sur les quais et on écoutait des musiciens qui jouaient du fado. Je ne comprenais pas les paroles, mais la musique était très émouvante. Ma mère a même pleuré une fois, ce qui nous a beaucoup surpris. On a aussi visité des caves où on fabrique le vin de Porto. Le guide nous a expliqué comment le vin vieillit dans de grands tonneaux en bois. Moi, j'ai seulement goûté un jus de raisin, parce que je ne bois pas d'alcool. Un autre moment que je me souviens, c'est une journée entière à la plage. L'eau de l'Atlantique était glaciale, mais on s'est baignés quand même. J'étais vraiment excité de voir les grandes vagues, parce que j'adore le surf. Malheureusement, je n'ai pas pu surfer, parce que le vent était trop fort ce jour-là. Ce voyage m'a appris beaucoup de choses sur la culture portugaise. Les gens étaient très gentils, et ils essayait toujours de nous aider, même quand on ne parlait pas leur langue. J'ai appris quelques mots, comme obrigado, qui veut dire merci. Ouais, franchement, c'était le plus beau voyage de ma vie. Je voudrais y retourner un jour, peut-être avec mes amis, pour découvrir la sud du pays et l'Algarve. Voilà, c'est tout ce que je voulais raconter sur ce voyage.",
+  "correctedText": "Alors, je vais vous parler d'un voyage qui m'a vraiment marqué. L'année dernière, je suis allé au Portugal avec ma famille pendant deux semaines. On est partis au mois de juillet, juste après la fin des examens. Le premier jour, nous sommes arrivés à Lisbonne très tard dans la nuit, et tout le monde était fatigué. L'hôtel était petit mais très charmant, avec une terrasse qui donnait sur toute la ville. Le matin, on prenait le petit-déjeuner dehors et on regardait les bateaux sur le fleuve. Ce qui m'a frappé, c'est la lumière : elle est différente de chez nous, plus douce et plus dorée. Nous avons visité beaucoup de monuments, comme la tour de Belém et le monastère des Hiéronymites. Mon frère voulait tout photographier, donc on avançait très lentement. Un jour, on a pris le tram vingt-huit, qui traverse les vieux quartiers de la ville. Il était plein de touristes, et il faisait très chaud dedans. Après, on a mangé des pastéis de nata dans une petite pâtisserie, et c'était le meilleur dessert que j'aie jamais mangé. La deuxième semaine, on est allés à Porto, dans le nord du pays. Le voyage en train a duré presque trois heures, mais le paysage était magnifique. À Porto, nous sommes restés dans un appartement tout près de la rivière. Le soir, on se promenait sur les quais et on écoutait des musiciens qui jouaient du fado. Je ne comprenais pas les paroles, mais la musique était très émouvante. Ma mère a même pleuré une fois, ce qui nous a beaucoup surpris. On a aussi visité des caves où on fabrique le vin de Porto. Le guide nous a expliqué comment le vin vieillit dans de grands tonneaux en bois. Moi, j'ai seulement goûté un jus de raisin, parce que je ne bois pas d'alcool. Un autre moment dont je me souviens, c'est une journée entière à la plage. L'eau de l'Atlantique était glaciale, mais on s'est baignés quand même. J'avais vraiment hâte de voir les grandes vagues, parce que j'adore le surf. Malheureusement, je n'ai pas pu surfer, parce que le vent était trop fort ce jour-là. Ce voyage m'a appris beaucoup de choses sur la culture portugaise. Les gens étaient très gentils, et ils essayaient toujours de nous aider, même quand on ne parlait pas leur langue. J'ai appris quelques mots, comme obrigado, qui veut dire merci. Franchement, c'était le plus beau voyage de ma vie. Je voudrais y retourner un jour, peut-être avec mes amis, pour découvrir le sud du pays et l'Algarve. Voilà, c'est tout ce que je voulais raconter sur ce voyage.",
+  "wordCount": 436,
+  "explanation": "What a vivid trip, I could see the light over Lisbon! You said <wrong>j'ai allé</wrong>, but <key>aller</key> takes <key>être</key>: <right>je suis allé</right>. With a city, say <right>à Porto</right>, not <wrong>dans Porto</wrong>. And after <key>beaucoup</key> it's just <key>de</key>: <right>beaucoup de</right> monuments.",
+  "followUp": {
+   "question": "Qu'est-ce que vous aimeriez découvrir dans le sud du Portugal ?",
+   "translation": "What would you like to discover in the south of Portugal?"
+  },
+  "corrections": [
+   {
+    "category": "filler",
+    "severity": "warning",
+    "label": "Filler before the first point",
+    "original": "Alors, euh,",
+    "replacement": "Alors,",
+    "replacementTranslation": "So,",
+    "explanation": "A hesitation that adds nothing; start straight with « Alors ».",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Wrong auxiliary with aller",
+    "original": "j'ai allé",
+    "replacement": "je suis allé",
+    "replacementTranslation": "I went",
+    "explanation": "« Aller » forms its passé composé with « être »: je suis allé.",
+    "examStatus": null
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "« beaucoup de » before a noun",
+    "original": "beaucoup des",
+    "replacement": "beaucoup de",
+    "replacementTranslation": "many",
+    "explanation": "After « beaucoup », use « de », not « des ».",
+    "examStatus": null
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Subjunctive after a superlative",
+    "original": "que j'ai jamais mangé",
+    "replacement": "que j'aie jamais mangé",
+    "replacementTranslation": "that I have ever eaten",
+    "explanation": "After « le meilleur… que », French uses the subjunctive: que j'aie jamais mangé.",
+    "examStatus": null
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Preposition before a city",
+    "original": "dans Porto",
+    "replacement": "à Porto",
+    "replacementTranslation": "to Porto",
+    "explanation": "With a city, use « à »: à Porto.",
+    "examStatus": null
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Relative pronoun with se souvenir de",
+    "original": "que je me souviens",
+    "replacement": "dont je me souviens",
+    "replacementTranslation": "that I remember",
+    "explanation": "« Se souvenir de » takes « dont »: un moment dont je me souviens.",
+    "examStatus": null
+   },
+   {
+    "category": "register",
+    "severity": "warning",
+    "label": "Anglicism « excité »",
+    "original": "J'étais vraiment excité",
+    "replacement": "J'avais vraiment hâte",
+    "replacementTranslation": "I was really looking forward",
+    "explanation": "« Excité » suggests agitation in French; to say you looked forward to it, use « avoir hâte ».",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Verb agreement with « ils »",
+    "original": "essayait",
+    "replacement": "essayaient",
+    "replacementTranslation": "were trying",
+    "explanation": "The subject « ils » is plural: ils essayaient.",
+    "examStatus": null
+   },
+   {
+    "category": "register",
+    "severity": "warning",
+    "label": "Casual « ouais »",
+    "original": "Ouais, franchement",
+    "replacement": "Franchement",
+    "replacementTranslation": "Honestly",
+    "explanation": "« Ouais » is very casual; in an exam say « Franchement » or « Oui ».",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Gender of « sud »",
+    "original": "la sud",
+    "replacement": "le sud",
+    "replacementTranslation": "the south",
+    "explanation": "« Sud » is masculine: le sud.",
+    "examStatus": null
+   }
+  ],
+  "stats": {
+   "sentences": 31,
+   "sentencesWithMistakes": 10,
+   "mistakes": 10,
+   "words": 436,
+   "wordsPerMinute": 145
+  }
+ },
+ {
+  "title": "Mon projet professionnel",
+  "prompt": "Parlez de votre projet professionnel.",
+  "durationSec": 300,
+  "transcript": "Bon, euh, je vais vous parler de mon projet professionnel et du travail que je voudrais faire plus tard. Depuis que je suis petit, je suis passionné par la technologie et par les ordinateurs. Quand j'avais dix ans, mon père m'a offert un vieil ordinateur portable, et j'ai passé des heures à le démonter pour comprendre comment il fonctionnait. À l'époque, je ne savais pas que ça pouvait devenir un vrai métier. Aujourd'hui, j'étudie l'informatique à l'université, et je suis en deuxième année de licence. Depuis deux ans, j'ai étudié le développement web et les bases de données. Ce que j'aime le plus, c'est créer des applications qui sont vraiment utiles pour les gens. Par exemple, l'année dernière, j'ai développé une petite application pour aider les étudiants à organiser leurs révisions. Beaucoup de mes amis l'utilise encore aujourd'hui, et ça me rend très fier. Mon travail idéal, ce serait dans une entreprise qui travaille sur l'éducation. Je pense que la technologie peut vraiment changer la façon dont on apprend. Par exemple, il y a des applications qui permettent d'apprendre une langue en parlant un peu tous les jours. C'est un domaine qui m'intéresse énormément, parce que j'ai moi-même eu des difficultés à l'école. Quand j'étais au collège, j'avais des mauvaises notes en anglais, parce que je n'osais pas parler. Les professeurs étaient gentils, mais il y avait trente élèves dans la classe. On n'avait pas le temps de pratiquer l'oral, donc on apprenait surtout la grammaire. Je réalise maintenant que c'était une erreur, parce qu'une langue, ça se parle avant tout. C'est pour ça que je voudrais créer des outils qui donnent plus de place à la parole. Pour y arriver, je sais que je dois encore beaucoup travailler. D'abord, je veux finir ma licence et ensuite faire un master en intelligence artificielle. Le problème, c'est que les masters sont très sélectifs, et il faut que j'ai de très bonnes notes. Donc cette année, je fais beaucoup d'efforts, surtout en mathématiques. Je travaille aussi le soir sur des projets personnels, pour avoir un portfolio à montrer. La semaine dernière, je suis resté jusqu'à trois heures du matin pour finir un programme. C'était fatigant, mais le résultat en valait vraiment la peine. En plus des études, je voudrais faire un stage dans une start-up. J'ai déjà envoyé mon CV à plusieurs entreprises, mais personne m'a répondu pour l'instant. Mon professeur m'a conseillé de participer à des hackathons pour rencontrer des professionnels. Le mois prochain, je vais participer à mon premier hackathon, à Lyon. Je suis un peu stressé, parce que je ne connais personne là-bas. Mais je pense que c'est une bonne occasion d'apprendre et de me faire des contacts. Plus tard, j'aimerais aussi travailler à l'étranger pendant quelques années. Je rêve d'aller au Canada, parce qu'on peut y travailler en français et en anglais. J'ai entendu que les entreprises de technologie à Montréal cherchent beaucoup de développeurs. En plus, la nature là-bas est incroyable, avec les lacs et les forêts. J'ai vu des photos de l'hiver, et ça a l'air magnifique, même s'il fait très froid. Mes parents sont un peu inquiets, parce que ce serait loin de la famille. Ma mère dit toujours qu'elle ne pourrait pas vivre sans voir ses enfants chaque semaine. Mais je pense qu'avec internet, c'est plus facile de rester en contact qu'avant. On peut se parler en vidéo tous les jours si on veut. Si j'aurais assez d'argent, je les inviterais à venir me voir chaque été. Ouais, genre, ce serait génial de leur montrer ma nouvelle vie. Bien sûr, je ne sais pas encore si tout ça va se réaliser. Les projets changent souvent, et la vie nous réserve parfois des surprises. Il y a cinq ans, je voulais devenir un médecin, et maintenant je fais de l'informatique. Mais je crois que l'important, c'est de faire quelque chose qu'on aime et qui a du sens. Pour moi, aider les gens à apprendre, ça a vraiment du sens. Je suis sûr que si je travaille dans ce domaine, je serai heureux. Voilà, euh, c'est à peu près tout ce que je voulais dire sur mon projet professionnel. Merci de m'avoir écouté.",
+  "correctedText": "Bon, je vais vous parler de mon projet professionnel et du travail que je voudrais faire plus tard. Depuis que je suis petit, je suis passionné par la technologie et par les ordinateurs. Quand j'avais dix ans, mon père m'a offert un vieil ordinateur portable, et j'ai passé des heures à le démonter pour comprendre comment il fonctionnait. À l'époque, je ne savais pas que ça pouvait devenir un vrai métier. Aujourd'hui, j'étudie l'informatique à l'université, et je suis en deuxième année de licence. Depuis deux ans, j'étudie le développement web et les bases de données. Ce que j'aime le plus, c'est créer des applications qui sont vraiment utiles pour les gens. Par exemple, l'année dernière, j'ai développé une petite application pour aider les étudiants à organiser leurs révisions. Beaucoup de mes amis l'utilisent encore aujourd'hui, et ça me rend très fier. Mon travail idéal, ce serait dans une entreprise qui travaille sur l'éducation. Je pense que la technologie peut vraiment changer la façon dont on apprend. Par exemple, il y a des applications qui permettent d'apprendre une langue en parlant un peu tous les jours. C'est un domaine qui m'intéresse énormément, parce que j'ai moi-même eu des difficultés à l'école. Quand j'étais au collège, j'avais de mauvaises notes en anglais, parce que je n'osais pas parler. Les professeurs étaient gentils, mais il y avait trente élèves dans la classe. On n'avait pas le temps de pratiquer l'oral, donc on apprenait surtout la grammaire. Je me rends compte maintenant que c'était une erreur, parce qu'une langue, ça se parle avant tout. C'est pour ça que je voudrais créer des outils qui donnent plus de place à la parole. Pour y arriver, je sais que je dois encore beaucoup travailler. D'abord, je veux finir ma licence et ensuite faire un master en intelligence artificielle. Le problème, c'est que les masters sont très sélectifs, et il faut que j'aie de très bonnes notes. Donc cette année, je fais beaucoup d'efforts, surtout en mathématiques. Je travaille aussi le soir sur des projets personnels, pour avoir un portfolio à montrer. La semaine dernière, je suis resté jusqu'à trois heures du matin pour finir un programme. C'était fatigant, mais le résultat en valait vraiment la peine. En plus des études, je voudrais faire un stage dans une start-up. J'ai déjà envoyé mon CV à plusieurs entreprises, mais personne ne m'a répondu pour l'instant. Mon professeur m'a conseillé de participer à des hackathons pour rencontrer des professionnels. Le mois prochain, je vais participer à mon premier hackathon, à Lyon. Je suis un peu stressé, parce que je ne connais personne là-bas. Mais je pense que c'est une bonne occasion d'apprendre et de me faire des contacts. Plus tard, j'aimerais aussi travailler à l'étranger pendant quelques années. Je rêve d'aller au Canada, parce qu'on peut y travailler en français et en anglais. J'ai entendu dire que les entreprises de technologie à Montréal cherchent beaucoup de développeurs. En plus, la nature là-bas est incroyable, avec les lacs et les forêts. J'ai vu des photos de l'hiver, et ça a l'air magnifique, même s'il fait très froid. Mes parents sont un peu inquiets, parce que ce serait loin de la famille. Ma mère dit toujours qu'elle ne pourrait pas vivre sans voir ses enfants chaque semaine. Mais je pense qu'avec internet, c'est plus facile de rester en contact qu'avant. On peut se parler en vidéo tous les jours si on veut. Si j'avais assez d'argent, je les inviterais à venir me voir chaque été. Franchement, ce serait génial de leur montrer ma nouvelle vie. Bien sûr, je ne sais pas encore si tout ça va se réaliser. Les projets changent souvent, et la vie nous réserve parfois des surprises. Il y a cinq ans, je voulais devenir médecin, et maintenant je fais de l'informatique. Mais je crois que l'important, c'est de faire quelque chose qu'on aime et qui a du sens. Pour moi, aider les gens à apprendre, ça a vraiment du sens. Je suis sûr que si je travaille dans ce domaine, je serai heureux. Voilà, c'est à peu près tout ce que je voulais dire sur mon projet professionnel. Merci de m'avoir écouté.",
+  "wordCount": 697,
+  "explanation": "You explained your plans really clearly, and the story about your app was great. You said <wrong>Si j'aurais</wrong>; after <key>si</key> use the imperfect: <right>Si j'avais</right>. It's <right>il faut que j'aie</right>, with the subjunctive after <key>il faut que</key>. And with a profession, drop the article: <right>devenir médecin</right>.",
+  "followUp": {
+   "question": "Qu'est-ce qui vous attire le plus dans le travail à Montréal ?",
+   "translation": "What attracts you most about working in Montréal?"
+  },
+  "corrections": [
+   {
+    "category": "filler",
+    "severity": "warning",
+    "label": "Filler before the first point",
+    "original": "Bon, euh,",
+    "replacement": "Bon,",
+    "replacementTranslation": "Well,",
+    "explanation": "Start without the hesitation: « Bon, je vais vous parler… ».",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Tense with « depuis »",
+    "original": "Depuis deux ans, j'ai étudié",
+    "replacement": "Depuis deux ans, j'étudie",
+    "replacementTranslation": "For two years I have been studying",
+    "explanation": "An action still going on with « depuis » takes the present: Depuis deux ans, j'étudie.",
+    "examStatus": null
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Verb agreement with « beaucoup de mes amis »",
+    "original": "l'utilise",
+    "replacement": "l'utilisent",
+    "replacementTranslation": "use it",
+    "explanation": "« Beaucoup de mes amis » is plural: l'utilisent.",
+    "examStatus": null
+   },
+   {
+    "category": "style",
+    "severity": "suggestion",
+    "label": "« de » before an adjective + noun",
+    "original": "des mauvaises notes",
+    "replacement": "de mauvaises notes",
+    "replacementTranslation": "bad marks",
+    "explanation": "Before an adjective placed before the noun, careful French uses « de »: de mauvaises notes.",
+    "examStatus": null
+   },
+   {
+    "category": "register",
+    "severity": "warning",
+    "label": "Anglicism « réaliser »",
+    "original": "Je réalise maintenant que",
+    "replacement": "Je me rends compte maintenant que",
+    "replacementTranslation": "I now realise that",
+    "explanation": "« Réaliser » means to carry out; to say you understand, use « se rendre compte ».",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Subjunctive after « il faut que »",
+    "original": "il faut que j'ai",
+    "replacement": "il faut que j'aie",
+    "replacementTranslation": "I need to have",
+    "explanation": "« Il faut que » takes the subjunctive: que j'aie.",
+    "examStatus": null
+   },
+   {
+    "category": "register",
+    "severity": "warning",
+    "label": "Dropped « ne » in the negation",
+    "original": "personne m'a répondu",
+    "replacement": "personne ne m'a répondu",
+    "replacementTranslation": "nobody has answered me",
+    "explanation": "Speech often drops « ne », but an exam expects it: personne ne m'a répondu.",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "« entendre dire que »",
+    "original": "J'ai entendu que",
+    "replacement": "J'ai entendu dire que",
+    "replacementTranslation": "I have heard that",
+    "explanation": "To report something you heard, French says « J'ai entendu dire que ».",
+    "examStatus": null
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "Conditional after « si »",
+    "original": "Si j'aurais",
+    "replacement": "Si j'avais",
+    "replacementTranslation": "If I had",
+    "explanation": "After « si », use the imperfect, not the conditional: Si j'avais.",
+    "examStatus": null
+   },
+   {
+    "category": "register",
+    "severity": "warning",
+    "label": "Casual « ouais, genre »",
+    "original": "Ouais, genre,",
+    "replacement": "Franchement,",
+    "replacementTranslation": "Honestly,",
+    "explanation": "« Ouais, genre » is very casual filler; say « Franchement » or nothing.",
+    "examStatus": "avoid"
+   },
+   {
+    "category": "grammar",
+    "severity": "error",
+    "label": "No article before a profession",
+    "original": "devenir un médecin",
+    "replacement": "devenir médecin",
+    "replacementTranslation": "become a doctor",
+    "explanation": "After « devenir », a profession takes no article: devenir médecin.",
+    "examStatus": null
+   },
+   {
+    "category": "filler",
+    "severity": "warning",
+    "label": "Filler before the conclusion",
+    "original": "Voilà, euh,",
+    "replacement": "Voilà,",
+    "replacementTranslation": "So,",
+    "explanation": "End cleanly: « Voilà, c'est à peu près tout… ».",
+    "examStatus": "avoid"
+   }
+  ],
+  "stats": {
+   "sentences": 50,
+   "sentencesWithMistakes": 12,
+   "mistakes": 12,
+   "words": 697,
+   "wordsPerMinute": 139
+  }
+ }
+]

@@ -45,6 +45,11 @@ export interface LlmEndpoint {
 	baseUrl: string;
 	apiKey: string;
 	model: string;
+	/**
+	 * Models to continue with, in order, when `model` is out of room under the
+	 * provider's rate limits (see `pacing.ts`). Empty or absent: `model` only.
+	 */
+	fallbackModels?: readonly string[];
 }
 
 export interface ChatMessage {
@@ -95,9 +100,6 @@ export interface EvaluationResult {
 	explanation: string;
 	/** The question that keeps the learner talking, with its translation; null if the model gave none. */
 	followUp: FollowUp | null;
-	/** Three translation styles of what the learner said. */
-	/** Null when they were not asked for (`includeTranslations`); fetched on demand then. */
-	translations: TranslationSet | null;
 	corrections: EvaluationCorrection[];
 	vocabulary: VocabularySuggestion[];
 	connectors: ConnectorSuggestion[];
@@ -112,12 +114,6 @@ export interface EvaluationRequest {
 	language: string;
 	/** The language of instruction, by its English name, e.g. `English`, `Spanish`. */
 	translationTarget: string;
-	/**
-	 * Ask for the translations of the correct version too. Only when the learner
-	 * shows them after every take: otherwise they are four or five more
-	 * renderings of the whole answer that nobody reads, fetched on demand instead.
-	 */
-	includeTranslations: boolean;
 	endpoint: LlmEndpoint;
 	/** Output token cap; defaults to the pacing-derived budget. */
 	maxTokens?: number;

@@ -79,10 +79,41 @@ export const LLM_MODELS: Record<LlmProviderId, LlmModelOption[]> = {
 	custom: []
 };
 
+/**
+ * The Groq models a request may move between when one is out of room, best
+ * first. Each has its own allowance under Groq's rate limits (8,000 tokens a
+ * minute on the free plan), so rotating multiplies what fits in a minute.
+ * All three follow onspot's JSON prompts (checked 2026-11-01 on a free key:
+ * phrase meanings and word glosses, JSON mode). A model a key cannot use is
+ * skipped after its first 404.
+ */
+export const GROQ_ROTATION_MODELS: readonly LlmModelId[] = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+
 export function getProvider(id: LlmProviderId): LlmProviderConfig {
 	return LLM_PROVIDERS[id] ?? LLM_PROVIDERS.custom;
 }
 
 export function getModelOptions(id: LlmProviderId): LlmModelOption[] {
 	return LLM_MODELS[id] ?? [];
+}
+
+/** A model's name as Settings shows it ("GPT-OSS 120B"), or its id without the vendor prefix. */
+export function modelLabel(model: string): string {
+	const curated = Object.values(LLM_MODELS)
+		.flat()
+		.find((option) => option.id === model)?.label;
+	return curated ?? model.split('/').pop() ?? model;
+}
+
+/** The provider an endpoint URL belongs to ("Groq"), or its host for any other server. */
+export function providerNameFor(baseUrl: string): string {
+	const host = (url: string) => {
+		try {
+			return new URL(url).host;
+		} catch {
+			return url;
+		}
+	};
+	const known = Object.values(LLM_PROVIDERS).find((provider) => provider.baseUrl && host(provider.baseUrl) === host(baseUrl));
+	return known?.name ?? host(baseUrl);
 }

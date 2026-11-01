@@ -99,6 +99,17 @@
 		};
 	});
 
+	/*
+	 * The paper's height and scroll offset, kept as they change (a resize
+	 * observer and its scroll events). Reading them back from the element
+	 * forced a layout of the whole page while Practice was still being built,
+	 * and again on every take the stack passed.
+	 */
+	let paperContent = $state<DOMRectReadOnly | null>(null);
+	/** The paper's inner height (padding included, as `clientHeight`); 0 while it is not displayed. */
+	const paperHeight = $derived(paperContent && paperContent.height > 0 ? paperContent.height + 2 * PAPER_PADDING_PX : 0);
+	let paperScrollTop = 0;
+
 	/**
 	 * A long session does not fit the paper; it scrolls so the current take
 	 * stays in view. It runs again on opening: on phones the paper is not
@@ -108,14 +119,19 @@
 		const row = rowOf(closestIndex);
 		const opening = open;
 		if (!paper || row < 0) return;
+		// Not displayed (a phone's closed paper): there is nothing to scroll, and it opens at the top.
+		if (paperHeight === 0) {
+			paperScrollTop = 0;
+			return;
+		}
 
 		const itemTop = PAPER_PADDING_PX + row * ITEM_STEP_PX;
 		const itemBottom = itemTop + ITEM_HEIGHT_PX;
-		const { scrollTop, clientHeight } = paper;
+		const scrollTop = paperScrollTop;
 
 		let target = scrollTop;
 		if (itemTop - PAPER_PADDING_PX < scrollTop) target = itemTop - PAPER_PADDING_PX;
-		else if (itemBottom + PAPER_PADDING_PX > scrollTop + clientHeight) target = itemBottom + PAPER_PADDING_PX - clientHeight;
+		else if (itemBottom + PAPER_PADDING_PX > scrollTop + paperHeight) target = itemBottom + PAPER_PADDING_PX - paperHeight;
 		if (target === scrollTop) return;
 
 		// Opening shows the paper already at the current take; following the stack is smooth.
@@ -129,7 +145,12 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions (taps only open the paper; the takes are buttons) -->
 	<div class="timeline-sheet" class:open bind:this={sheet} onpointerdown={pressSheet}>
 		<div class="timeline-lift">
-			<div class="timeline-paper" bind:this={paper}>
+			<div
+				class="timeline-paper"
+				bind:this={paper}
+				bind:contentRect={paperContent}
+				onscroll={() => (paperScrollTop = paper?.scrollTop ?? 0)}
+			>
 				<div class="timeline-track">
 					<span class="ink-playhead" style:transform={`translateY(${playheadOffset}px)`} aria-hidden="true"></span>
 					<ol class="timeline-items">
@@ -177,6 +198,9 @@
 		--margin-line-at: 32px;
 		--playhead-inset: 10px;
 		--settle: cubic-bezier(0.16, 1, 0.3, 1);
+		/* The paper slides out and back this fast; its ink and labels change a little quicker. */
+		--slide-duration: 220ms;
+		--ink-duration: 160ms;
 
 		/* The middle 60% of the stage, against its right edge. */
 		position: absolute;
@@ -225,8 +249,8 @@
 		min-height: 0;
 		filter: drop-shadow(-15px 15px 20px rgb(0 0 0 / 0.18));
 		transition:
-			filter 0.5s var(--settle),
-			transform 0.5s var(--settle);
+			filter var(--slide-duration) var(--settle),
+			transform var(--slide-duration) var(--settle);
 	}
 	/* Masking tape holding the paper to the edge of the screen. */
 	.timeline-lift::before {
@@ -281,7 +305,7 @@
 			1% 25%, 0% 22%, 2% 19%, 0% 16%,
 			1% 13%, 0% 10%, 2% 7%, 0% 4%
 		);
-		transition: width 0.5s var(--settle);
+		transition: width var(--slide-duration) var(--settle);
 	}
 	.timeline-paper::-webkit-scrollbar { width: 6px; }
 	.timeline-paper::-webkit-scrollbar-track { background: rgb(0 0 0 / 0.05); border-radius: 4px; }
@@ -348,7 +372,7 @@
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
-		transition: background-color 0.2s;
+		transition: background-color var(--ink-duration);
 	}
 	.timeline-item:hover {
 		background-color: rgb(var(--paper-stain) / 0.05);
@@ -365,7 +389,10 @@
 		margin-left: var(--tick-inset);
 		border-radius: 2px;
 		background-color: var(--tick-color);
-		transition: all 0.3s ease;
+		transition:
+			width var(--ink-duration) ease,
+			height var(--ink-duration) ease,
+			background-color var(--ink-duration) ease;
 	}
 	.timeline-number {
 		flex-shrink: 0;
@@ -377,7 +404,10 @@
 		font-variant-numeric: tabular-nums;
 		opacity: 0;
 		transform: translateX(-5px);
-		transition: all 0.3s ease;
+		transition:
+			opacity var(--ink-duration) ease,
+			transform var(--ink-duration) ease,
+			color var(--ink-duration) ease;
 	}
 	.timeline-text {
 		min-width: 0;
@@ -390,7 +420,10 @@
 		text-overflow: ellipsis;
 		opacity: 0;
 		transform: translateX(-10px);
-		transition: all 0.3s ease;
+		transition:
+			opacity var(--ink-duration) ease,
+			transform var(--ink-duration) ease,
+			color var(--ink-duration) ease;
 	}
 	.timeline-sheet:is(.open, :has(:focus-visible)) :is(.timeline-number, .timeline-text) {
 		opacity: 1;
@@ -424,7 +457,7 @@
 		box-shadow: 0 1px 3px rgb(192 57 43 / 0.5);
 		filter: blur(0.3px);
 		pointer-events: none;
-		transition: transform 0.3s var(--settle);
+		transition: transform var(--ink-duration) var(--settle);
 	}
 
 	/*

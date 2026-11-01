@@ -2,7 +2,7 @@
 
 import { derived, get } from 'svelte/store';
 import type { LlmEndpoint, LlmProviderId } from '#lib/adapters/llm/index.js';
-import { getProvider } from '#lib/adapters/llm/index.js';
+import { GROQ_ROTATION_MODELS, getProvider } from '#lib/adapters/llm/index.js';
 import { appSettings, type AppSettings } from './settings';
 import { customApiKey, deepseekApiKey, groqApiKey, localLlmApiKey } from './secrets';
 
@@ -35,13 +35,15 @@ export function resolveLlmEndpoint(settings: AppSettings): LlmEndpoint {
 	const provider = getProvider(settings.llmProvider);
 	const baseUrl =
 		settings.llmProvider === 'custom' ? settings.customBaseUrl : provider.baseUrl;
+	const model =
+		settings.llmProvider === 'custom' ? settings.customModel : settings.llmModel || provider.defaultModel;
+	// Groq limits each model separately, so a busy model's requests can continue on another.
+	const rotates = settings.llmProvider === 'groq' && settings.llmRotation === 'rotate';
 	return {
 		baseUrl: baseUrl || provider.baseUrl,
 		apiKey: get(secretFor(settings.llmProvider)),
-		model:
-			settings.llmProvider === 'custom'
-				? settings.customModel
-				: settings.llmModel || provider.defaultModel
+		model,
+		fallbackModels: rotates ? GROQ_ROTATION_MODELS.filter((fallback) => fallback !== model) : []
 	};
 }
 

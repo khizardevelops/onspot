@@ -6,12 +6,15 @@
 	 * or a selected range. It lives on <body>: takes sit in a scrolling,
 	 * 3D-transformed list, which would clip a label inside the card or misplace a
 	 * fixed one. floating-ui keeps it beside its anchor, flips it near an edge,
-	 * and follows the anchor while the list scrolls.
+	 * follows the anchor while the list scrolls, and hides while the anchor is
+	 * scrolled out of sight (out of a partial view's window, say), so the label
+	 * never floats over unrelated text.
 	 */
 	import {
 		autoUpdate,
 		computePosition,
 		flip,
+		hide,
 		offset,
 		shift,
 		type ReferenceElement
@@ -39,6 +42,8 @@
 	let label = $state<HTMLElement | null>(null);
 	let x = $state(0);
 	let y = $state(0);
+	/** The anchor is scrolled out of every container that shows it. */
+	let anchorOutOfSight = $state(false);
 
 	function moveToBody(node: HTMLElement) {
 		document.body.appendChild(node);
@@ -55,10 +60,11 @@
 			void computePosition(reference, floating, {
 				strategy: 'fixed',
 				placement: side,
-				middleware: [offset(GAP_PX), flip(), shift({ padding: EDGE_PADDING_PX })]
+				middleware: [offset(GAP_PX), flip(), shift({ padding: EDGE_PADDING_PX }), hide({ strategy: 'referenceHidden' })]
 			}).then((position) => {
 				x = position.x;
 				y = position.y;
+				anchorOutOfSight = position.middlewareData.hide?.referenceHidden ?? false;
 			});
 
 		return autoUpdate(reference, floating, place);
@@ -72,6 +78,7 @@
 		class="word-gloss"
 		dir="auto"
 		class:is-status={isStatus}
+		class:out-of-sight={anchorOutOfSight}
 		role="tooltip"
 		style:left={`${x}px`}
 		style:top={`${y}px`}
@@ -97,6 +104,9 @@
 		line-height: 1.35;
 		pointer-events: none;
 		white-space: normal;
+	}
+	.word-gloss.out-of-sight {
+		visibility: hidden;
 	}
 	.word-gloss-detail {
 		display: block;

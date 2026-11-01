@@ -2,13 +2,6 @@
 
 import { translationGuidance } from './languageGuidance';
 
-export const TRANSLATION_SCHEMA = `{
-  "idiomatic": string,
-  "idiomaticVariants": string[],
-  "literal": string,
-  "wordForWord": string
-}`;
-
 export const DETAILED_TRANSLATION_SCHEMA = `{
   "idiomatic": string,
   "idiomaticVariants": string[],

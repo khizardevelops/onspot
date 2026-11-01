@@ -3,6 +3,17 @@
 import { isTauri } from '#lib/platform/runtime.js';
 import { recordCall, recordRefusal } from '#lib/usage/ledger.js';
 import { repairJson } from './jsonRepair.js';
+import { modelLabel } from './providers.js';
+import {
+	admit,
+	DEFAULT_PATIENCE_MS,
+	learnFromRefusal,
+	planRequest,
+	release,
+	settle,
+	waitForRoom,
+	type Admission
+} from './pacing.js';
 import type { ChatMessage, LlmEndpoint } from './types.js';
 
 /**
@@ -31,6 +42,12 @@ interface ChatCompletionOptions {
 	signal?: AbortSignal;
 	/** Give up after this long, so a stalled provider cannot leave the UI waiting forever. */
 	timeoutMs?: number;
+	/**
+	 * How long to wait for the endpoint's own model before a fallback model
+	 * takes the request (see `pacing.ts`): longer where the best model's
+	 * quality matters most.
+	 */
+	patienceMs?: number;
 }
 
 /**
@@ -127,11 +144,43 @@ function rejectedJsonReply(errorBody: string): string | null {
 const INVALID_JSON_RETRIES = 1;
 
 /**
+ * Refusals one request may meet before it fails: each sends it to another
+ * model, or waits, and teaches the pacing a limit, so a few are enough.
+ * Waiting for room is not a refusal and does not count.
+ */
+const MAX_REFUSALS = 6;
+
+/**
+ * The readable part of a provider's error body: its `error.message` when the
+ * body is the usual JSON, otherwise the body itself.
+ */
+function providerMessage(body: string): string {
+	try {
+		const message = (JSON.parse(body) as { error?: { message?: unknown } })?.error?.message;
+		if (typeof message === 'string' && message.trim()) return message.trim();
+	} catch {
+		// not JSON
+	}
+	return body.trim();
+}
+
+/** A failed request's message for the learner: which model, what went wrong, and what the provider said. */
+function failureMessage(model: string, status: number, body: string): string {
+	const said = providerMessage(body).slice(0, MAX_ERROR_CHARS);
+	const name = modelLabel(model);
+	if (status === 401) return `${name}: the provider rejected the API key. Check it in Settings.${said ? ` (${said})` : ''}`;
+	return `${name} request failed (HTTP ${status})${said ? `: ${said}` : ''}`;
+}
+
+/**
  * Minimal OpenAI-compatible Chat Completions client.
  *
  * Groq, DeepSeek and most self-hosted gateways implement this shape, so one
- * function covers them all. Provider errors are surfaced with the response body
- * so a 401 (bad key) or 429 (quota) is actionable in the UI. A JSON reply the
+ * function covers them all. Every request goes through the rate-limit pacing
+ * (`pacing.ts`): it waits for room under the model's per-minute allowance, or
+ * goes to the next of the endpoint's fallback models, and a refusal is learnt
+ * from and retried. Other provider errors are surfaced with the provider's
+ * message so a 401 (bad key) is actionable in the UI. A JSON reply the
  * provider rejected over a known slip is repaired and used; otherwise it is
  * asked for once more.
  */
@@ -143,7 +192,8 @@ export async function chatCompletion(
 		maxTokens = 2048,
 		json = false,
 		signal,
-		timeoutMs = DEFAULT_LLM_TIMEOUT_MS
+		timeoutMs = DEFAULT_LLM_TIMEOUT_MS,
+		patienceMs = DEFAULT_PATIENCE_MS
 	}: ChatCompletionOptions = {}
 ): Promise<string> {
 	const base = endpoint.baseUrl.trim().replace(/\/+$/, '');
@@ -156,51 +206,91 @@ export async function chatCompletion(
 	if (endpoint.apiKey.trim()) headers.Authorization = `Bearer ${endpoint.apiKey.trim()}`;
 
 	const url = `${base}/chat/completions`;
-	const body = JSON.stringify({
-		model: endpoint.model,
-		messages,
-		temperature,
-		max_tokens: maxTokens,
-		...reasoningOptions(endpoint.model),
-		...(json ? { response_format: { type: 'json_object' } } : {})
-	});
+	const requestBody = (model: string) =>
+		JSON.stringify({
+			model,
+			messages,
+			temperature,
+			max_tokens: maxTokens,
+			...reasoningOptions(model),
+			...(json ? { response_format: { type: 'json_object' } } : {})
+		});
+	const models = [endpoint.model, ...(endpoint.fallbackModels ?? []).filter((model) => model !== endpoint.model)];
 
-	for (let attempt = 0; ; attempt++) {
-		const response = await fetchWithTimeout(url, { method: 'POST', headers, body }, { timeoutMs, signal });
+	let invalidJsonReplies = 0;
+	let refusals = 0;
+	for (;;) {
+		const plan = planRequest(endpoint, models, messages, maxTokens, patienceMs, Date.now());
+		if (plan.waitMs > 0) {
+			await waitForRoom(endpoint, plan.model, plan.waitMs, signal);
+			// Planned again after the wait: other requests may have taken the room meanwhile.
+			continue;
+		}
+
+		const admission = admit(plan, messages, Date.now());
+		const response = await sendCharged(admission, () =>
+			fetchWithTimeout(url, { method: 'POST', headers, body: requestBody(plan.model) }, { timeoutMs, signal })
+		);
 
 		if (!response.ok) {
 			const detail = await response.text().catch(() => '');
-			recordRefusal({ url, apiKey: endpoint.apiKey, model: endpoint.model, body: detail });
+			recordRefusal({ url, apiKey: endpoint.apiKey, model: plan.model, body: detail });
 
 			const rejected = json ? rejectedJsonReply(detail) : null;
 			if (rejected !== null) {
+				// The reply was written (and counted) even though the provider refused it.
+				settle(admission, { promptTokens: 0, totalTokens: 0, cachedTokens: 0 }, response.headers, Date.now());
 				const repaired = repairJson(rejected);
 				if (repaired) return repaired;
-				if (attempt < INVALID_JSON_RETRIES) continue;
-				throw new Error(`${endpoint.model}'s reply wasn't valid JSON. Please try again.`);
+				if (invalidJsonReplies++ < INVALID_JSON_RETRIES) continue;
+				throw new Error(`${modelLabel(plan.model)}'s reply wasn't valid JSON. Please try again.`);
 			}
-			throw new Error(
-				`${endpoint.model} request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, MAX_ERROR_CHARS)}` : ''}`
-			);
+
+			const outcome = learnFromRefusal(admission, response.status, detail, Date.now());
+			if (outcome === 'try-again' && ++refusals < MAX_REFUSALS) continue;
+			throw new Error(failureMessage(plan.model, response.status, detail));
 		}
 
 		// A misconfigured custom base URL can answer 200 with an HTML page.
 		const data = await response.json().catch(() => {
+			release(admission, Date.now());
 			throw new Error(`${hostOf(base)} did not return a chat-completions response. Check the provider URL.`);
 		});
-		const totalTokens = Number(data?.usage?.total_tokens);
-		const promptTokens = Number(data?.usage?.prompt_tokens);
+		const usage = completedUsage(data);
+		settle(admission, usage, response.headers, Date.now());
 		recordCall({
 			url,
 			apiKey: endpoint.apiKey,
-			model: endpoint.model,
-			tokens: Number.isFinite(totalTokens) ? totalTokens : 0,
+			model: plan.model,
+			tokens: usage.totalTokens,
 			// What the provider had to set aside to admit this call (see `CloudCall.reservedTokens`).
-			reservedTokens: Number.isFinite(promptTokens) ? promptTokens + maxTokens : 0,
+			reservedTokens: usage.promptTokens > 0 ? usage.promptTokens + maxTokens : 0,
 			headers: response.headers
 		});
 		return replyText(data);
 	}
+}
+
+/** Sends a charged request; a request that never reached the provider gives its charge back. */
+async function sendCharged(admission: Admission, send: () => Promise<Response>): Promise<Response> {
+	try {
+		return await send();
+	} catch (error) {
+		release(admission, Date.now());
+		throw error;
+	}
+}
+
+/** The `usage` block of a chat-completions reply; zeros where a gateway leaves it out. */
+function completedUsage(data: unknown): { promptTokens: number; totalTokens: number; cachedTokens: number } {
+	const usage = (data as { usage?: Record<string, unknown> })?.usage ?? {};
+	const count = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+	const details = (usage.prompt_tokens_details ?? {}) as Record<string, unknown>;
+	return {
+		promptTokens: count(usage.prompt_tokens),
+		totalTokens: count(usage.total_tokens),
+		cachedTokens: count(details.cached_tokens)
+	};
 }
 
 /** The reply's text; some OpenAI-compatible gateways return content as an array of parts. */

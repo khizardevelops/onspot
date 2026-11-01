@@ -3,7 +3,6 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import { page } from '$app/state';
 	import { initSettings, appSettings, settingsReady } from '#lib/stores/settings.js';
 	import { initPractice } from '#lib/stores/practice.js';
@@ -105,7 +104,7 @@
 	<!-- Navigation lives in each page's top bar (AppHeader); the page has the whole window. -->
 	<main class="app-page paper-surface relative z-[1] h-dvh min-w-0 overflow-hidden text-foreground">
 		{#key page.url.pathname}
-			<div class="h-full" in:fade={{ duration: 90 }}>
+			<div class="page-enter h-full">
 				{@render children()}
 			</div>
 		{/key}
@@ -134,6 +133,24 @@
 	@media (max-width: 640px) {
 		:global(main.app-page) {
 			padding-top: env(safe-area-inset-top);
+		}
+	}
+	/*
+	 * Each page fades in as it replaces the last. A CSS animation, not a Svelte
+	 * transition: Svelte's fade reads the new page's computed opacity first,
+	 * which forced a style pass over the whole page while it was being built.
+	 */
+	.page-enter {
+		animation: page-enter 90ms linear;
+	}
+	@keyframes page-enter {
+		from {
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.page-enter {
+			animation: none;
 		}
 	}
 	/* Only published as --paper-key; never painted itself. */

@@ -212,6 +212,21 @@ export function restsOn(stack: StackPosition, index: number): boolean {
 }
 
 /**
+ * True for the cards that show at this stack position and the ones a single
+ * step of scrolling would bring into sight: the next card down the pile (it
+ * starts fading in as soon as the top card lifts) and the one waiting above,
+ * ready to drop back on. Cards outside this reach cannot be seen yet.
+ *
+ * @param index The card's place in the stack, oldest first.
+ * @param stack The current stack position.
+ */
+export function isWithinReach(index: number, stack: StackPosition): boolean {
+	const deepestReached = stack.closestIndex - (BURIED_CARDS_SHOWN + 1);
+	const highestReached = stack.closestIndex + 1;
+	return index >= deepestReached && index <= highestReached;
+}
+
+/**
  * The scroll offset that rests a card on top of the stack.
  *
  * @param index The card to show.

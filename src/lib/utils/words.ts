@@ -96,11 +96,22 @@ export function sameWords(first: string, second: string): boolean {
 	);
 }
 
-/** The words of a text, lower-cased and with one apostrophe style, for comparisons. */
+/**
+ * A word as it is compared with another: lower-cased, with one apostrophe
+ * style, so a capital or a curly apostrophe (j'ai / J’ai) is not a change.
+ *
+ * @param word One word token's text.
+ * @returns The form to compare.
+ */
+export function comparableWord(word: string): string {
+	return word.toLocaleLowerCase().replaceAll('’', "'");
+}
+
+/** The words of a text in their comparable form (see `comparableWord`). */
 function comparableWords(text: string): string[] {
 	return tokenizeWords(text)
 		.filter((token) => token.word)
-		.map((token) => token.text.toLocaleLowerCase().replaceAll('’', "'"));
+		.map((token) => comparableWord(token.text));
 }
 
 /**

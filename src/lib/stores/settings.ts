@@ -20,9 +20,6 @@ import {
 	RETIRED_DEFAULT_ELEVENLABS_VOICE_ID
 } from '#lib/speech/tts/cloud/elevenLabsVoices.js';
 
-/** How much translation to show under an attempt. */
-export type TranslationMode = 'off' | 'idiomatic' | 'all';
-
 /**
  * Non-secret preferences, persisted in the database so they sync with the
  * learner's data. Secrets live in `stores/secrets.ts` instead.
@@ -55,12 +52,15 @@ export interface AppSettings {
 	llmProvider: LlmProviderId;
 	/** Selected model for the non-custom providers (enum-backed dropdown). */
 	llmModel: LlmModelId;
+	/**
+	 * When the Groq model is out of room under Groq's rate limits: continue
+	 * with another Groq model (`GROQ_ROTATION_MODELS`), or wait for this one.
+	 */
+	llmRotation: 'rotate' | 'wait';
 	/** Base URL for the custom OpenAI-compatible provider. */
 	customBaseUrl: string;
 	/** Model name for the custom provider (free text). */
 	customModel: string;
-	/** How much translation to show under an attempt. */
-	translationMode: TranslationMode;
 	/**
 	 * The on-device voice for the English of explanations (see
 	 * `explanationVoicesFor`); its target-language words keep `ttsVoice`.
@@ -103,9 +103,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	ttsApiVoice: 'alloy',
 	llmProvider: 'groq',
 	llmModel: getProvider('groq').defaultModel,
+	llmRotation: 'rotate',
 	customBaseUrl: '',
 	customModel: '',
-	translationMode: 'off',
 	explanationVoice: '',
 	// French is currently the only approved language. A usable default avoids an
 	// indeterminate first boot that otherwise stays at “Checking language data…”.
@@ -130,8 +130,8 @@ const CHOICES = {
 	ttsMode: ['local', 'cloud'],
 	ttsCloudProvider: ['elevenlabs', 'openai'],
 	correctionMode: ['cloud', 'local'],
-	translationMode: ['off', 'idiomatic', 'all'],
 	llmProvider: ['groq', 'deepseek', 'custom'],
+	llmRotation: ['rotate', 'wait'],
 	syncProvider: ['off', 'google-drive', 'webdav']
 } as const satisfies Partial<Record<keyof AppSettings, readonly string[]>>;
 const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
@@ -195,6 +195,26 @@ async function persist(value: AppSettings): Promise<void> {
 	}
 }
 
+/**
+ * Saves the fields chosen while the stored settings were loading. The load
+ * applies everything without saving (it must not write defaults back), so
+ * these would otherwise stay unsaved until some other setting changed, and
+ * be lost on the next start.
+ */
+async function persistChosenWhileLoading(value: AppSettings, fields: (keyof AppSettings)[]): Promise<void> {
+	try {
+		const db = await getDatabaseAdapter();
+		for (const field of fields) {
+			const json = JSON.stringify(value[field]);
+			if (written.get(field) === json) continue;
+			await db.setSetting(`${FIELD_PREFIX}${field}`, json);
+			written.set(field, json);
+		}
+	} catch (error) {
+		console.error('[settings] failed to persist a choice made while loading', error);
+	}
+}
+
 /** Loads persisted settings from the database. Safe to call once on startup. */
 export async function initSettings(): Promise<void> {
 	// Also runs after a database restore or a cloud download. Suspend
@@ -254,6 +274,7 @@ export async function initSettings(): Promise<void> {
 		}
 	}
 	// A choice made while the database was being read wins over the stored value.
+	const chosenWhileLoading = [...pending.keys()];
 	for (const [field, value] of pending) {
 		(loaded as unknown as Record<string, unknown>)[field] = value;
 	}
@@ -271,6 +292,8 @@ export async function initSettings(): Promise<void> {
 	applying = false;
 	hydrated = true;
 	settingsReady.set(true);
+
+	if (chosenWhileLoading.length > 0) await persistChosenWhileLoading(loaded, chosenWhileLoading);
 }
 
 export const appSettings = {

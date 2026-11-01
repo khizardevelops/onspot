@@ -9,8 +9,28 @@ import {
 	type TranslationLanguage
 } from './translationPrompt';
 import type { ChatMessage, LlmEndpoint } from './types';
+import { sentenceChunks } from '#lib/utils/textChunks.js';
+import { tokenizeWords } from '#lib/utils/words.js';
 
-const MAX_TRANSLATION_TOKENS = 2048;
+/**
+ * Words translated in one request. Every word comes back four or five times
+ * (idiomatic, its variants, literal, word for word) plus its breakdown entry,
+ * so a longer text is translated in parts of whole sentences: each reply then
+ * fits its budget, and each request a fraction of Groq's free per-minute
+ * allowance.
+ */
+const TRANSLATION_PART_WORDS = 60;
+
+/**
+ * Reply tokens per source word across all the views, with room to spare:
+ * a 60-word part's answer took ~950 (2026-11-01, GPT-OSS 120B). A reply cut
+ * off by its budget is invalid JSON and fails.
+ */
+const REPLY_TOKENS_PER_WORD = 20;
+/** GPT-OSS reasons before answering, even at low effort: 130–700 tokens measured (477 on that part). */
+const REASONING_HEADROOM = 900;
+const MIN_TRANSLATION_TOKENS = 1024;
+const MAX_TRANSLATION_TOKENS = 3072;
 
 function translationMessages(
 	text: string,
@@ -28,7 +48,7 @@ Return only a JSON object with this exact structure:
 
 ${translationRules(translation)}
 
-For "wordBreakdown", map the source's primary tokens or morphemes in order to their isolated ${translation.translationTarget} equivalents. Split contractions when useful. Keep each item brief.`
+For "wordBreakdown", map the source's primary tokens or morphemes in order to their isolated ${translation.translationTarget} equivalents. Split contractions when useful. Keep each item brief. Leave punctuation out: no entries for commas, full stops or other marks.`
 		},
 		{
 			role: 'user',
@@ -61,22 +81,19 @@ function breakdown(value: unknown): TranslationBreakdownItem[] {
 		.filter((item) => item.source && item.target);
 }
 
-/**
- * Generates the three translation views without re-running attempt feedback.
- *
- * @param text What to translate: the take's correct version ("Did you mean to
- *   say?"), which is the transcript itself when there was nothing to fix.
- */
-export async function generateTranslations(
+/** Translates one part of a text: all the views, as the model returned them. */
+async function translatePart(
 	text: string,
 	endpoint: LlmEndpoint,
 	translation: TranslationLanguage,
 	signal?: AbortSignal
-): Promise<TranslationSet> {
+): Promise<Omit<TranslationSet, 'version'>> {
+	const words = tokenizeWords(text).filter((token) => token.word).length;
+	const maxTokens = Math.min(MAX_TRANSLATION_TOKENS, Math.max(MIN_TRANSLATION_TOKENS, words * REPLY_TOKENS_PER_WORD + REASONING_HEADROOM));
 	const raw = await chatCompletion(endpoint, translationMessages(text, translation), {
 		json: true,
 		temperature: 0.1,
-		maxTokens: MAX_TRANSLATION_TOKENS,
+		maxTokens,
 		signal
 	});
 	const parsed = extractJson(raw);
@@ -87,16 +104,56 @@ export async function generateTranslations(
 			? (root.translations as Record<string, unknown>)
 			: root;
 	const idiomatic = stringField(source.idiomatic);
-	const translations: TranslationSet = {
-		version: TRANSLATION_SET_VERSION,
+	const part = {
 		idiomatic,
 		idiomaticVariants: stringArray(source.idiomaticVariants, idiomatic),
 		literal: stringField(source.literal),
 		wordForWord: stringField(source.wordForWord),
 		wordBreakdown: breakdown(source.wordBreakdown)
 	};
-	if (!translations.idiomatic || !translations.literal || !translations.wordForWord) {
+	if (!part.idiomatic || !part.literal || !part.wordForWord) {
 		throw new Error('The model did not return all three translation variants. Please try again.');
 	}
-	return translations;
+	return part;
+}
+
+/**
+ * Joins the parts of a long text's translation in order. A variant of the
+ * whole is each part's variant at that position (a part without one keeps
+ * its idiomatic rendering there).
+ */
+function joinParts(parts: Omit<TranslationSet, 'version'>[]): Omit<TranslationSet, 'version'> {
+	const join = (pick: (part: Omit<TranslationSet, 'version'>) => string) => parts.map(pick).join(' ');
+	const variantCount = Math.max(0, ...parts.map((part) => part.idiomaticVariants.length));
+
+	return {
+		idiomatic: join((part) => part.idiomatic),
+		idiomaticVariants: Array.from({ length: variantCount }, (_, position) =>
+			join((part) => part.idiomaticVariants[position] ?? part.idiomatic)
+		),
+		literal: join((part) => part.literal),
+		wordForWord: join((part) => part.wordForWord),
+		wordBreakdown: parts.flatMap((part) => part.wordBreakdown)
+	};
+}
+
+/**
+ * Generates the three translation views without re-running attempt feedback.
+ * A long text is translated in parts of whole sentences (`TRANSLATION_PART_WORDS`),
+ * sent together; the rate-limit pacing spreads them over time and models.
+ *
+ * @param text What to translate: the take's correct version ("Did you mean to
+ *   say?"), which is the transcript itself when there was nothing to fix.
+ */
+export async function generateTranslations(
+	text: string,
+	endpoint: LlmEndpoint,
+	translation: TranslationLanguage,
+	signal?: AbortSignal
+): Promise<TranslationSet> {
+	const parts = sentenceChunks(text, TRANSLATION_PART_WORDS).map((span) => text.slice(span.start, span.end));
+	const translated = await Promise.all(
+		(parts.length > 0 ? parts : [text]).map((part) => translatePart(part, endpoint, translation, signal))
+	);
+	return { version: TRANSLATION_SET_VERSION, ...joinParts(translated) };
 }

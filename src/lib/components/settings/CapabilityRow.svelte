@@ -31,6 +31,16 @@
 		onModeChange,
 		children
 	}: Props = $props();
+
+	/*
+	 * A row's settings are built the first time it opens, then kept (so closing
+	 * it can animate and it reopens at once). All three used to be built with
+	 * the Settings page, closed, which made opening Settings slow.
+	 */
+	let hasOpened = $state(false);
+	$effect.pre(() => {
+		if (open) hasOpened = true;
+	});
 </script>
 
 <div class="capability" {id}>
@@ -77,7 +87,7 @@
 
 	<div id={`${id}-detail`} class="capability-detail" data-open={open} inert={!open}>
 		<div class="capability-detail-inner">
-			{@render children()}
+			{#if hasOpened}{@render children()}{/if}
 		</div>
 	</div>
 </div>

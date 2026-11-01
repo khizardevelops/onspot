@@ -15,7 +15,7 @@ import {
 	type IDatabaseAdapter,
 	TRANSLATION_SET_VERSION
 } from '#lib/adapters/db/index.js';
-import { appSettings, setSetting, type AppSettings } from './settings';
+import { appSettings, setSetting, settingsReady, type AppSettings } from './settings';
 import { groqApiKey } from './secrets';
 import { ttsApiOptions } from './ttsConfig';
 import { resolveLlmEndpoint } from './llm';
@@ -27,8 +27,11 @@ import { transcribeSpeech } from '#lib/speech/stt/service.js';
 import {
 	evaluateAttempt,
 	generateTranslations,
-	generateWordGlosses,
-	hasWordMeanings,
+	generateSectionGlosses,
+	glossSectionOf,
+	glossWords,
+	hasMeaningAt,
+	phraseContext,
 	translatePhrase,
 	separateFollowUp,
 	speakableExplanation,
@@ -36,6 +39,7 @@ import {
 } from '#lib/adapters/llm/index.js';
 import {
 	preloadLocalVoice,
+	isStoppedClip,
 	synthesizeExplanation,
 	synthesizeSpeech,
 	type ExplanationSpeechOptions,
@@ -505,7 +509,6 @@ export async function stopAndAnalyze(): Promise<void> {
 			level: settings.level,
 			...teachingLanguages(settings),
 			// Translations shown under every take come with the evaluation; otherwise only when asked for.
-			includeTranslations: settings.translationMode !== 'off',
 			endpoint: resolveLlmEndpoint(settings),
 			signal: controller.signal
 		});
@@ -568,10 +571,6 @@ async function persistAttempt(
 
 	const attemptId = newId('attempt');
 	const audioKey = `attempt:${attemptId}`;
-	const translations = evaluation.translations && {
-		...evaluation.translations,
-		instructionLanguage: get(appSettings).instructionLanguage
-	};
 	const attempt: Attempt = {
 		id: attemptId,
 		sessionId,
@@ -579,8 +578,9 @@ async function persistAttempt(
 		promptText: prompt.text,
 		transcript,
 		correctedText: evaluation.correctedText,
-		translation: evaluation.translations?.idiomatic || null,
-		translations,
+		// Translated only when the learner asks for it (the card's translation menu).
+		translation: null,
+		translations: null,
 		ttsVoice: get(appSettings).ttsVoice,
 		explanation: evaluation.explanation,
 		followUp: evaluation.followUp,
@@ -613,8 +613,8 @@ async function persistAttempt(
 		id: attemptId,
 		transcript,
 		correctedText: evaluation.correctedText,
-		translation: evaluation.translations?.idiomatic ?? '',
-		translations,
+		translation: '',
+		translations: null,
 		explanation: evaluation.explanation,
 		followUp: evaluation.followUp,
 		wordGlosses: {},
@@ -807,7 +807,7 @@ export function ensureAttemptTranslations(
  * The hover translations of one of an attempt's texts: one meaning per word
  * token (`glossWords`) and its phrases, or null until any have been fetched.
  * A text can hold translated selections before its word meanings
- * (`hasWordMeanings`).
+ * (`hasMeaningAt`).
  *
  * @param attempt The attempt the text belongs to.
  * @param text The transcript or the correct version.
@@ -846,11 +846,11 @@ function glossJobKey(attemptId: string, text: string): string {
 }
 
 /**
- * The meaning of a range of words the learner selected. A range selected
- * before, or an expression the word meanings already found, answers at once;
- * anything else is one small LLM call, saved for next time. It never waits
- * for the whole text's word meanings, unless they are already on their way
- * (then they may hold the answer, and are paid for anyway).
+ * The meaning of a range of words the learner selected: one small LLM call
+ * that translates exactly those words in context, saved so selecting them
+ * again answers at once. Expressions found by the word meanings are not
+ * reused: their glosses are written for hovering and can be too terse for a
+ * deliberate selection.
  *
  * @param attemptId The attempt the text belongs to.
  * @param text The transcript or the correct version.
@@ -872,18 +872,19 @@ export function ensurePhraseMeaning(
 	if (running) return running;
 
 	const job = (async () => {
-		await glossJobs.get(glossJobKey(attemptId, text))?.catch(() => {});
-
 		const findSaved = () => {
 			const attempt = get(store).attempts.find((item) => item.id === attemptId);
 			const glosses = attempt ? wordGlossesFor(attempt, text) : null;
-			return glosses?.phrases.find((saved) => saved.start === start && saved.end === end)?.meaning;
+			return glosses?.phrases.find(
+				(saved) => saved.origin === 'selection' && saved.start === start && saved.end === end
+			)?.meaning;
 		};
 		const saved = findSaved();
 		if (saved) return saved;
 
 		const settings = get(appSettings);
-		const meaning = await translatePhrase(phrase, text, resolveLlmEndpoint(settings), teachingLanguages(settings));
+		const context = phraseContext(text, start, end);
+		const meaning = await translatePhrase(phrase, context, resolveLlmEndpoint(settings), teachingLanguages(settings));
 
 		const attempt = get(store).attempts.find((item) => item.id === attemptId);
 		if (attempt) {
@@ -900,35 +901,47 @@ export function ensurePhraseMeaning(
 }
 
 /**
- * Fetches the hover translations of one of an attempt's texts, the one the
- * learner is pointing at, in one LLM call, and saves them on the attempt so
- * later hovers are instant and work offline. The other text is fetched only
- * if the learner points at it too: the two are mostly the same words, so
- * fetching both at once nearly doubled the cost. Concurrent hovers share one
+ * Fetches the hover translations around the word the learner is pointing at:
+ * the section of the text it is in (`glossSections`, about a paragraph), in
+ * one small LLM call, and saves them on the attempt so later hovers are
+ * instant and work offline. The rest of a long take is fetched only where
+ * the learner points, and the other text (transcript or correct version)
+ * only if they point at it too. Concurrent hovers in one section share one
  * request.
  *
  * @param attemptId The attempt whose words were hovered.
  * @param text The transcript or the correct version.
+ * @param wordIndex The word pointed at (`glossWords` index).
  * @throws With a readable message when the LLM call fails.
  */
-export function ensureWordGlosses(attemptId: string, text: string): Promise<void> {
-	const jobKey = glossJobKey(attemptId, text);
+export function ensureWordGlosses(attemptId: string, text: string, wordIndex: number): Promise<void> {
+	const attempt = get(store).attempts.find((item) => item.id === attemptId);
+	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
+
+	const section = glossSectionOf(text, wordIndex);
+	if (!section || hasMeaningAt(wordGlossesFor(attempt, text), wordIndex)) return Promise.resolve();
+
+	const jobKey = `${glossJobKey(attemptId, text)}:${section.start}`;
 	const running = glossJobs.get(jobKey);
 	if (running) return running;
 
-	const attempt = get(store).attempts.find((item) => item.id === attemptId);
-	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
-	if (!text.trim() || hasWordMeanings(wordGlossesFor(attempt, text))) return Promise.resolve();
-
 	const job = (async () => {
 		const settings = get(appSettings);
-		const [glosses] = await generateWordGlosses([text], resolveLlmEndpoint(settings), teachingLanguages(settings));
+		const fetched = await generateSectionGlosses(text, section, resolveLlmEndpoint(settings), teachingLanguages(settings));
 
-		// Selections translated while these were on their way are kept.
+		// Merged into what is saved now: other sections and selections may have arrived meanwhile.
 		const key = glossKey(text);
 		const current = get(store).attempts.find((item) => item.id === attemptId);
-		const selections = current?.wordGlosses[key]?.phrases.filter((phrase) => phrase.origin === 'selection') ?? [];
-		const merged = { ...glosses, phrases: [...glosses.phrases, ...selections] };
+		const saved = current?.wordGlosses[key];
+		const wordCount = glossWords(text).length;
+		const words = Array.from({ length: wordCount }, (_, index) =>
+			index >= section.start && index <= section.end ? fetched.words[index - section.start] : (saved?.words[index] ?? '')
+		);
+		const merged = {
+			words,
+			phrases: [...(saved?.phrases ?? []), ...fetched.phrases],
+			sections: [...(saved?.sections ?? []), section]
+		};
 		await saveWordGlosses(attemptId, { ...(current?.wordGlosses ?? {}), [key]: merged });
 	})().finally(() => glossJobs.delete(jobKey));
 
@@ -948,8 +961,13 @@ function trackText(attempt: AttemptView, kind: AttemptTrackKind): string {
 	return [explanation, question].filter(Boolean).join(' ');
 }
 
-/** The follow-up question in the target language; older takes carried it inside the explanation. */
-function followUpQuestion(attempt: AttemptView): string {
+/**
+ * The follow-up question in the target language; older takes carried it inside the explanation.
+ *
+ * @param attempt The take.
+ * @returns The question, or an empty string when the take has none.
+ */
+export function followUpQuestion(attempt: AttemptView): string {
 	return attempt.followUp?.question || separateFollowUp(attempt.explanation).askedQuestion || '';
 }
 
@@ -1056,13 +1074,26 @@ function localExplanationOptions(attempt: AttemptView, settings: AppSettings): E
 const preparationQueue: string[] = [];
 let preparing = false;
 
+/** Stops the clip being prepared (at its next piece) once preparing is no longer allowed. */
+let preparationStop = new AbortController();
+
 /**
- * True when clips can be prepared: on-device read-back with its voice already
- * downloaded (preparing must never start a download of its own).
+ * True when clips can be prepared: the learner's settings are loaded (until
+ * then the defaults say on-device), read-back is on the device, and its
+ * voice is already downloaded (preparing must never start a download of its own).
  */
 function canPrepareAudio(): boolean {
-	return get(appSettings).ttsMode === 'local' && get(languageData).installed.voice;
+	return get(settingsReady) && get(appSettings).ttsMode === 'local' && get(languageData).installed.voice;
 }
+
+/** Read-back moved to the cloud, or the voice went: the queue is dropped and the clip being made stops. */
+function stopPreparingIfNotAllowed(): void {
+	if (canPrepareAudio()) return;
+
+	preparationQueue.length = 0;
+	preparationStop.abort();
+}
+appSettings.subscribe(stopPreparingIfNotAllowed);
 
 /** Queues a take's clips; `first` puts it at the front, ahead of the take being prepared. */
 function prepareTakeAudio(attemptId: string, { first = false } = {}): void {
@@ -1088,10 +1119,18 @@ languageData.subscribe((data) => {
 	const installed = data.installed.voice && data.status !== 'checking';
 	if (installed && !voiceWasInstalled) prepareSessionAudio(get(store).attempts);
 	voiceWasInstalled = installed;
+	stopPreparingIfNotAllowed();
+});
+// Settings finish loading after start-up: that can be the moment preparing becomes allowed.
+settingsReady.subscribe((ready) => {
+	if (ready && get(languageData).installed.voice && get(languageData).status !== 'checking') {
+		prepareSessionAudio(get(store).attempts);
+	}
 });
 
 async function prepareQueuedAudio(): Promise<void> {
 	preparing = true;
+	if (preparationStop.signal.aborted) preparationStop = new AbortController();
 	try {
 		while (preparationQueue.length > 0) {
 			const attemptId = preparationQueue[0];
@@ -1105,9 +1144,9 @@ async function prepareQueuedAudio(): Promise<void> {
 				if (preparationQueue[0] !== attemptId) break;
 
 				try {
-					URL.revokeObjectURL((await makeClip()).url);
+					URL.revokeObjectURL((await makeClip(preparationStop.signal)).url);
 				} catch (error) {
-					console.warn('[practice] a clip could not be prepared', error);
+					if (!isStoppedClip(error)) console.warn('[practice] a clip could not be prepared', error);
 				}
 			}
 			if (preparationQueue[0] === attemptId) preparationQueue.shift();
@@ -1117,23 +1156,24 @@ async function prepareQueuedAudio(): Promise<void> {
 	}
 }
 
-/** A take's clips, most important first. */
-function takeClips(attemptId: string): Array<() => Promise<SpeechResult>> {
+/** A take's clips, most important first; `signal` stops one being made when preparing is no longer allowed. */
+function takeClips(attemptId: string): Array<(signal: AbortSignal) => Promise<SpeechResult>> {
 	const attempt = get(store).attempts.find((item) => item.id === attemptId);
 	if (!attempt) return [];
 
+	// Made in the background: a clip the learner is listening to always goes first.
 	const settings = get(appSettings);
-	const clips: Array<() => Promise<SpeechResult>> = [];
+	const clips: Array<(signal: AbortSignal) => Promise<SpeechResult>> = [];
 	if (attempt.explanation && get(explanationAudioAvailable)) {
-		clips.push(() => synthesizeExplanation(localExplanationOptions(attempt, settings)));
+		clips.push((signal) => synthesizeExplanation({ ...localExplanationOptions(attempt, settings), background: true, signal }));
 	}
 	for (const kind of ['followUp', 'corrected', 'said'] as const) {
 		const text = trackText(attempt, kind);
-		if (text.trim()) clips.push(() => synthesizeSpeech(trackSpeechOptions(attempt, text, settings)));
+		if (text.trim()) clips.push((signal) => synthesizeSpeech({ ...trackSpeechOptions(attempt, text, settings), background: true, signal }));
 	}
 	for (const correction of attempt.corrections) {
 		const text = correction.speakText ?? correction.replacement;
-		if (text?.trim()) clips.push(() => synthesizeSpeech(correctionSpeechOptions(text, settings)));
+		if (text?.trim()) clips.push((signal) => synthesizeSpeech({ ...correctionSpeechOptions(text, settings), background: true, signal }));
 	}
 	return clips;
 }

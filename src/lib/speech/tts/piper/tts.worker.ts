@@ -5,12 +5,14 @@
 /**
  * Local Piper host. Loading, phonemization and ONNX inference all happen here,
  * and requests are serialized because one ONNX session must not be run by two
- * word-clicks at once. At most two voices stay resident (an explanation
+ * word-clicks at once (the main-thread proxy also sends them one at a time,
+ * listened ones first). At most two voices stay resident (an explanation
  * alternates the English voice and the target-language voice, and reloading a
- * voice at every switch would take seconds); they are released after an idle
- * period to return memory to the browser.
+ * voice at every switch would take seconds). Memory goes back to the browser
+ * when the proxy ends this worker after an idle period.
  */
-import type { ModelProgress } from '#lib/types.js';
+import type { ITTSAdapter } from '../BaseTtsAdapter';
+import type { ModelProgress, TtsSynthesis } from '#lib/types.js';
 
 interface SynthesizeRequest {
 	id: number;
@@ -25,12 +27,7 @@ interface LoadRequest {
 	voice: string;
 }
 
-interface ReleaseRequest {
-	id: number;
-	type: 'release';
-}
-
-type Request = SynthesizeRequest | LoadRequest | ReleaseRequest;
+type Request = SynthesizeRequest | LoadRequest;
 
 type Response =
 	| { id: number; type: 'progress'; progress: ModelProgress }
@@ -44,10 +41,7 @@ type Response =
 			peak: number;
 	  }
 	| { id: number; type: 'ready' }
-	| { id: number; type: 'released' }
 	| { id: number; type: 'error'; message: string };
-
-const IDLE_RELEASE_MS = 90_000;
 
 /** Voices kept loaded: the two most recently used. */
 const RESIDENT_VOICES = 2;
@@ -58,7 +52,6 @@ function keepResident(voice: string): string[] {
 	recentVoices = [voice, ...recentVoices.filter((id) => id !== voice)].slice(0, RESIDENT_VOICES);
 	return recentVoices;
 }
-let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let queue = Promise.resolve();
 let registryPromise: Promise<typeof import('./registry').ttsRegistry> | null = null;
 
@@ -71,34 +64,33 @@ function post(message: Response, transfer: Transferable[] = []): void {
 	self.postMessage(message, { transfer });
 }
 
-function cancelIdleRelease(): void {
-	if (idleTimer) clearTimeout(idleTimer);
-	idleTimer = null;
-}
+/**
+ * How ONNX Runtime reports a run that needed more WebAssembly memory than it
+ * could get: "failed to call OrtRun(). ERROR_CODE: 6, ERROR_MESSAGE:
+ * std::bad_alloc". Long texts are spoken a sentence at a time (see
+ * `textPieces.ts`), so this should not happen; a single enormous word, which
+ * cannot be cut, still can.
+ */
+const OUT_OF_MEMORY = /bad_alloc|out of memory/i;
 
-function scheduleIdleRelease(): void {
-	cancelIdleRelease();
-	idleTimer = setTimeout(() => {
-		queue = queue.then(async () => {
-			const ttsRegistry = await getRegistry();
-			await ttsRegistry.disposeAll();
-			recentVoices = [];
-			post({ id: 0, type: 'released' });
-		});
-	}, IDLE_RELEASE_MS);
+const TEXT_TOO_LONG_MESSAGE = 'This text is too long for the on-device voice.';
+
+/** Runs the voice; a run that ran out of memory is reported in words a learner can act on. */
+async function synthesizeReadably(adapter: ITTSAdapter, text: string): Promise<TtsSynthesis> {
+	try {
+		return await adapter.synthesize(text);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		if (!OUT_OF_MEMORY.test(message)) throw error;
+
+		console.warn(`[tts] the voice ran out of memory on ${text.length} characters`, message);
+		throw new Error(TEXT_TOO_LONG_MESSAGE, { cause: error });
+	}
 }
 
 async function handle(request: Request): Promise<void> {
-	cancelIdleRelease();
 	try {
 		const ttsRegistry = await getRegistry();
-		if (request.type === 'release') {
-			await ttsRegistry.disposeAll();
-			recentVoices = [];
-			post({ id: request.id, type: 'released' });
-			return;
-		}
-
 		await ttsRegistry.disposeOthers(keepResident(request.voice));
 		const adapter = ttsRegistry.getAdapter(request.voice);
 		if (!adapter) throw new Error(`Unknown local voice "${request.voice}".`);
@@ -111,7 +103,7 @@ async function handle(request: Request): Promise<void> {
 			return;
 		}
 
-		const result = await adapter.synthesize(request.text);
+		const result = await synthesizeReadably(adapter, request.text);
 		post(
 			{
 				id: request.id,
@@ -124,7 +116,6 @@ async function handle(request: Request): Promise<void> {
 			},
 			[result.audio.buffer]
 		);
-		scheduleIdleRelease();
 	} catch (error) {
 		post({
 			id: request.id,

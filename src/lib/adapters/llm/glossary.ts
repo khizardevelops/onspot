@@ -4,17 +4,20 @@ import { chatCompletion } from './client';
 import { extractJson } from './evaluate';
 import type { TranslationLanguage } from './translationPrompt';
 import type { ChatMessage, LlmEndpoint } from './types';
-import type { PhraseGloss, TextGlosses } from '../db/types';
-import { tokenizeWords } from '#lib/utils/words.js';
+import type { GlossedRange, PhraseGloss, TextGlosses } from '../db/types';
+import { sentenceSpans, type TextSpan } from '#lib/utils/segments.js';
+import { tokenizeWords, type TextToken } from '#lib/utils/words.js';
 
 /**
  * Hover translations: the meaning of each word of a text, in the sense it has
  * in that sentence ("allé" → "went", not the dictionary "gone"), plus the
  * multi-word expressions that only make sense together ("pomme de terre" →
  * "potato"). A dictionary cannot do this, and text may only leave the device
- * through the learner's own LLM, so the configured model glosses every word of
- * an attempt's texts in one call, the first time the learner hovers one. Any
- * other range the learner selects is translated on its own (`translatePhrase`).
+ * through the learner's own LLM, so the configured model glosses the words the
+ * first time the learner hovers one: a section of whole sentences at a time
+ * (`glossSections`), so a five-minute take is never one huge request and the
+ * learner only pays for the parts they read. Any other range the learner
+ * selects is translated on its own (`translatePhrase`).
  */
 
 /** An expression longer than this is a clause, not something to read as one word. */
@@ -25,8 +28,16 @@ const TOKENS_PER_GLOSS = 7;
 /** GPT-OSS reasons before answering, even at low effort (130–440 tokens measured). */
 const REASONING_HEADROOM = 512;
 const MIN_GLOSS_TOKENS = 256;
-/** Two 240-word texts fit; Groq reserves prompt + this against its per-minute limit. */
-const MAX_GLOSS_TOKENS = 4096;
+
+/**
+ * Words glossed in one request: about a paragraph of speech. The request is
+ * then ~1,500 tokens (prompt and reply), a fifth of Groq's free per-minute
+ * allowance, and answers in about two seconds.
+ */
+const GLOSS_SECTION_WORDS = 90;
+
+/** Sentences either side of a selection sent with it, so it is translated in context. */
+const PHRASE_CONTEXT_SENTENCES = 1;
 
 /**
  * The words of a text in the order they are glossed. The transcript view
@@ -41,36 +52,122 @@ export function glossWords(text: string): string[] {
 		.map((token) => token.text);
 }
 
-function glossMessages(texts: string[], language: TranslationLanguage): ChatMessage[] {
+/** The word tokens of a text, numbered as `glossWords` numbers them. */
+function wordTokens(text: string): TextToken[] {
+	return tokenizeWords(text).filter((token) => token.word);
+}
+
+/** For each sentence of a text, the range of word indexes inside it; sentences without words are left out. */
+function sentenceWordRanges(text: string, words: TextToken[]): GlossedRange[] {
+	const ranges: GlossedRange[] = [];
+	let wordIndex = 0;
+
+	for (const sentence of sentenceSpans(text)) {
+		const start = wordIndex;
+		while (wordIndex < words.length && words[wordIndex].start < sentence.end) wordIndex++;
+		if (wordIndex > start) ranges.push({ start, end: wordIndex - 1 });
+	}
+
+	// Words after the last sentence end (none in practice) close the text.
+	if (wordIndex < words.length) ranges.push({ start: wordIndex, end: words.length - 1 });
+	return ranges;
+}
+
+/**
+ * How a text's words are glossed: consecutive sections of whole sentences,
+ * each up to about `GLOSS_SECTION_WORDS` words. A sentence longer than twice
+ * that (speech recognised without punctuation) is cut into windows of that
+ * size. The sections depend only on the text, so they line up across
+ * requests and with what was saved.
+ *
+ * @param text Any target-language text.
+ * @returns Word index ranges (`glossWords` indexes, inclusive), in order, covering every word.
+ */
+export function glossSections(text: string): GlossedRange[] {
+	const sections: GlossedRange[] = [];
+	let open: GlossedRange | null = null;
+
+	for (const sentence of sentenceWordRanges(text, wordTokens(text))) {
+		const sentenceWords = sentence.end - sentence.start + 1;
+
+		if (sentenceWords > GLOSS_SECTION_WORDS * 2) {
+			if (open) sections.push(open);
+			open = null;
+			for (let start = sentence.start; start <= sentence.end; start += GLOSS_SECTION_WORDS) {
+				sections.push({ start, end: Math.min(sentence.end, start + GLOSS_SECTION_WORDS - 1) });
+			}
+			continue;
+		}
+
+		if (open && sentence.end - open.start + 1 <= GLOSS_SECTION_WORDS) {
+			open.end = sentence.end;
+			continue;
+		}
+		if (open) sections.push(open);
+		open = { ...sentence };
+	}
+
+	if (open) sections.push(open);
+	return sections;
+}
+
+/** The section `wordIndex` belongs to. */
+export function glossSectionOf(text: string, wordIndex: number): GlossedRange | null {
+	return glossSections(text).find((section) => section.start <= wordIndex && wordIndex <= section.end) ?? null;
+}
+
+/**
+ * True once the meaning of the word at `wordIndex` has been fetched (it may
+ * still be blank: the model gave none). Meanings saved whole, before
+ * sections, cover every word.
+ */
+export function hasMeaningAt(glosses: TextGlosses | null, wordIndex: number): boolean {
+	if (!glosses) return false;
+	if (!glosses.sections) return glosses.words.length > 0;
+	return glosses.sections.some((section) => section.start <= wordIndex && wordIndex <= section.end);
+}
+
+/**
+ * The sentences around words `start`..`end`, as context for translating
+ * them: their own sentence(s) and `PHRASE_CONTEXT_SENTENCES` either side.
+ *
+ * @param text The whole text.
+ * @param start First word index (`glossWords`).
+ * @param end Last word index, inclusive.
+ */
+export function phraseContext(text: string, start: number, end: number): string {
+	const words = wordTokens(text);
+	const sentences: TextSpan[] = sentenceSpans(text);
+	const first = words[start];
+	const last = words[end];
+	if (!first || !last || sentences.length === 0) return text.trim();
+
+	const firstSentence = Math.max(0, sentences.findIndex((sentence) => sentence.end > first.start));
+	const lastSentence = sentences.findIndex((sentence) => sentence.end >= last.end);
+	const from = Math.max(0, firstSentence - PHRASE_CONTEXT_SENTENCES);
+	const to = Math.min(sentences.length - 1, (lastSentence < 0 ? sentences.length - 1 : lastSentence) + PHRASE_CONTEXT_SENTENCES);
+
+	return text.slice(sentences[from].start, sentences[to].end);
+}
+
+function glossMessages(sectionText: string, words: string[], language: TranslationLanguage): ChatMessage[] {
 	const { language: source, translationTarget: target } = language;
 
 	const system = `You give ${source}-to-${target} word meanings for a language learner who hovers over words.
 For every numbered word, give its meaning in ${target} as it is used in that sentence:
-- 1 to 4 words, lowercase unless it is a name; the inflected sense ("allé" → "went", "j'ai" → "I have"); no explanations.
+- 1 to 4 words, lowercase unless ${target} capitalises it (a name; in English, "I"); the inflected sense ("allé" → "went", "j'ai" → "I have"); no explanations.
 - A name stays as it is. A misspoken or non-existent word gets its most likely intended meaning in brackets with a question mark, e.g. "[late?]".
 Also list the expressions: runs of 2 to ${MAX_EXPRESSION_WORDS} consecutive words that must be read together because translating them word by word gives a wrong or misleading meaning, such as compound nouns ("pomme de terre" → "potato"), fixed expressions ("tout à fait" → "absolutely", "il y a" → "there is", "en retard" → "late", "tout à coup" → "suddenly") and verb phrases ("avoir besoin de" → "to need").
-If the word-by-word meanings already read correctly together, it is NOT an expression: ordinary phrases such as "avec ma sœur", "nous avons acheté", "dans un petit café", "c'était très bon" or "au marché" are not. Most sentences have none or one. Give each expression as its first and last word number and its meaning in context.
-Return only JSON: { "texts": [ { "glosses": [string, ...], "expressions": [ { "from": number, "to": number, "meaning": string } ] } ] }, one entry per text, with exactly one gloss per numbered word, in the same order.`;
+If the word-by-word meanings already read correctly together, it is NOT an expression: ordinary phrases such as "avec ma sœur", "nous avons acheté", "dans un petit café", "c'était très bon" or "au marché" are not, and neither is any verb in a compound tense (an auxiliary plus a past participle, such as "j'ai préféré" or "nous sommes allés"). Most sentences have none or one. Give each expression as its first and last word number and its meaning in context, translating all of its words, subject included ("il y a" → "there is", never just "is").
+Return only JSON: { "glosses": [string, ...], "expressions": [ { "from": number, "to": number, "meaning": string } ] }, with exactly one gloss per numbered word, in the same order.`;
 
-	const user = texts
-		.map((text, textIndex) => {
-			const numberedWords = glossWords(text).map((word, wordIndex) => `${wordIndex + 1}. ${word}`);
-			return [`Text ${textIndex + 1}: """${text.trim()}"""`, 'Words:', ...numberedWords].join('\n');
-		})
-		.join('\n\n');
+	const numberedWords = words.map((word, wordIndex) => `${wordIndex + 1}. ${word}`);
+	const user = [`Text: """${sectionText.trim()}"""`, 'Words:', ...numberedWords].join('\n');
 
 	return [
 		{ role: 'system', content: system },
 		{ role: 'user', content: user }
 	];
-}
-
-/**
- * True once a text's word meanings have been fetched. A text can hold
- * translated selections before that, which do not count.
- */
-export function hasWordMeanings(glosses: TextGlosses | null): boolean {
-	return (glosses?.words.length ?? 0) > 0;
 }
 
 /** One gloss per word: a short list is padded with blanks, a long one cut, so indexes always line up. */
@@ -106,48 +203,56 @@ function validExpressions(raw: unknown, wordCount: number): PhraseGloss[] {
 	return expressions;
 }
 
+/** One section's meanings: a meaning per word of the section, and its expressions, by index in the whole text. */
+export interface SectionGlosses {
+	section: GlossedRange;
+	words: string[];
+	phrases: PhraseGloss[];
+}
+
 /**
- * Glosses every word of the given texts with the configured LLM, and finds the
- * expressions to read as one.
+ * Glosses the words of one section of a text (see `glossSections`) with the
+ * configured LLM, and finds the expressions to read as one.
  *
- * @param texts Target-language texts, e.g. an attempt's transcript and correct version.
+ * @param text The whole target-language text, e.g. an attempt's transcript.
+ * @param section Which of its sections.
  * @param endpoint The learner's LLM.
  * @param language Source and target language names.
  * @param signal Cancels the request.
- * @returns For each text, one meaning per word (see `glossWords`; blank where the
- *   model gave none) and its expressions.
+ * @returns One meaning per word of the section (blank where the model gave
+ *   none) and its expressions, indexed in the whole text.
  * @throws With a readable message when the model fails or returns no glosses at all.
  */
-export async function generateWordGlosses(
-	texts: string[],
+export async function generateSectionGlosses(
+	text: string,
+	section: GlossedRange,
 	endpoint: LlmEndpoint,
 	language: TranslationLanguage,
 	signal?: AbortSignal
-): Promise<TextGlosses[]> {
-	const wordCounts = texts.map((text) => glossWords(text).length);
-	const totalWords = wordCounts.reduce((sum, count) => sum + count, 0);
-	if (totalWords === 0) return texts.map(() => ({ words: [], phrases: [] }));
+): Promise<SectionGlosses> {
+	const tokens = wordTokens(text).slice(section.start, section.end + 1);
+	if (tokens.length === 0) return { section, words: [], phrases: [] };
 
-	const budget = totalWords * TOKENS_PER_GLOSS + REASONING_HEADROOM;
-	const maxTokens = Math.min(MAX_GLOSS_TOKENS, Math.max(MIN_GLOSS_TOKENS, budget));
-	const raw = await chatCompletion(endpoint, glossMessages(texts, language), {
+	const sectionText = text.slice(tokens[0].start, tokens.at(-1)!.end);
+	const words = tokens.map((token) => token.text);
+	const maxTokens = Math.max(MIN_GLOSS_TOKENS, words.length * TOKENS_PER_GLOSS + REASONING_HEADROOM);
+	const raw = await chatCompletion(endpoint, glossMessages(sectionText, words, language), {
 		json: true,
 		temperature: 0.1,
 		maxTokens,
 		signal
 	});
 
-	const parsed = extractJson(raw) as { texts?: Array<{ glosses?: unknown; expressions?: unknown }> } | null;
-	const entries = Array.isArray(parsed?.texts) ? parsed.texts : [];
-	const glosses = wordCounts.map((count, index) => ({
-		words: alignedGlosses(entries[index]?.glosses, count),
-		phrases: validExpressions(entries[index]?.expressions, count)
-	}));
+	const parsed = extractJson(raw) as { glosses?: unknown; expressions?: unknown } | null;
+	const glosses = alignedGlosses(parsed?.glosses, words.length);
+	if (glosses.every((gloss) => !gloss)) throw new Error('The model returned no word meanings. Please try again.');
 
-	if (glosses.every((text) => text.words.every((gloss) => !gloss))) {
-		throw new Error('The model returned no word meanings. Please try again.');
-	}
-	return glosses;
+	const phrases = validExpressions(parsed?.expressions, words.length).map((phrase) => ({
+		...phrase,
+		start: phrase.start + section.start,
+		end: phrase.end + section.start
+	}));
+	return { section, words: glosses, phrases };
 }
 
 /** A phrase's meaning is a few words; the rest is room for GPT-OSS's reasoning. */
@@ -157,7 +262,7 @@ const MAX_PHRASE_TOKENS = 640;
  * Translates a range of words the learner selected, as it is used in its text.
  *
  * @param phrase The selected words, exactly as they appear in the text.
- * @param text The whole text, for context.
+ * @param text The text around it, for context (see `phraseContext`).
  * @param endpoint The learner's LLM.
  * @param language Source and target language names.
  * @returns The meaning, a few words in the target language.

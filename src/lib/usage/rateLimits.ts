@@ -16,8 +16,12 @@
  * Requested 2416. Please try again in 16.9s."
  */
 
-/** The limit windows providers name in their refusals. */
-export type LimitWindow = 'RPM' | 'RPD' | 'TPM' | 'TPD' | 'ASH' | 'ASD';
+/**
+ * The limit windows providers name in their refusals. OTPM (reply tokens a
+ * minute) is in no published table: Groq's free plan caps some models, e.g.
+ * Qwen 3.8 at 1,000, and says so only when refusing.
+ */
+export type LimitWindow = 'RPM' | 'RPD' | 'TPM' | 'OTPM' | 'TPD' | 'ASH' | 'ASD';
 
 export interface HeaderBudget {
 	limit: number;
@@ -36,6 +40,8 @@ export interface RefusalLimit {
 	limit: number;
 	/** How much the provider says was already used, when it says. */
 	used: number | null;
+	/** How much the provider counted the refused request as (its prompt plus its reply budget), when it says. */
+	requested: number | null;
 	/** When the provider says to try again (ms since epoch), if it says. */
 	retryAt: number | null;
 }
@@ -98,8 +104,9 @@ export function parseRateLimitHeaders(headers: Headers, now: number): HeaderLimi
 	return requests || tokens ? { requests, tokens } : null;
 }
 
-const REFUSAL_LIMIT = /\((RPM|RPD|TPM|TPD|ASH|ASD)\):\s*Limit\s+(\d+)(?:,\s*Used\s+(\d+))?/i;
+const REFUSAL_LIMIT = /\((RPM|RPD|TPM|OTPM|TPD|ASH|ASD)\):\s*Limit\s+(\d+)(?:,\s*Used\s+(\d+))?/i;
 const RETRY_IN = /try again in\s+([\dhms.]+)/i;
+const REQUESTED = /Requested\s+(\d+)/i;
 
 /**
  * Reads the limit a refusal names, e.g. Groq's "on tokens per day (TPD):
@@ -114,10 +121,12 @@ export function parseRefusal(body: string, now: number): RefusalLimit | null {
 	if (!match) return null;
 
 	const retryIn = parseDuration(body.match(RETRY_IN)?.[1]?.replace(/\.$/, '') ?? null);
+	const requested = body.match(REQUESTED)?.[1];
 	return {
 		window: match[1].toUpperCase() as LimitWindow,
 		limit: Number(match[2]),
 		used: match[3] === undefined ? null : Number(match[3]),
+		requested: requested === undefined ? null : Number(requested),
 		retryAt: retryIn === null ? null : now + retryIn
 	};
 }

@@ -28,6 +28,7 @@
 	} from '#lib/stores/processing.js';
 	import { getLanguage } from '#lib/languages/index.js';
 	import { usageWarnings } from '#lib/usage/monitor.js';
+	import { pacingWait } from '#lib/adapters/llm/index.js';
 	import { toast } from '#lib/stores/toast.js';
 	import { MAX_RECORDING_SEC } from '#lib/config.js';
 	import AppHeader from '#lib/components/AppHeader.svelte';
@@ -88,6 +89,13 @@
 		$practice.attempts.find((attempt) => attempt.id === $practice.activeAttemptId) ?? null
 	);
 	const busy = $derived($practice.phase === 'transcribing' || $practice.phase === 'evaluating');
+
+	/** A feedback request waiting for room under the provider's per-minute limit says so, instead of looking stuck. */
+	const waitingText = $derived.by(() => {
+		if ($practice.phase !== 'evaluating' || !$pacingWait) return null;
+		const seconds = Math.max(1, Math.ceil(($pacingWait.until - Date.now()) / 1000));
+		return `${$pacingWait.provider}'s per-minute limit: continuing in ${seconds} s…`;
+	});
 	const recording = $derived($practice.phase === 'recording');
 	const locked = $derived($practice.sessionId !== null);
 
@@ -95,6 +103,10 @@
 	let lastAttemptId: string | null = null;
 	let deleteOpen = $state(false);
 	let coachOpen = $state(true);
+	/** How narrow the Feedback sidebar can be without its toolbar or cards laying out differently (desktop only). */
+	let feedbackContentWidth = $state<number | null>(null);
+	/** That width as the `--feedback-content-width` the grid and the bookmark are sized by (none: the maximum). */
+	const feedbackContentWidthStyle = $derived(feedbackContentWidth === null ? undefined : `${feedbackContentWidth}px`);
 	/** The session's paper timeline; on phones it opens from a button in the top bar. */
 	let timelineOpen = $state(false);
 	/** Phone layout: Feedback and the timeline open from the top bar, and the mode moves into the session menu. */
@@ -342,7 +354,7 @@
 		<Loader2 class="size-4 shrink-0 animate-spin text-[var(--brand)]" />
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center justify-between gap-2 text-[12px]">
-				<span class="truncate font-medium">{$practice.statusText || 'Working…'}</span>
+				<span class="truncate font-medium">{waitingText ?? ($practice.statusText || 'Working…')}</span>
 				{#if $practice.progress}<span class="shrink-0 font-mono text-[11px] text-muted-foreground">{$practice.progress.progress}%</span>{/if}
 			</div>
 			<NeoProgressBar
@@ -360,7 +372,11 @@
 	<Check size={15} class="menu-check {String(item.value) === `mode:${$practice.mode}` ? '' : 'invisible'}" aria-hidden="true" />
 {/snippet}
 
-<div class="practice-grid relative grid h-full grid-cols-1" class:coach-closed={!coachOpen}>
+<div
+	class="practice-grid relative grid h-full grid-cols-1"
+	class:coach-closed={!coachOpen}
+	style:--feedback-content-width={feedbackContentWidthStyle}
+>
 	<section class="practice-stage relative flex min-h-0 min-w-0 flex-col overflow-hidden">
 		<div class="ambient ambient-one" aria-hidden="true"></div>
 		<div class="ambient ambient-two" aria-hidden="true"></div>
@@ -532,7 +548,14 @@
 	{#if coachOpen}
 		<button type="button" class="coach-scrim" aria-label="Close feedback" onclick={() => (coachOpen = false)}></button>
 	{/if}
-	<FeedbackPanel attempt={active} {activeCorrectionId} {stats} bind:open={coachOpen} onSelectCorrection={selectCorrection} />
+	<FeedbackPanel
+		attempt={active}
+		{activeCorrectionId}
+		{stats}
+		bind:open={coachOpen}
+		bind:contentWidth={feedbackContentWidth}
+		onSelectCorrection={selectCorrection}
+	/>
 
 	<!--
 		A paper index tab in the Feedback sidebar, poking out of its left edge with
@@ -544,6 +567,7 @@
 		<button
 			type="button"
 			class="feedback-bookmark"
+			style:--feedback-content-width={feedbackContentWidthStyle}
 			class:tucked={coachOpen}
 			class:clean={errorCount === 0}
 			aria-label={`Open feedback: ${errorCount} error${errorCount === 1 ? '' : 's'}`}
@@ -575,13 +599,21 @@
 </NeoDialog>
 
 <style>
+	/* Set per element, never inherited: see the desktop layout below. */
+	@property --feedback-content-width {
+		syntax: '*';
+		inherits: false;
+	}
+
 	.practice-grid {
 		/* Neo components reserve a shadow margin by default; this layout spaces them itself. */
 		--neo-shadow-margin: 0;
 		--neo-shadow-margin-lg: 0;
 		/* Transparent so the app's paper texture shows behind the practice stage. */
 		background: transparent;
-		transition: grid-template-columns 420ms cubic-bezier(0.22, 1, 0.36, 1), grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1);
+		/* How long the Feedback sidebar takes to slide in or out (desktop), or the sheet to rise (tablets). */
+		--feedback-slide-duration: 180ms;
+		--feedback-slide-easing: cubic-bezier(0.22, 1, 0.36, 1);
 	}
 	.practice-stage {
 		isolation: isolate;
@@ -719,26 +751,73 @@
 	.ambient-one { top: 10%; right: 8%; width: 15rem; height: 15rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-2) 14%, transparent), transparent 68%); }
 	.ambient-two { bottom: 18%; left: 2%; width: 12rem; height: 12rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-3) 12%, transparent), transparent 68%); }
 	@media (prefers-reduced-motion: reduce) {
-		.practice-grid { transition-duration: 1ms; }
+		.practice-grid { --feedback-slide-duration: 1ms; }
 		.waveform span { transition-duration: 1ms !important; }
 	}
 	/*
-	 * Desktop: the sidebar keeps its width and its column shrinks, so it slides
-	 * out to the right whole (the page clips it) instead of squeezing its text.
+	 * Desktop: the sidebar lies over the right of the page and slides in and
+	 * out whole (a transform, so the compositor moves it), instead of squeezing
+	 * its text. Its column only keeps the room free: it changes at once, so the
+	 * takes reflow once, under the sidebar or into the room it is sliding into.
+	 * (Animating the column itself laid out the whole stack, every word of
+	 * every card, on every frame of the slide.)
+	 *
+	 * Its width follows its content: FeedbackPanel reports the narrowest width
+	 * at which its toolbar and cards lay out as they do at the maximum
+	 * (`--feedback-content-width`), and the takes get the rest. The maximum is
+	 * the old fixed width; the minimum keeps a usable column. A content change
+	 * resizes the column and the sidebar together, at once.
+	 *
+	 * That width is set on just the elements that use it (the grid, the panel
+	 * and the bookmark) and does not inherit (see `@property` above): on the
+	 * grid an inherited variable restyled every word of every card whenever it
+	 * changed (57 ms on the long takes), which happens as each take is shown.
 	 */
 	@media (min-width: 1024px) {
 		.practice-grid {
-			--feedback-open-width: clamp(330px, 31vw, 440px);
-			--feedback-width: var(--feedback-open-width);
-			grid-template-columns: minmax(0, 1fr) var(--feedback-width);
+			--feedback-min-width: 330px;
+			--feedback-max-width: clamp(var(--feedback-min-width), 31vw, 440px);
+			grid-template-columns: minmax(0, 1fr) clamp(
+				var(--feedback-min-width),
+				var(--feedback-content-width, var(--feedback-max-width)),
+				var(--feedback-max-width)
+			);
 		}
-		.practice-grid.coach-closed { --feedback-width: 0px; }
-		.practice-grid :global(aside.feedback-shell) { width: var(--feedback-open-width); }
-		.practice-grid.coach-closed :global(aside.feedback-shell) { box-shadow: none; }
+		.practice-grid.coach-closed { grid-template-columns: minmax(0, 1fr) 0px; }
+		.practice-grid :global(aside.feedback-shell),
+		.feedback-bookmark {
+			--feedback-open-width: clamp(
+				var(--feedback-min-width),
+				var(--feedback-content-width, var(--feedback-max-width)),
+				var(--feedback-max-width)
+			);
+		}
+		.practice-grid :global(aside.feedback-shell) {
+			position: absolute;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			width: var(--feedback-open-width);
+			transition: transform var(--feedback-slide-duration) var(--feedback-slide-easing);
+		}
+		/* Its shadow goes once it is out of sight, or a sliver would stay at the window's edge. */
+		.practice-grid.coach-closed :global(aside.feedback-shell) {
+			box-shadow: none;
+			transform: translateX(100%);
+			transition:
+				transform var(--feedback-slide-duration) var(--feedback-slide-easing),
+				box-shadow 0s linear var(--feedback-slide-duration);
+		}
 	}
 	@media (max-width: 1023px) {
 		.practice-grid { grid-template-rows: minmax(0, 1fr) 42%; }
 		.practice-grid.coach-closed { grid-template-rows: minmax(0, 1fr) 0px; }
+	}
+	/* Tablets: the panel rises into the room under the takes. */
+	@media (min-width: 641px) and (max-width: 1023px) {
+		.practice-grid:not(.coach-closed) :global(aside.feedback-shell) {
+			animation: sheet-in var(--feedback-slide-duration) var(--feedback-slide-easing);
+		}
 	}
 	.coach-scrim { display: none; }
 	/* Below desktop, collapsed feedback is gone entirely; the bookmark (or, on phones, the top bar) brings it back. */
@@ -748,16 +827,17 @@
 
 	/*
 	 * The bookmark: a manila card-stock tab sticking out of the sidebar's left
-	 * edge, like a divider tab in a notebook. Its right edge follows the
-	 * sidebar's edge (`--feedback-width`, timed with the grid), and it sits
-	 * under the sidebar, so sliding it right tucks it in. Tucking is quick;
-	 * coming out waits for the sidebar to start leaving and overshoots a little.
+	 * edge, like a divider tab in a notebook. The button rides the sidebar's
+	 * edge (moved by its width, with the sidebar's own slide), and the
+	 * paper sits under the sidebar, so sliding the paper right tucks it in.
+	 * Tucking is quick; coming out waits for the sidebar to start leaving and
+	 * overshoots a little. Both are transforms, so the compositor runs them.
 	 * Its deckled edge is a clip, so its shadow is on the button around it.
 	 */
 	.feedback-bookmark {
 		position: absolute;
 		top: 68px;
-		right: var(--feedback-width, 0px);
+		right: 0;
 		z-index: 12;
 		padding: 0;
 		border: 0;
@@ -766,18 +846,21 @@
 			drop-shadow(-1px 1px 1px rgb(60 40 15 / 0.35))
 			drop-shadow(-3px 5px 6px rgb(60 40 15 / 0.2));
 		cursor: pointer;
-		transition:
-			right 420ms cubic-bezier(0.22, 1, 0.36, 1),
-			transform 420ms cubic-bezier(0.34, 1.45, 0.64, 1) 200ms;
+		transform: translateX(calc(-1 * var(--feedback-open-width, 0px)));
+		transition: transform var(--feedback-slide-duration) var(--feedback-slide-easing);
 	}
-	.feedback-bookmark.tucked {
+	.practice-grid.coach-closed .feedback-bookmark {
+		transform: translateX(0);
+	}
+	.feedback-bookmark .tab-paper {
+		transition: transform 260ms cubic-bezier(0.34, 1.45, 0.64, 1) 100ms;
+	}
+	.feedback-bookmark.tucked .tab-paper {
 		transform: translateX(105%);
-		transition:
-			right 420ms cubic-bezier(0.22, 1, 0.36, 1),
-			transform 240ms cubic-bezier(0.4, 0, 1, 1);
+		transition: transform 140ms cubic-bezier(0.4, 0, 1, 1);
 	}
-	.feedback-bookmark:not(.tucked):hover,
-	.feedback-bookmark:not(.tucked):focus-visible {
+	.feedback-bookmark:not(.tucked):hover .tab-paper,
+	.feedback-bookmark:not(.tucked):focus-visible .tab-paper {
 		transform: translateX(-3px);
 		transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 	}
@@ -843,9 +926,9 @@
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.feedback-bookmark,
-		.feedback-bookmark.tucked {
-			transition-duration: 1ms;
-			transition-delay: 0s;
+		.feedback-bookmark .tab-paper {
+			transition-duration: 1ms !important;
+			transition-delay: 0s !important;
 		}
 	}
 	/* The phone's top-bar buttons, and the correction count on Feedback. */

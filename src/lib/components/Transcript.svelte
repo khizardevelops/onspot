@@ -3,6 +3,7 @@
 <script lang="ts">
 	import type { Correction, CorrectionSeverity, TextGlosses } from '#lib/adapters/db/index.js';
 	import { playWord } from '#lib/stores/pronunciation.js';
+	import type { TextSpan } from '#lib/utils/segments.js';
 	import { isJapaneseText, tokenizeWords } from '#lib/utils/words.js';
 	import { TranscriptMeanings } from './transcriptMeanings.svelte.js';
 	import { TouchWordSelection, WordDragSelection, selectedWordRange } from './wordSelection.js';
@@ -10,6 +11,16 @@
 
 	interface Props {
 		text: string;
+		/**
+		 * Shows only this part of `text` (character offsets, end exclusive).
+		 * Words keep their indexes in the whole text, so meanings and
+		 * selections line up with the whole text's.
+		 */
+		excerpt?: TextSpan;
+		/** Word indexes to mark as changed (the correct version's fixes). */
+		changedWords?: ReadonlySet<number>;
+		/** Words the correct version drops, as said, by the word index they stood before (the word count: after the last word). */
+		removedBefore?: ReadonlyMap<number, string>;
 		corrections?: Correction[];
 		/** Correction highlighted in the feedback panel, if any. */
 		activeCorrectionId?: string | null;
@@ -18,7 +29,7 @@
 		/** Word meanings and expressions for hover translations; null until fetched. */
 		glosses?: TextGlosses | null;
 		/** Fetches `glosses`, on the first hover. Without it, words show no meaning. */
-		requestGlosses?: () => Promise<void>;
+		requestGlosses?: (wordIndex: number) => Promise<void>;
 		/** Translates a selected range of words (`start`..`end` word indexes). */
 		requestPhrase?: (start: number, end: number, phrase: string) => Promise<string>;
 		class?: string;
@@ -26,6 +37,9 @@
 
 	let {
 		text,
+		excerpt,
+		changedWords,
+		removedBefore,
 		corrections = [],
 		activeCorrectionId = null,
 		onSelect,
@@ -46,7 +60,7 @@
 
 	const meanings = new TranscriptMeanings({
 		glosses: () => glosses,
-		requestGlosses: () => requestGlosses?.() ?? Promise.resolve(),
+		requestGlosses: (wordIndex) => requestGlosses?.(wordIndex) ?? Promise.resolve(),
 		requestPhrase: (start, end, phrase) =>
 			requestPhrase?.(start, end, phrase) ?? Promise.reject(new Error('Selections are not translated here.')),
 		phraseText: (start, end) => {
@@ -64,6 +78,19 @@
 	function isSelectionClick(event: MouseEvent): boolean {
 		return wordDrag.consumeSelectionClick() || event.detail > 1;
 	}
+
+	// Scrolling anything that holds this text (its partial-view window, the card, the page) moves
+	// the words under a resting pointer: a hovered word's meaning goes with it.
+	$effect(() => {
+		if (!showsMeanings) return;
+		const onScroll = (event: Event) => {
+			const scrolledAroundText = event.target instanceof Node && root !== null && event.target.contains(root);
+			if (scrolledAroundText) meanings.textScrolled();
+		};
+		// Scroll events do not bubble; they are seen here while capturing.
+		document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+		return () => document.removeEventListener('scroll', onScroll, { capture: true });
+	});
 
 	/** The words under the learner's selection, inked like a highlighter while they select. */
 	let marked = $state<{ start: number; end: number } | null>(null);
@@ -201,6 +228,40 @@
 		}
 		return list;
 	});
+
+	/** The tokens on screen (all of them, or the excerpt's) and the position of the first in `tokens`. */
+	const shown = $derived.by(() => {
+		if (!excerpt) return { from: 0, tokens };
+
+		const from = tokens.findIndex((token) => token.start >= excerpt.start);
+		const after = tokens.findIndex((token) => token.end > excerpt.end);
+		if (from === -1) return { from: 0, tokens: [] };
+
+		return { from, tokens: tokens.slice(from, after === -1 ? tokens.length : after) };
+	});
+
+	const lastWordIndex = $derived(tokens.reduce((last, token) => token.wordIndex ?? last, -1));
+
+	function isChanged(token: Token): boolean {
+		return token.wordIndex !== undefined && Boolean(changedWords?.has(token.wordIndex));
+	}
+
+	/** A space or punctuation between two changed words belongs to the same change. */
+	function isInsideChange(index: number): boolean {
+		const before = tokens[index - 1];
+		const after = tokens[index + 1];
+		return Boolean(before && after && isChanged(before) && isChanged(after));
+	}
+
+	/** The words dropped right before this word, if any. */
+	function droppedBefore(token: Token): string | undefined {
+		return token.wordIndex === undefined ? undefined : removedBefore?.get(token.wordIndex);
+	}
+
+	/** The words dropped after this one, the last of the text. */
+	function droppedAfter(token: Token): string | undefined {
+		return token.wordIndex === lastWordIndex ? removedBefore?.get(lastWordIndex + 1) : undefined;
+	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -213,8 +274,12 @@
 	onmousedown={(event) => showsMeanings && wordDrag.press(event)}
 	ondblclick={(event) => showsMeanings && wordDrag.selectOne(event)}
 >
-	{#each tokens as token, index (index)}
-		{#if token.word && token.correctionId}
+	{#each shown.tokens as token, offset (shown.from + offset)}
+		{@const index = shown.from + offset}
+		{@const dropped = droppedBefore(token)}
+		{@const droppedAtEnd = droppedAfter(token)}
+		<!-- No whitespace between the tags here: the text keeps it (pre-wrap), so a line break would add a space. -->
+		{#if dropped}<del class="dropped-words">{dropped}</del>{' '}{/if}{#if token.word && token.correctionId}
 			<button
 				type="button"
 				data-word-index={token.wordIndex}
@@ -248,6 +313,7 @@
 				class:marked={isMarked(index)}
 				class:mark-start={index === markedTokens?.from}
 				class:mark-end={index === markedTokens?.to}
+				class:changed-word={isChanged(token)}
 				class="cursor-pointer rounded {unspaced ? '' : 'px-0.5'} {inHighlight(token.wordIndex) ? 'expression-highlight' : ''} transition-colors hover:bg-[var(--surface-2)]"
 				onpointerenter={(event) => showsMeanings && meanings.hoverWord(event, token.wordIndex)}
 				onpointerleave={(event) => meanings.leaveWord(event)}
@@ -258,7 +324,9 @@
 					if (showsMeanings) meanings.tapWord(event, token.wordIndex);
 				}}>{token.text}</span
 			>
-		{:else}<span class:marked={isMarked(index)}>{token.text}</span>{/if}
+		{:else}<span class:marked={isMarked(index)} class:changed-gap={isInsideChange(index)}>{token.text}</span>{/if}{#if droppedAtEnd}{' '}<del
+				class="dropped-words">{droppedAtEnd}</del
+			>{/if}
 	{/each}
 </span>
 
@@ -344,5 +412,34 @@
 	}
 	.marked.mark-start.mark-end {
 		clip-path: polygon(var(--chisel-slant) 0, 100% 0, calc(100% - var(--chisel-slant)) 100%, 0 100%);
+	}
+
+	/*
+	 * The correct version's fixes, what the learner should have said: tinted
+	 * and underlined green, in bold like the explanation's "say this"
+	 * highlights. The ink stays the text colour, so contrast never depends on
+	 * the tint.
+	 */
+	.changed-word,
+	.changed-gap {
+		background-color: color-mix(in srgb, var(--good) 15%, transparent);
+		text-decoration: underline solid var(--good) 1.5px;
+		text-underline-offset: 3px;
+	}
+	.changed-word {
+		font-weight: 600;
+	}
+
+	/*
+	 * Words the correct version drops, with nothing in their place: shown
+	 * where they were said, struck through, small and quiet, so the passage
+	 * says what to leave out (a bare mark left the learner guessing what).
+	 */
+	.dropped-words {
+		font-size: 0.88em;
+		color: color-mix(in srgb, var(--error) 80%, var(--muted-foreground));
+		text-decoration: line-through;
+		text-decoration-color: var(--error);
+		text-decoration-thickness: 1.5px;
 	}
 </style>

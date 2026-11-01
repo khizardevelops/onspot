@@ -83,17 +83,10 @@ class TTSRegistry {
     return adapter.synthesize(text);
   }
 
-  /** Keep no more than one 63–77 MB voice session resident at a time. */
-  /** Unloads every loaded voice except the ones to keep resident. */
+  /** Unloads every loaded voice except the ones to keep resident (each session is 63–77 MB). */
   public async disposeOthers(keepIds: readonly string[]): Promise<void> {
     for (const [id, adapter] of this.adapters) {
       if (!keepIds.includes(id) && adapter.status === 'ready') await adapter.dispose();
-    }
-  }
-
-  public async disposeAll(): Promise<void> {
-    for (const adapter of this.adapters.values()) {
-      if (adapter.status !== 'unloaded') await adapter.dispose();
     }
   }
 }

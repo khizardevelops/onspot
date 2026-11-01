@@ -4,7 +4,17 @@ export * from './types';
 export * from './providers';
 export { chatCompletion, isChatModel, listModels, testConnection } from './client';
 export { evaluateAttempt, extractJson, normalizeEvaluation } from './evaluate';
+export { pacingWait, type PacingWait } from './pacing';
 export { generateTranslations } from './translate';
-export { generateWordGlosses, glossWords, hasWordMeanings, translatePhrase } from './glossary';
+export {
+	generateSectionGlosses,
+	glossSectionOf,
+	glossSections,
+	glossWords,
+	hasMeaningAt,
+	phraseContext,
+	translatePhrase,
+	type SectionGlosses
+} from './glossary';
 export * from './explanation';
 export { buildEvaluationMessages } from './prompt';
