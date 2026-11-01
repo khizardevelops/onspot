@@ -1,8 +1,10 @@
 <div align="center">
 
+<img src="brand-assets/app-icon-tile.svg" width="120" height="120" alt="onspot app icon: a spotlight shining on a sound wave">
+
 # onspot
 
-### The language app that makes you *speak*, then coaches you like a teacher.
+### The language learning app that makes you *speak*, then coaches you like a teacher.
 
 **Stop tapping flashcards. Open your mouth.** onspot gives you a topic, listens to you talk for
 a minute, then marks your spoken French the way a good teacher would: every mistake pinned to

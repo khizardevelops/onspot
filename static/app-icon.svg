@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="824" height="824" viewBox="100 100 824 824">
+  <defs>
+    <linearGradient id="linear-gradient-1" x1="512" y1="246" x2="512" y2="750" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffc24d" stop-opacity="0.6"/>
+      <stop offset="0.5" stop-color="#f6a531" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#f6a531" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="radial-gradient-1" cx="0" cy="0" r="252" gradientTransform="matrix(1 0 0 0.167 512 750)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6a531" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#f6a531" stop-opacity="0.15"/>
+    </radialGradient>
+  </defs>
+  <title>App icon</title>
+  <g id="App_icon" data-name="App icon">
+    <path id="Tile__824_squircle__r_185.4_" data-name="Tile (824 squircle, r 185.4)" d="M383.414 100 L640.586 100 C722.193 100 762.997 100 799.794 112.143 L806.921 113.888 C854.878 131.344 892.656 169.122 910.112 217.079 L911.857 224.206 C924 261.003 924 301.807 924 383.414 L924 640.586 C924 722.193 924 762.997 911.857 799.794 L910.112 806.921 C892.656 854.878 854.878 892.656 806.921 910.112 L799.794 911.857 C762.997 924 722.193 924 640.586 924 L383.414 924 C301.807 924 261.003 924 224.206 911.857 L217.079 910.112 C169.122 892.656 131.344 854.878 113.888 806.921 L112.143 799.794 C100 762.997 100 722.193 100 640.586 L100 383.414 C100 301.807 100 261.003 112.143 224.206 L113.888 217.079 C131.344 169.122 169.122 131.344 217.079 113.888 L224.206 112.143 C261.003 100 301.807 100 383.414 100 Z" fill="#151412"/>
+    <g id="Mark__m___28_" data-name="Mark (m = 28)">
+      <path id="Beam__tangent_hull_of_lamp_and_pool_" data-name="Beam (tangent hull of lamp and pool)" d="M595.87 245.222 L763.611 747.667 C768.798 763.205 722.008 777.948 642.022 785.978 C562.035 794.007 461.965 794.007 381.978 785.978 C301.992 777.948 255.202 763.205 260.389 747.667 L428.13 245.222 C430.606 237.804 467.421 232 512 232 C556.579 232 593.394 237.804 595.87 245.222 Z" fill="url(#linear-gradient-1)"/>
+      <ellipse id="Pool__18_m_x_3_m_" data-name="Pool (18 m x 3 m)" cx="512" cy="750" rx="252" ry="42" fill="url(#radial-gradient-1)"/>
+      <ellipse id="Lamp__6_m_x_1_m_" data-name="Lamp (6 m x 1 m)" cx="512" cy="246" rx="84" ry="14" fill="#ffc24d"/>
+      <path id="Bar_1__3_m_" data-name="Bar 1 (3 m)" d="M372 596 L372 596 C379.732 596 386 602.268 386 610 L386 666 C386 673.732 379.732 680 372 680 L372 680 C364.268 680 358 673.732 358 666 L358 610 C358 602.268 364.268 596 372 596 Z" fill="#ffc24d"/>
+      <path id="Bar_2__5_m_" data-name="Bar 2 (5 m)" d="M442 568 L442 568 C449.732 568 456 574.268 456 582 L456 694 C456 701.732 449.732 708 442 708 L442 708 C434.268 708 428 701.732 428 694 L428 582 C428 574.268 434.268 568 442 568 Z" fill="#ffc24d"/>
+      <path id="Bar_3__8_m_" data-name="Bar 3 (8 m)" d="M512 526 L512 526 C519.732 526 526 532.268 526 540 L526 736 C526 743.732 519.732 750 512 750 L512 750 C504.268 750 498 743.732 498 736 L498 540 C498 532.268 504.268 526 512 526 Z" fill="#ffc24d"/>
+      <path id="Bar_4__5_m_" data-name="Bar 4 (5 m)" d="M582 568 L582 568 C589.732 568 596 574.268 596 582 L596 694 C596 701.732 589.732 708 582 708 L582 708 C574.268 708 568 701.732 568 694 L568 582 C568 574.268 574.268 568 582 568 Z" fill="#ffc24d"/>
+      <path id="Bar_5__3_m_" data-name="Bar 5 (3 m)" d="M652 596 L652 596 C659.732 596 666 602.268 666 610 L666 666 C666 673.732 659.732 680 652 680 L652 680 C644.268 680 638 673.732 638 666 L638 610 C638 602.268 644.268 596 652 596 Z" fill="#ffc24d"/>
+    </g>
+  </g>
+  <g id="Logo">
+  </g>
+  <g id="Construction">
+  </g>
+</svg>

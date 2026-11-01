@@ -19,6 +19,7 @@
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import { asset } from '$app/paths';
 	import { page } from '$app/state';
 	import { quickTooltip } from '#lib/neo.js';
 	import { newSession } from '#lib/stores/practice.js';
@@ -90,7 +91,8 @@
 <header class="app-header paper-surface relative z-20 border-b">
 	<div class="app-header-row">
 		<nav class="app-nav flex shrink-0 items-center gap-1.5" aria-label="Primary navigation">
-			<div class="brand-mark mr-1 grid size-7 place-items-center rounded-[9px] text-[13px] font-semibold text-white shadow-md" role="img" aria-label="onspot">o</div>
+			<!-- The app icon cropped to its tile (brand-assets/app-icon-tile.svg), as the favicon. -->
+			<img class="mr-1 size-9 shrink-0" src={asset('app-icon.svg')} alt="onspot" width="36" height="36" />
 
 			<NeoTooltip tooltip="New session" placement="bottom" {...quickTooltip}>
 				<NeoButton aria-label="New session" class="nav-key" rounded elevation={2} onclick={startNewSession}>
@@ -185,9 +187,6 @@
 		margin-top: 0.125rem;
 	}
 
-	.brand-mark {
-		background: linear-gradient(145deg, var(--brand), var(--brand-2) 62%, var(--brand-3));
-	}
 	.nav-divider {
 		width: 1px;
 		height: 22px;
