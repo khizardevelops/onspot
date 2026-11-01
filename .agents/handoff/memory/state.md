@@ -2,6 +2,43 @@
 
 ## Current State
 
+**Installers branded (2026-11-02, uncommitted; user: "make sure all of these installers use the
+app icon and brand assets"):** v0.2.1's setup .exe still had NSIS's own icon and blue sidebar, the
+MSI WiX's stock images, the DMG a plain window, the .deb/.rpm/AppImage menu entry the old
+"Learn to speak French… desktop-first" comment (Cargo description), and the Flatpak metainfo the
+old teal brand colours. Now: `scripts/brand-assets.sh` renders everything from `brand-assets/`
+(tauri icon; Android adaptive foreground = the mark alone at m = 2.5 dp inside the 66 dp safe
+circle, plus a monochrome themed-icon layer; installer images `src-tauri/icons/installer/` from
+`brand-assets/installer/*.svg`). tauri.conf.json: NSIS installer/uninstaller icon = icon.ico,
+header/sidebar BMPs; WiX banner/dialog BMPs; DMG background + positions; shortDescription,
+longDescription, homepage; bundle.icon starts with the 512 px icon.png (Tauri takes the first PNG
+as the Linux window icon, which was 32 px) and adds 64x64. Flatpak installs 32–512 px + the
+scalable SVG; metainfo branding Light #FFC24D / #714D1D. Verified locally: config passes Tauri's
+schema; a real `tauri build --bundles deb` has 32/64/128/256/512 icons, the new Comment,
+Description and Homepage; the Flatpak build commands run against it; appstreamcli and
+desktop-file-validate pass; aapt2 compiles and links the adaptive icon (minSdk 24). Not yet
+verified: the NSIS/WiX/DMG builds themselves (CI only) and the icon on a phone.
+**APK on releases:** Android signing secrets set 2026-11-02 (see below).
+
+**Phone gestures and Back (2026-11-02, uncommitted; user: Feedback sheet "collapsable via swiping
+it down", "supports all of these touch swips and mobile gestures", "the setting page and other page
+also needs a back button"):** touch-only gesture classes in `src/lib/gestures/` (touch events,
+following `TouchWordSelection`; no library: neo's NeoDrawer handles only its dialog with handle
+drags, and a pull-down from a list at its top needs the first touchmove cancelled).
+`SwipeToDismiss`: Feedback sheet below 1024 px (grip, drag from the toolbar or from the list at
+scrollTop 0, closes past 30% or a 0.4 px/ms flick, shade fades), the stats sheet (down) and the
+timeline paper (right). `SwipeBetweenTabs`: Feedback severity filters and the Settings tabs
+(passive; ≥56 px, 2:1 sideways, ≤600 ms; skips inputs, sliders, sideways scrollers and
+`[data-swipe-ignore]`). Back: `navigation/back.svelte.ts` counts onspot pages behind via
+`afterNavigate` (a reload restarts at 0). The AppHeader Back key on every page but Practice, and
+Android Back, both close the topmost `closeOnBack` entry (`closeTopmost()` skips closed ones), then
+go back in history, or go to Practice with `replaceState` when nothing is behind. Insights' open
+pattern and the stats sheet close on Back. Left out on purpose: swipe on centred dialogs/menus
+(Back closes them), swiping between main sections (clashes with Android's edge Back), swipe actions
+on History rows (accidental deletes); dev pages have no shared header. Verified with Playwright and
+CDP touch, 34/34, on the worktree's server and again on :5173 after merging; `bun run check` 0
+errors. Real Android device not yet checked.
+
 **Every installer for x64 and ARM64 (2026-11-01, feature branch 94f072e..5b1ca79, not on main):**
 release.yml builds `windows` + `windows-arm` (.exe/.msi; ARM cross-built on windows-latest),
 `macos` (Apple Silicon) + `macos-intel` (macos-15-intel), `linux` + `linux-arm` (ubuntu-22.04-arm:
@@ -59,8 +96,12 @@ close-up of the bar in dark mode. Not verified: button clicks, drag and edge res
 (KDE's Remote Control prompt blocked xdotool), light mode on the desktop, Windows, macOS.
 
 **Release v0.2.0 (2026-11-01):** tag pushed; Desktop release (Windows .exe/.msi, macOS .dmg,
-Linux .AppImage/.deb/.rpm, Flatpak), Android (tag and main) and Pages all green. The APK is not on
-the release: android.yml only publishes a signed APK and the repo has no signing secrets. iOS
+Linux .AppImage/.deb/.rpm, Flatpak), Android (tag and main) and Pages all green. The APK was not
+on the release then: android.yml only publishes a signed APK and the repo had no signing secrets.
+**Signing secrets set (2026-11-02, user's choice):** `ANDROID_KEYSTORE_BASE64`/`_KEY_ALIAS`/
+`_KEY_PASSWORD` from the local keystore; the v0.2.1 Android run was re-run and published
+`onspot-0.2.1-12d6176-arm64.apk` (43 MB), signer CN=onspot SHA-256 9556…5cbf = the local key, so
+it installs over the existing app. Every `v*` tag now publishes the signed APK. iOS
 skipped (user's choice; no Apple signing). The Flatpak installs fine; Bazaar's UI hung after a
 successful install (its own bug), Discover started a redundant second install.
 
@@ -197,8 +238,8 @@ phonemizer in the worker); links/`goto` use `pageHref()` (`src/lib/pages.ts`: ba
 is not cross-origin isolated (cloud mode unaffected; on-device models single-threaded). Verified
 locally with a Pages-like server: first visit, deep link, cloud setup, a real take. Releases: tag
 `v*` → release.yml (Linux .deb/.AppImage/.rpm on ubuntu-22.04, `GGML_NATIVE=OFF`; also Windows,
-macOS) and android.yml (publishes only when signing secrets exist; none are set, so the signed APK
-is built locally and uploaded with `gh release upload`).
+macOS) and android.yml (publishes only when signing secrets exist; they are set since 2026-11-02,
+so a tag publishes the signed APK itself).
 
 **Language of instruction (2026-11-01, user request):** Settings → Language → "Language of
 instruction" (`settings.instructionLanguage`, default `en`; `INSTRUCTION_LANGUAGES` in

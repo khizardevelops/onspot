@@ -71,10 +71,14 @@ installed. After switching to a branch with different dependencies, run
   Move practice history with Settings → Storage → Export / Restore.
 - `cargo run --release -p tauri-plugin-speech --example bench -- …` (see above) measures the
   native STT engine without the app.
-- **App icons: `bun tauri icon brand-assets/app-icon-1024.png --ios-color '#151412'`.** Regenerates
-  `src-tauri/icons/` (desktop, iOS) and the Android launcher icons in `src-tauri/gen/android/`
-  from the one macOS-grid master. `--ios-color` also sets the Android adaptive background: Ink, so
-  the master's transparent margin merges with the tile (Tauri's default is white). The web favicon
+- **App icons and installer images: `scripts/brand-assets.sh`** (needs bun, resvg, ImageMagick 7).
+  Runs `tauri icon brand-assets/app-icon-1024.png --ios-color '#151412'` (`src-tauri/icons/`,
+  iOS, Android legacy icons; Ink as the Android adaptive background), then overwrites the Android
+  adaptive foreground with the mark alone and adds the monochrome layer (`brand-assets/android/`),
+  then renders the NSIS/WiX BMPs and the DMG background into `src-tauri/icons/installer/`
+  (`brand-assets/installer/`). `tauri icon` reorders `icon.icns`; `git checkout` it if that is
+  its only change. Don't run `tauri icon` alone: it puts the whole tile back in the Android
+  foreground, past the launcher's safe zone. The web favicon
   and header mark are `static/app-icon.svg`, a copy of `brand-assets/app-icon-tile.svg` (the icon
   with its viewBox cropped to the 824 tile, because the margin made the favicon too small).
 
