@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<component type="desktop-application">
+  <id>app.onspot.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+
+  <name>onspot</name>
+  <summary>Practise speaking a language and get a teacher's feedback</summary>
+  <developer id="io.github.khizardevelops">
+    <name>onspot contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      onspot gives you a topic, listens to you talk for a minute, then marks what you said the
+      way a good teacher would: every mistake pinned to the exact words you used, explained in
+      plain language, and read back to you the way a native speaker would say it.
+    </p>
+    <ul>
+      <li>Speak first: a prompt, a microphone and one minute, no multiple choice</li>
+      <li>Corrections for grammar, vocabulary, connectors and naturalness</li>
+      <li>Hear the corrected version read aloud</li>
+      <li>Speech recognition and voices can run entirely on your device</li>
+      <li>Optional cloud providers use your own API keys</li>
+      <li>Your history stays in a database you own, with export and cloud sync</li>
+    </ul>
+    <p>French is ready; Japanese is in development.</p>
+  </description>
+
+  <launchable type="desktop-id">app.onspot.desktop.desktop</launchable>
+  <provides>
+    <binary>onspot</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/khizardevelops/onspot</url>
+  <url type="bugtracker">https://github.com/khizardevelops/onspot/issues</url>
+  <url type="vcs-browser">https://github.com/khizardevelops/onspot</url>
+
+  <categories>
+    <category>Education</category>
+    <category>Languages</category>
+  </categories>
+  <keywords>
+    <keyword>language</keyword>
+    <keyword>speaking</keyword>
+    <keyword>French</keyword>
+    <keyword>Japanese</keyword>
+    <keyword>pronunciation</keyword>
+  </keywords>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#0f766e</color>
+    <color type="primary" scheme_preference="dark">#2db3a3</color>
+  </branding>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">960</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1" />
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>French practice with a teacher's feedback</caption>
+      <image>https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/fr-light.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Japanese practice in dark mode</caption>
+      <image>https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/jap-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Practice history</caption>
+      <image>https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/history-light.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.1.0" date="2026-11-01">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

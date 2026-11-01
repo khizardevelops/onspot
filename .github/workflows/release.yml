@@ -1,6 +1,7 @@
 # Builds the desktop bundles: Windows (.exe/.msi), macOS (.dmg) and Linux
-# (.deb/.AppImage/.rpm). Push a v* tag to publish them on a GitHub Release, or
-# run the workflow manually from the Actions tab.
+# (.deb/.AppImage/.rpm, and a .flatpak made from the .deb). Push a v* tag to
+# publish them on a GitHub Release, or run the workflow manually from the
+# Actions tab.
 name: Desktop release
 
 on:
@@ -91,6 +92,11 @@ jobs:
           workspaces: src-tauri -> target
           key: desktop-${{ matrix.name }}
 
+      # The AppImage bundles every GStreamer plugin installed here
+      # (bundle.linux.appimage.bundleMediaFramework); WebKitGTK plays, decodes
+      # and captures audio through them. Base and good cover onspot's formats.
+      # Not bad: it pulls in a libreadline that breaks the host's /bin/sh when
+      # the app opens a link.
       - name: Install Linux system libraries
         if: matrix.name == 'linux'
         run: |
@@ -99,11 +105,28 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good
 
       # Tauri runs `beforeBuildCommand` (bun run build) itself.
       - name: Build the desktop bundle
         run: bunx tauri build
+
+      # A bundled library that shadows the host's copy only breaks on distros
+      # newer than this runner: in 0.1.0 the bundled libwayland-client made
+      # WebKit abort on Arch's Mesa. Start the AppImage here (Ubuntu 22.04, the
+      # oldest base it supports) and on rolling Arch before publishing it.
+      - name: Check the AppImage
+        if: matrix.name == 'linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          appimage="$(echo src-tauri/target/release/bundle/appimage/*.AppImage)"
+          packaging/appimage/check.sh "$appimage"
+          packaging/smoke-test.sh "$appimage"
+          docker run --rm --env APPIMAGE_EXTRACT_AND_RUN --volume "$PWD:/work:ro" --workdir /work archlinux:latest \
+            bash -c "pacman -Syu --noconfirm --needed mesa libglvnd wayland libx11 libxcb fontconfig freetype2 harfbuzz fribidi ttf-dejavu xorg-server-xvfb xorg-xauth > /dev/null && packaging/smoke-test.sh '$appimage'"
 
       - name: Collect artifacts
         shell: bash
@@ -127,3 +150,51 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  # Repackages the Linux job's .deb as a Flatpak on the GNOME runtime
+  # (packaging/flatpak/app.onspot.desktop.yml).
+  flatpak:
+    needs: bundle
+    # Only the Linux bundle is needed, so a failed Windows or macOS bundle does
+    # not stop it; without the Linux .deb the download step fails.
+    if: ${{ !cancelled() && needs.bundle.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      # flatpak-builder sandboxes each build step with bubblewrap.
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: onspot-desktop-linux
+          path: linux-bundles
+
+      - name: Stage the .deb for the manifest
+        id: stage
+        shell: bash
+        run: |
+          shopt -s nullglob
+          debs=(linux-bundles/*.deb)
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "Expected one .deb from the Linux job, found ${#debs[@]}." >&2
+            exit 1
+          fi
+
+          cp "${debs[0]}" packaging/flatpak/onspot.deb
+          version="$(basename "${debs[0]}" | cut -d_ -f2)"
+          echo "bundle=onspot_${version}_x86_64.flatpak" >> "$GITHUB_OUTPUT"
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/app.onspot.desktop.yml
+          bundle: ${{ steps.stage.outputs.bundle }}
+
+      - name: Publish to a GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.stage.outputs.bundle }}

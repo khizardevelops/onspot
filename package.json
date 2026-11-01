@@ -53,7 +53,7 @@
     "@sveltejs/kit": "^3.0.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "^2.12.4",
     "@transcribe/shout": "^1.0.7",
     "@transcribe/transcriber": "^3.0.1",
     "@tsconfig/svelte": "^5.0.8",

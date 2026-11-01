@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Flatpak for the onspot desktop app.
+#
+# It repackages the release .deb (Tauri's recipe for shipping an existing
+# binary): the GNOME runtime already provides everything the binary links to
+# (WebKitGTK 4.1, GTK 3, libsoup 3) plus GStreamer for recording and playback.
+#
+# The .deb is not in the repository. Copy the one to package next to this file
+# as `onspot.deb` (release.yml does this with the Linux job's .deb), then:
+#
+#   flatpak-builder --user --install --force-clean <build-dir> packaging/flatpak/app.onspot.desktop.yml
+#   flatpak run app.onspot.desktop
+#
+# The app keeps its database, models and settings in its own sandboxed XDG
+# directories (~/.var/app/app.onspot.desktop/), which need no permission.
+# Export and Restore go through the file chooser portal.
+id: app.onspot.desktop
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: onspot
+
+finish-args:
+  # Window: native Wayland, X11 only where there is no Wayland session.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # GPU rendering for the WebKitGTK webview.
+  - --device=dri
+  # Microphone and playback (PulseAudio, or PipeWire's PulseAudio server).
+  - --socket=pulseaudio
+  # Model downloads, the optional cloud speech and language providers, cloud
+  # sync, and the OAuth loopback listener for Google Drive.
+  - --share=network
+
+modules:
+  - name: onspot
+    buildsystem: simple
+    sources:
+      - type: file
+        path: onspot.deb
+      - type: file
+        path: app.onspot.desktop.desktop
+      - type: file
+        path: app.onspot.desktop.metainfo.xml
+    build-commands:
+      - ar -x onspot.deb data.tar.gz
+      - tar -xf data.tar.gz
+      - install -Dm755 usr/bin/onspot /app/bin/onspot
+
+      # Tauri's .deb names the icons after the binary; Flatpak exports only
+      # icons named after the app id. Its "256x256@2" icon is 256 px.
+      - install -Dm644 usr/share/icons/hicolor/32x32/apps/onspot.png /app/share/icons/hicolor/32x32/apps/app.onspot.desktop.png
+      - install -Dm644 usr/share/icons/hicolor/128x128/apps/onspot.png /app/share/icons/hicolor/128x128/apps/app.onspot.desktop.png
+      - install -Dm644 usr/share/icons/hicolor/256x256@2/apps/onspot.png /app/share/icons/hicolor/256x256/apps/app.onspot.desktop.png
+
+      - install -Dm644 app.onspot.desktop.desktop /app/share/applications/app.onspot.desktop.desktop
+      - install -Dm644 app.onspot.desktop.metainfo.xml /app/share/metainfo/app.onspot.desktop.metainfo.xml

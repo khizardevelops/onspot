@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=onspot
+GenericName=Speaking Practice
+Comment=Practise speaking a language and get feedback like a teacher's
+Exec=onspot
+Icon=app.onspot.desktop
+Terminal=false
+Categories=Education;Languages;
+Keywords=language;speaking;French;Japanese;pronunciation;practice;
+StartupNotify=true
+StartupWMClass=onspot

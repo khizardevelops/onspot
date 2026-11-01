@@ -86,3 +86,6 @@ coverage/
 Thumbs.db
 .commandcode/taste/
 .claude/
+
+# The .deb a local Flatpak build repackages (packaging/flatpak/app.onspot.desktop.yml)
+packaging/flatpak/onspot.deb
