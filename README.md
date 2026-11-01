@@ -22,8 +22,8 @@ speaker would say it.
 <br>
 
 <!-- Dark mode is shown first; the light versions are one click away under Screenshots. -->
-<img src="docs/screenshots/jap-dark.png" width="100%"
-     alt="onspot's practice screen: a spoken Japanese sentence with a word-by-word breakdown and a teacher's feedback panel">
+<img src="docs/screenshots/practice-dark.png" width="100%"
+     alt="onspot's practice screen: a spoken French take on an index card with its mistakes highlighted, the corrected sentences, a teacher's explanation and colour-coded feedback cards">
 
 </div>
 
@@ -52,11 +52,11 @@ Click a theme to show or hide it.
 <summary><b>🌙 Dark mode</b></summary>
 <br>
 
-<p align="center"><img src="docs/screenshots/jap-dark.png" width="100%" alt="Japanese practice, dark mode"></p>
-<p align="center"><b>Japanese practice</b>: A word-by-word breakdown with readings, plus suggestions for more natural phrasing that you can hear read aloud.</p>
+<p align="center"><img src="docs/screenshots/practice-dark.png" width="100%" alt="French practice, dark mode"></p>
+<p align="center"><b>Practice</b>: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.</p>
 
-<p align="center"><img src="docs/screenshots/fr-dark.png" width="100%" alt="French practice, dark mode"></p>
-<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
+<p align="center"><img src="docs/screenshots/phone-dark.png" width="72%" alt="Practice and feedback on a phone, dark mode"></p>
+<p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
 
 <p align="center"><img src="docs/screenshots/history-dark.png" width="100%" alt="History, dark mode"></p>
 <p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
@@ -67,11 +67,11 @@ Click a theme to show or hide it.
 <summary><b>☀️ Light mode</b></summary>
 <br>
 
-<p align="center"><img src="docs/screenshots/jap-light.png" width="100%" alt="Japanese practice, light mode"></p>
-<p align="center"><b>Japanese practice</b>: A word-by-word breakdown with readings, plus suggestions for more natural phrasing that you can hear read aloud.</p>
+<p align="center"><img src="docs/screenshots/practice-light.png" width="100%" alt="French practice, light mode"></p>
+<p align="center"><b>Practice</b>: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.</p>
 
-<p align="center"><img src="docs/screenshots/fr-light.png" width="100%" alt="French practice, light mode"></p>
-<p align="center"><b>French practice</b>: Every mistake is marked on the words you actually said. Idiomatic, literal and word-for-word translations sit underneath, and the feedback panel explains each correction like a teacher would.</p>
+<p align="center"><img src="docs/screenshots/phone-light.png" width="72%" alt="Practice and feedback on a phone, light mode"></p>
+<p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
 
 <p align="center"><img src="docs/screenshots/history-light.png" width="100%" alt="History, light mode"></p>
 <p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
