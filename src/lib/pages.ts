@@ -2,8 +2,8 @@
 
 import { resolve } from '$app/paths';
 
-/** The app's pages. */
-export type Page = '/' | '/history' | '/insights' | '/settings';
+/** The app's pages (`/settings/text-size` is Text size's live preview, opened from Settings). */
+export type Page = '/' | '/history' | '/insights' | '/settings' | '/settings/text-size';
 
 /**
  * A page's URL: under the app's base path (e.g. `/onspot` on GitHub Pages),

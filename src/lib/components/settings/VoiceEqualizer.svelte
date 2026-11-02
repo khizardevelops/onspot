@@ -211,10 +211,6 @@
 		background: color-mix(in srgb, var(--surface-2) 70%, var(--card));
 		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
 		padding: 16px 16px 12px 8px;
-		transition:
-			background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
-			border-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
-			box-shadow 140ms cubic-bezier(0.4, 0, 0.2, 1);
 	}
 	.eq.playing {
 		background: color-mix(in srgb, var(--brand) 7%, var(--card));
@@ -293,7 +289,7 @@
 		vector-effect: non-scaling-stroke;
 	}
 	.eq-graph .area {
-		transition: opacity 400ms ease;
+		transition: opacity var(--motion-slide) var(--motion-ease-out);
 	}
 	.eq.playing .eq-graph .area {
 		animation: eq-breathe 2.4s ease-in-out infinite;
@@ -305,10 +301,8 @@
 		translate: -50% -50%;
 		border-radius: 50%;
 		background: var(--card);
+		/* No transition: a point follows its slider at once (`top` would also lay out on every frame). */
 		border: 2px solid var(--border-strong);
-		transition:
-			top 160ms ease-out,
-			border-color 200ms ease;
 	}
 	.eq-point.changed {
 		border-color: var(--brand);
@@ -349,7 +343,6 @@
 		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 		color: var(--muted-foreground);
-		transition: color 200ms ease;
 	}
 	.eq-value.changed {
 		color: var(--brand);
@@ -417,8 +410,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.eq,
-		.eq-point {
+		.eq-graph .area {
 			transition-duration: 1ms;
 		}
 		.eq.playing .eq-graph .area {

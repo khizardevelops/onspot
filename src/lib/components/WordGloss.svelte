@@ -7,8 +7,9 @@
 	 * 3D-transformed list, which would clip a label inside the card or misplace a
 	 * fixed one. floating-ui keeps it beside its anchor, flips it near an edge,
 	 * follows the anchor while the list scrolls, and hides while the anchor is
-	 * scrolled out of sight (out of a partial view's window, say), so the label
-	 * never floats over unrelated text.
+	 * scrolled out of sight (out of a partial view's window, say). It also hides
+	 * while something is drawn over the anchor (a newer take dropped onto its
+	 * card, a sheet), so the label never floats over unrelated text.
 	 *
 	 * A selection's label can also read its words aloud (`onSpeak`). That label
 	 * takes the pointer, with a bridge over the gap to its words, so the pointer
@@ -50,7 +51,7 @@
 	let label = $state<HTMLElement | null>(null);
 	let x = $state(0);
 	let y = $state(0);
-	/** The anchor is scrolled out of every container that shows it. */
+	/** The anchor is scrolled out of every container that shows it, or something is drawn over it. */
 	let anchorOutOfSight = $state(false);
 	/** Where the label ended up: below or above its anchor (`flip` moves it where there is room). */
 	let placedSide = $state<'top' | 'bottom'>('bottom');
@@ -60,11 +61,29 @@
 		return { destroy: () => node.remove() };
 	}
 
+	/**
+	 * True when something else is drawn over the middle of the anchor's first
+	 * line: a newer take dropped onto its card, a sheet, a dialog. floating-ui's
+	 * `hide` only sees an anchor clipped by a scroller, and a buried card is
+	 * not clipped, just covered. Hit testing passes through inert content, so
+	 * the words of a card in the pile never count as showing.
+	 */
+	function isCovered(reference: ReferenceElement): boolean {
+		const owner = reference instanceof Element ? reference : reference.contextElement;
+		if (!owner) return false;
+
+		const lines = Array.from(reference.getClientRects?.() ?? []).filter((box) => box.width > 0 && box.height > 0);
+		const line = lines[0] ?? reference.getBoundingClientRect();
+		const topmost = document.elementFromPoint(line.left + line.width / 2, line.top + line.height / 2);
+		return !topmost || !owner.contains(topmost);
+	}
+
 	$effect(() => {
 		if (!anchor || !label) return;
 		const reference = anchor;
 		const floating = label;
 		const side = placement;
+		let nextFrame = 0;
 
 		const place = () =>
 			void computePosition(reference, floating, {
@@ -74,11 +93,25 @@
 			}).then((position) => {
 				x = position.x;
 				y = position.y;
-				anchorOutOfSight = position.middlewareData.hide?.referenceHidden ?? false;
+				anchorOutOfSight = (position.middlewareData.hide?.referenceHidden ?? false) || isCovered(reference);
 				placedSide = position.placement.startsWith('top') ? 'top' : 'bottom';
 			});
 
-		return autoUpdate(reference, floating, place);
+		// The takes' stack poses its cards in the frame after a scroll (see
+		// AttemptStream). Placed only when the scroll arrives, the label would
+		// trail its word by a frame and judge what covers it by the old poses,
+		// so it is placed again in that frame, after the cards have moved.
+		const placeNowAndInNextFrame = () => {
+			place();
+			cancelAnimationFrame(nextFrame);
+			nextFrame = requestAnimationFrame(place);
+		};
+
+		const stopUpdating = autoUpdate(reference, floating, placeNowAndInNextFrame);
+		return () => {
+			stopUpdating();
+			cancelAnimationFrame(nextFrame);
+		};
 	});
 </script>
 

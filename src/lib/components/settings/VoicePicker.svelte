@@ -3,6 +3,7 @@
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { quickDialog } from '#lib/neo.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoInput } from '@dvcol/neo-svelte/inputs';
 	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
@@ -134,6 +135,7 @@
 </button>
 
 <NeoDialog
+	{...quickDialog}
 	bind:open
 	portal
 	rounded

@@ -7,6 +7,8 @@
 	import { initSettings, appSettings, settingsReady } from '#lib/stores/settings.js';
 	import { initPractice } from '#lib/stores/practice.js';
 	import { applyTheme, theme } from '#lib/stores/theme.svelte.js';
+	// Applies the learner's text sizes (Settings → Text size) before the first render.
+	import '#lib/stores/textSize.svelte.js';
 	import { toast } from '#lib/stores/toast.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
@@ -17,6 +19,7 @@
 	import WindowBar from '#lib/components/WindowBar.svelte';
 	import { currentRuntime } from '#lib/platform/runtime.js';
 	import { trackPageHistory } from '#lib/navigation/back.svelte.js';
+	import { showPressesImmediately } from '#lib/gestures/pressFeedback.js';
 	import type { PaperTextureParams } from '@paper-design/shaders';
 	import { NeoThemeProvider } from '@dvcol/neo-svelte/providers';
 
@@ -100,6 +103,9 @@
 				void initPractice().catch(() => undefined);
 			});
 	});
+
+	// A finger shows a press on any neo button at once, and lets go at once.
+	onMount(showPressesImmediately);
 </script>
 
 <PaperTexture class="paper-page" params={PAGE[theme.current]} preloadParams={PAGE_PAPERS} publishAs="--paper-page" />

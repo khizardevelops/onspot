@@ -17,18 +17,25 @@
 	 * touch screens it is swiped like one: down from its grip or toolbar (or from
 	 * the list once it is scrolled to the top) to close it, down on the stats to
 	 * put them away, and sideways across the cards for the next or previous
-	 * severity filter.
+	 * severity filter. On phones the Practice page also pulls it up from the
+	 * bar (it binds `shell` for that).
+	 *
+	 * The session stats are a sheet over the bottom of the list that a tap
+	 * anywhere else in the panel puts away, or, pinned, part of the panel that
+	 * stays open (see `stores/statsPin.svelte.ts`).
 	 */
 	import { quickCollapse } from '#lib/neo.js';
 	import { SwipeToDismiss } from '#lib/gestures/swipeToDismiss.js';
 	import { SwipeBetweenTabs, type TabStep } from '#lib/gestures/swipeBetweenTabs.js';
 	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
+	import { setStatsPinned, statsPin } from '#lib/stores/statsPin.svelte.js';
 	import { untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 	import type { Correction, CorrectionSeverity } from '#lib/adapters/db/index.js';
 	import type { AttemptView } from '#lib/stores/practice.js';
 	import { speakText } from '#lib/stores/practice.js';
+	import { practiceSession } from '#lib/stores/practiceSession.js';
 	import { correctionTitle, isDeletion, isInsertion } from '#lib/utils/corrections.js';
 	import { parseExplanation } from '#lib/adapters/llm/index.js';
 	import { narrowestWidthKeepingLayout } from '#lib/utils/narrowestWidth.js';
@@ -48,6 +55,7 @@
 		ListFilter,
 		MessageSquareText,
 		PanelRightClose,
+		Pin,
 		TriangleAlert,
 		Volume2
 	} from '@lucide/svelte';
@@ -77,6 +85,8 @@
 		contentWidth?: number | null;
 		/** How far a swipe has taken the sheet towards closing, 0 to 1, so the page can fade what is behind it. */
 		onSwipeProgress?: (progress: number) => void;
+		/** The panel's own element (the sheet on phones), for the page's pull-up from its bar. */
+		shell?: HTMLElement;
 	}
 
 	let {
@@ -86,12 +96,14 @@
 		stats,
 		onSelectCorrection,
 		contentWidth = $bindable(null),
-		onSwipeProgress
+		onSwipeProgress,
+		shell = $bindable()
 	}: Props = $props();
 	let filter = $state<Filter>('all');
 	let expandedId = $state<string | null>(null);
 	let knownAttemptId = $state<string | null>(null);
-	let statsOpen = $state(false);
+	/** Pinned stats are open from the start. */
+	let statsOpen = $state(statsPin.pinned);
 	let filterMenuOpen = $state(false);
 
 	const CATEGORIES: Category[] = ['grammar', 'register', 'filler', 'style'];
@@ -202,7 +214,6 @@
 	/** A narrower panel is only worth a resize when it frees this much room; growing is never held back. */
 	const MIN_WORTHWHILE_SHRINK_PX = 12;
 
-	let shell = $state<HTMLElement>();
 	let list = $state<HTMLElement>();
 
 	$effect(() => {
@@ -328,6 +339,28 @@
 	// Android Back puts the stats away before it closes the panel.
 	closeOnBack(() => statsOpen, () => (statsOpen = false));
 
+	/**
+	 * A tap anywhere else in the panel puts unpinned stats away. On the cards
+	 * it does only that (it would otherwise also open a card the stats were
+	 * hiding half of); the toolbar's controls still do what they say.
+	 */
+	function putStatsAwayOnTap(event: MouseEvent): void {
+		if (!statsOpen || statsPin.pinned || !(event.target instanceof Element)) return;
+		const target = event.target;
+		if (statsSheet?.contains(target) || target.closest('[aria-controls="session-stats"]')) return;
+
+		statsOpen = false;
+		if (list?.contains(target)) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+	}
+
+	function toggleStatsPin(): void {
+		setStatsPinned(!statsPin.pinned);
+		if (statsPin.pinned) statsOpen = true;
+	}
+
 	/** The header's name opens the filter by type (grammar, register, …). */
 	const filterItems = $derived<NeoMenuItem[]>([
 		{ value: 'all', label: 'All feedback', after: filterCount, divider: { bottom: true } },
@@ -354,6 +387,14 @@
 		onSelectCorrection?.(attempt.id, correction.id);
 	}
 
+	/** A sample session (Settings → Text size's live preview) plays nothing. */
+	const live = practiceSession().live;
+
+	/** "Hear it": reads the correction aloud. */
+	function hear(text: string): void {
+		if (live) void speakText(text);
+	}
+
 	function fmtTime(seconds: number): string {
 		const mins = Math.floor(seconds / 60);
 		const secs = Math.floor(seconds % 60);
@@ -375,6 +416,7 @@
 	style:--feedback-content-width={contentWidth === null ? undefined : `${contentWidth}px`}
 	data-state={open ? 'open' : 'closed'}
 	inert={!open}
+	onclickcapture={putStatsAwayOnTap}
 >
 		<!-- The pinned sheet, casting its shadow over the cards below. -->
 		<!--
@@ -449,7 +491,7 @@
 			</div>
 		</header>
 
-		<div class="feedback-list" class:stats-room={statsOpen} bind:this={list}>
+		<div class="feedback-list" class:stats-room={statsOpen && !statsPin.pinned} bind:this={list}>
 			{#if !attempt}
 				<div class="list-note" data-keep-layout in:fade={{ duration: 240 }}>
 					<MessageSquareText class="size-5" />
@@ -474,6 +516,7 @@
 							in:fly={{ y: 8, duration: 220 }}
 							out:fade={{ duration: 120 }}
 							class="feedback-card"
+							data-text-section="feedback"
 							data-severity={correction.severity}
 							class:expanded
 							class:linked={correction.id === activeCorrectionId}
@@ -531,7 +574,7 @@
 											</span>
 										{/if}
 										{#if correction.speakText || correction.replacement}
-											<button type="button" class="pencil-link gap-1" onclick={() => void speakText(correction.speakText ?? correction.replacement)}>
+											<button type="button" class="pencil-link gap-1" onclick={() => hear(correction.speakText ?? correction.replacement)}>
 												<Volume2 class="size-3.5" /> Hear it
 											</button>
 										{/if}
@@ -544,13 +587,38 @@
 			{/if}
 		</div>
 
-		<!-- Takes no room until asked for; then it slides up over the bottom of the list. -->
-		<section id="session-stats" class="stats-sheet" class:open={statsOpen} aria-label="Session stats" inert={!statsOpen} bind:this={statsSheet}>
+		<!--
+			Takes no room until asked for; then it slides up over the bottom of the
+			list. Pinned, it is part of the panel under the list instead.
+		-->
+		<section
+			id="session-stats"
+			class="stats-sheet"
+			class:open={statsOpen}
+			class:pinned={statsPin.pinned}
+			aria-label="Session stats"
+			inert={!statsOpen}
+			bind:this={statsSheet}
+		>
 			<div class="stats-header">
 				<span>Session stats</span>
-				<button type="button" class="stats-close" aria-label="Hide session stats" onclick={() => (statsOpen = false)}>
-					<ChevronDown size={16} strokeWidth={2.5} />
-				</button>
+				<span class="stats-header-actions">
+					<button
+						type="button"
+						class="stats-action"
+						class:is-selected={statsPin.pinned}
+						aria-pressed={statsPin.pinned}
+						aria-label={statsPin.pinned ? 'Unpin session stats' : 'Keep session stats open'}
+						title={statsPin.pinned ? 'Unpin: a tap elsewhere puts the stats away' : 'Keep open: pin the stats to the panel'}
+						onclick={toggleStatsPin}
+					>
+						<!-- One pin, filled in while pressed. -->
+						<Pin size={15} strokeWidth={2.2} fill={statsPin.pinned ? 'currentColor' : 'none'} />
+					</button>
+					<button type="button" class="stats-action" aria-label="Hide session stats" onclick={() => (statsOpen = false)}>
+						<ChevronDown size={16} strokeWidth={2.5} />
+					</button>
+				</span>
 			</div>
 			<div class="stats-row">
 				{#each STATS as stat (stat.label)}
@@ -565,8 +633,14 @@
 
 <style>
 	/*
-	 * A notebook page: warm paper with grain, a red margin line and binder
-	 * holes on the left. Everything written on it starts right of the margin.
+	 * A notebook page: warm paper, a red margin line and binder holes on the
+	 * left. Everything written on it starts right of the margin.
+	 *
+	 * Its textures are images (src/lib/textures/), never inline SVG noise: a
+	 * browser renders an feTurbulence filter again on every frame the sheet
+	 * moves (33 fps when dragged on a phone, 120 fps without). The page's own
+	 * all-over grain was dropped: at 7% it changed the paper by under one grey
+	 * level.
 	 */
 	.feedback-shell {
 		--notebook: var(--background);
@@ -597,13 +671,11 @@
 		--tape: rgb(240 235 220 / 0.85);
 		--label-tape: rgb(249 244 231 / 0.97);
 		--stat-edge: rgb(120 100 70 / 0.22);
-		--grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
 		/* A narrow margin: the holes and the red line, then the content, as close as they look right. */
 		--margin-at: 20px;
 		--content-start: 28px;
 
 		background-color: var(--notebook);
-		background-image: var(--grain);
 	}
 	:global([data-theme='dark']) .feedback-shell {
 		--pinned-paper: #24211c;
@@ -678,9 +750,7 @@
 		border-bottom: 2px solid rgb(0 0 0 / 0.08);
 		border-radius: 0 0 2px 2px;
 		background-color: var(--pinned-paper);
-		background-image:
-			var(--grain),
-			repeating-linear-gradient(to bottom, transparent 0 24px, var(--ruled-blue) 24px 25px);
+		background-image: repeating-linear-gradient(to bottom, transparent 0 24px, var(--ruled-blue) 24px 25px);
 		box-shadow: var(--pinned-shadow);
 	}
 	.feedback-paper::before {
@@ -772,8 +842,8 @@
 		background-color: var(--label-tape);
 		background-image:
 			linear-gradient(180deg, rgb(255 255 255 / 0.4), transparent 45%, rgb(80 60 30 / 0.06)),
-			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='40'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7 0.03' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)' opacity='0.32'/%3E%3C/svg%3E"),
-			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.3'/%3E%3C/svg%3E");
+			url('../textures/tape-crepe.webp'),
+			url('../textures/tape-grain.webp');
 		background-size: auto, 160px 40px, 120px 120px;
 		background-blend-mode: normal, multiply, multiply;
 		box-shadow:
@@ -971,11 +1041,19 @@
 		overscroll-behavior: contain;
 		padding: 0.5rem 0.875rem 1.5rem var(--content-start);
 		scrollbar-width: thin;
-		transition: padding-bottom 0.3s ease;
 	}
 	/* Room to scroll the last card out from under the open stats. */
 	.feedback-list.stats-room {
 		padding-bottom: 8rem;
+	}
+	/*
+	 * A sheet: no overscroll stretch either. Pulling down at the top drags the
+	 * sheet; the list stretching under the finger as well made it flicker.
+	 */
+	@media (max-width: 1023px) {
+		.feedback-list {
+			overscroll-behavior: none;
+		}
 	}
 	.feedback-cards {
 		margin: 0;
@@ -1006,9 +1084,8 @@
 		background-size: auto, auto, cover;
 		background-blend-mode: var(--key-blend);
 		box-shadow: var(--paper-depth), var(--card-shadow);
-		transition:
-			box-shadow 0.2s ease,
-			transform 0.2s ease;
+		/* The lift moves; its deeper shadow is there at once (a shadow is repainted on every frame it changes). */
+		transition: transform var(--motion-slide) var(--motion-ease-out);
 	}
 	.feedback-card[data-severity='error'] {
 		--severity-ink: var(--error);
@@ -1084,7 +1161,7 @@
 	.card-heading :global(.card-chevron) {
 		margin-top: 0.0625rem;
 		color: var(--muted-foreground);
-		transition: transform 0.3s ease;
+		transition: transform var(--motion-slide) var(--motion-ease-out);
 	}
 	.feedback-card.expanded .card-heading :global(.card-chevron) {
 		transform: rotate(180deg);
@@ -1110,7 +1187,7 @@
 	.card-title {
 		flex: 1;
 		min-width: 0;
-		font-size: 0.875rem;
+		font-size: calc(0.875rem * var(--text-scale-feedback, 1));
 		font-weight: 700;
 		line-height: 1.3;
 	}
@@ -1119,7 +1196,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.3125rem;
-		font-size: 0.8125rem;
+		font-size: calc(0.8125rem * var(--text-scale-feedback, 1));
 		line-height: 1.3;
 	}
 	.wrong-text {
@@ -1133,7 +1210,7 @@
 	}
 	.card-gloss {
 		color: var(--muted-foreground);
-		font-size: 0.75rem;
+		font-size: calc(0.75rem * var(--text-scale-feedback, 1));
 	}
 	.card-details {
 		padding: 0.75rem 0.875rem;
@@ -1142,7 +1219,7 @@
 		/* The same stock, a shade deeper, like the card's lower half. */
 		background-color: color-mix(in srgb, var(--severity-ink) 5%, var(--severity-paper));
 		color: var(--muted-foreground);
-		font-size: 0.8125rem;
+		font-size: calc(0.8125rem * var(--text-scale-feedback, 1));
 		line-height: 1.45;
 	}
 
@@ -1185,17 +1262,22 @@
 		border-radius: 14px 14px 0 0;
 		/* The darker notebook paper, so the white stat cards stand out of it. */
 		background-color: color-mix(in srgb, var(--notebook) 88%, #8a7a5c);
-		background-image:
-			var(--grain),
-			repeating-linear-gradient(to bottom, transparent 0 24px, color-mix(in srgb, var(--ruled-blue) 40%, transparent) 24px 25px);
+		background-image: repeating-linear-gradient(
+			to bottom,
+			transparent 0 24px,
+			color-mix(in srgb, var(--ruled-blue) 40%, transparent) 24px 25px
+		);
 		box-shadow:
 			0 -1px 0 rgb(255 255 255 / 0.5),
 			0 -10px 30px rgb(0 0 0 / 0.15);
 		transform: translateY(100%);
-		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		/* Leaving: accelerating away. */
+		transition: transform var(--motion-sheet) var(--motion-ease-in);
 	}
 	.stats-sheet.open {
 		transform: translateY(0);
+		/* Arriving: decelerating into place. */
+		transition-timing-function: var(--motion-ease-out);
 	}
 	/* The sheet's grip. */
 	.stats-sheet::before {
@@ -1220,15 +1302,48 @@
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
 	}
-	.stats-close {
+	.stats-header-actions {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	}
+	.stats-action {
 		display: grid;
 		place-items: center;
 		width: 28px;
 		height: 28px;
 		border: 0;
+		border-radius: 999px;
 		background: none;
 		color: var(--ink);
 		cursor: pointer;
+	}
+	.stats-action.is-selected {
+		color: var(--primary);
+	}
+	/* Touch screens: the app's touch floor (see app.css). */
+	@media (pointer: coarse) {
+		.stats-action {
+			width: var(--touch-target, 36px);
+			height: var(--touch-target, 36px);
+		}
+	}
+	/*
+	 * Pinned: part of the panel, under the list, which ends where it begins
+	 * (so nothing hides under it). Shown or hidden at once; it does not slide.
+	 */
+	.stats-sheet.pinned {
+		position: relative;
+		flex-shrink: 0;
+		border-radius: 0;
+		box-shadow:
+			0 -1px 0 rgb(255 255 255 / 0.5),
+			0 -6px 16px -6px rgb(0 0 0 / 0.14);
+		transform: none;
+		transition: none;
+	}
+	.stats-sheet.pinned:not(.open) {
+		display: none;
 	}
 	.stats-row {
 		display: flex;
@@ -1305,8 +1420,7 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.feedback-card,
-		.stats-sheet,
-		.feedback-list {
+		.stats-sheet {
 			transition-duration: 1ms;
 		}
 	}

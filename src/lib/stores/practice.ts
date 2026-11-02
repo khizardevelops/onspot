@@ -821,12 +821,21 @@ export function wordGlossesFor(
 }
 
 /**
+ * Meanings saved before word meanings were asked for by word number
+ * (2026-11-02) may be shifted by a word: the model's plain list was matched by
+ * position, and one skipped word moved every meaning after it (see
+ * `alignedGlosses`). They are left unread under their old keys, and fetched
+ * again on the next hover.
+ */
+const GLOSS_KEY_PREFIX = 'numbered';
+
+/**
  * Where a text's hover meanings are kept on its attempt: per language of
- * instruction, so a change of language fetches new ones. English keeps the
- * plain text hash, which is what meanings saved before this choice use.
+ * instruction, so a change of language fetches new ones.
  */
 function glossKey(text: string, instructionLanguage = get(appSettings).instructionLanguage): string {
-	return instructionLanguage === DEFAULT_INSTRUCTION_LANGUAGE_ID ? hashText(text) : `${instructionLanguage}:${hashText(text)}`;
+	const textKey = instructionLanguage === DEFAULT_INSTRUCTION_LANGUAGE_ID ? hashText(text) : `${instructionLanguage}:${hashText(text)}`;
+	return `${GLOSS_KEY_PREFIX}:${textKey}`;
 }
 
 /** Saves an attempt's hover translations in the view and the database. */

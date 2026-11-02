@@ -19,6 +19,8 @@
 		wordGlossesFor
 	} from '#lib/stores/practice.js';
 	import { appSettings } from '#lib/stores/settings.js';
+	import { currentTextDevice, textScaleFor, type TakeLength } from '#lib/stores/textSize.svelte.js';
+	import { practiceSession } from '#lib/stores/practiceSession.js';
 	import { getInstructionLanguage, getLanguage } from '#lib/languages/index.js';
 	import { listLocalVoices } from '#lib/speech/tts/service.js';
 	import { splitSentences } from '#lib/utils/segments.js';
@@ -61,6 +63,14 @@
 	}
 
 	let { attempt, index, active, activeCorrectionId = null, onSelectCorrection }: Props = $props();
+	/*
+	 * A take of a sample session (Settings → Text size's live preview) starts
+	 * with every text open (all three translations and each word) so each can
+	 * be sized, and does no real work: no audio, no provider, no saving; its
+	 * words are plain text, without meanings to look up.
+	 */
+	const live = practiceSession().live;
+	const showsEveryText = !live;
 	type TranslationView = 'off' | 'idiomatic' | 'literal' | 'wordForWord' | 'all';
 
 	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
@@ -98,6 +108,13 @@
 		// Japanese glyphs are about twice as wide as Latin ones.
 		fitFontSize(layoutLength(attempt.transcript), transcriptWidth, transcriptFit)
 	);
+	/**
+	 * A take whose text is at the floor of its fit is a long take; the learner
+	 * sets the sizes of long and short takes apart (Settings → Text size). The
+	 * card says which it is in `data-take-length`, which picks its sizes.
+	 */
+	const takeLength = $derived<TakeLength>(transcriptSize <= transcriptFit.min ? 'long' : 'short');
+	const textVariant = $derived({ device: currentTextDevice(), length: takeLength });
 
 	/*
 	 * A long section can be partly open: its first lines, enough to recognise
@@ -106,20 +123,35 @@
 	 */
 	const PEEK_TEXT_LINES = 6;
 	const PEEK_EXPLANATION_LINES = 5;
-	/** The explanation's type: 15px with relaxed leading (keep in step with its class below). */
+	/** The explanation's type: 15px with relaxed leading (keep in step with `.explanation-size` below). */
 	const EXPLANATION_FONT_PX = 15;
 	const EXPLANATION_LINE_HEIGHT = 1.625;
-	const textPeekHeight = $derived(Math.round(PEEK_TEXT_LINES * transcriptSize * transcriptFit.lineHeight));
-	const explanationPeekHeight = Math.round(PEEK_EXPLANATION_LINES * EXPLANATION_FONT_PX * EXPLANATION_LINE_HEIGHT);
+
+	/*
+	 * Each section reads at the learner's text size for it (Settings → Text
+	 * size); a partly open section still shows the same number of lines.
+	 */
+	function peekHeight(lines: number, fontPx: number, lineHeight: number): number {
+		return Math.round(lines * fontPx * lineHeight);
+	}
+	const saidPeekHeight = $derived(
+		peekHeight(PEEK_TEXT_LINES, transcriptSize * textScaleFor('said', textVariant), transcriptFit.lineHeight)
+	);
+	const correctedPeekHeight = $derived(
+		peekHeight(PEEK_TEXT_LINES, transcriptSize * textScaleFor('corrected', textVariant), transcriptFit.lineHeight)
+	);
+	const explanationPeekHeight = $derived(
+		peekHeight(PEEK_EXPLANATION_LINES, EXPLANATION_FONT_PX * textScaleFor('explanation', textVariant), EXPLANATION_LINE_HEIGHT)
+	);
 
 	let showSegments = $state(false);
 	let rerendering = $state(false);
 	let generatingTranslations = $state(false);
 	let translationError = $state<string | null>(null);
-	let showIdiomaticVariants = $state(false);
-	let showWordBreakdown = $state(false);
+	let showIdiomaticVariants = $state(showsEveryText);
+	let showWordBreakdown = $state(showsEveryText);
 	/** Off until the learner picks a translation: nothing is translated (or paid for) unasked. */
-	let translationView = $state<TranslationView>('off');
+	let translationView = $state<TranslationView>(showsEveryText ? 'all' : 'off');
 
 	const language = $derived(getLanguage($appSettings.targetLanguage));
 	const languageName = $derived(language?.name ?? 'target language');
@@ -167,6 +199,7 @@
 
 	/** Hover meanings, selection translations and read-aloud for one of this take's texts (all in the studied language). */
 	function meaningsOf(text: string) {
+		if (!live) return {};
 		return {
 			glosses: wordGlossesFor(attempt, text, $appSettings.instructionLanguage),
 			requestGlosses: (wordIndex: number) => ensureWordGlosses(attempt.id, text, wordIndex),
@@ -274,7 +307,9 @@
 	function onMenuSelect(item: NeoMenuItem): void {
 		const key = String(item.value);
 		if (key === 'regenerate') void regenerateTranslations();
-		else if (key === 'replay') void playRecording(attempt.id);
+		else if (key === 'replay') {
+			if (live) void playRecording(attempt.id);
+		}
 		else if (key === 'segments') showSegments = !showSegments;
 		else if (key.startsWith('view:')) void chooseTranslation(key.slice(5));
 		else if (key.startsWith('voice:')) void rerender(key.slice(6));
@@ -289,7 +324,7 @@
 
 	async function requestTranslations(force: boolean): Promise<boolean> {
 		translationError = null;
-		if (generatingTranslations) return false;
+		if (!live || generatingTranslations) return false;
 		generatingTranslations = true;
 		try {
 			await ensureAttemptTranslations(attempt.id, force);
@@ -339,7 +374,7 @@
 
 	/** Pauses or resumes the track already loaded; otherwise synthesizes and plays it. */
 	function toggleTrack(kind: AttemptTrackKind): void {
-		if (trackLoading(kind)) return;
+		if (!live || trackLoading(kind)) return;
 
 		if (isCurrentTrack(kind) && $audioActivity.track?.url) togglePlay();
 		else void playAttemptTrack(attempt.id, kind);
@@ -355,12 +390,13 @@
 	}
 
 	function toggleSegment(position: number, text: string): void {
+		if (!live) return;
 		if (segmentPlaying(position)) togglePlay();
 		else void playSegment(attempt.id, text, position);
 	}
 
 	async function rerender(voice: string): Promise<void> {
-		if (!voice || voice === selectedVoice || rerendering) return;
+		if (!live || !voice || voice === selectedVoice || rerendering) return;
 		rerendering = true;
 		try {
 			await setAttemptVoice(attempt.id, voice);
@@ -381,6 +417,7 @@
 <!-- An index card: its paper, rules and edges are styled below; the pile adds tape and shadow. -->
 <NeoCard
 	data-card-surface
+	data-take-length={takeLength}
 	class="attempt-card relative w-full min-w-0"
 	spacing="0"
 	width="100%"
@@ -429,7 +466,7 @@
 				playing={trackPlaying('said')}
 				loading={trackLoading('said')}
 				onToggle={() => toggleTrack('said')}
-				peekHeight={textPeekHeight}
+				peekHeight={saidPeekHeight}
 				defaultExtent="part"
 			>
 				{#snippet badge()}
@@ -437,7 +474,7 @@
 						<NeoPill size="small" rounded elevation={0} tinted color="success" class="correct-pill"><Check size={11} /> Correct</NeoPill>
 					{/if}
 				{/snippet}
-				<div style:font-size={`${transcriptSize}px`} style:line-height={transcriptFit.lineHeight}>
+				<div data-text-section="said" style:font-size={`calc(${transcriptSize}px * var(--text-scale-said, 1))`} style:line-height={transcriptFit.lineHeight}>
 					<Transcript
 						text={attempt.transcript}
 						corrections={attempt.corrections}
@@ -457,7 +494,7 @@
 					playing={trackPlaying('corrected')}
 					loading={trackLoading('corrected')}
 					onToggle={() => toggleTrack('corrected')}
-					peekHeight={textPeekHeight}
+					peekHeight={correctedPeekHeight}
 				>
 					{#snippet actions()}
 						<button
@@ -479,8 +516,13 @@
 							</button>
 						{/if}
 					{/snippet}
-					<!-- Same size as the transcript, so the two read as a pair. -->
-					<div class="font-serif" style:font-size={`${transcriptSize}px`} style:line-height={transcriptFit.lineHeight}>
+					<!-- The transcript's size, so the two read as a pair, times the learner's own size for this section. -->
+					<div
+						class="font-serif"
+						data-text-section="corrected"
+						style:font-size={`calc(${transcriptSize}px * var(--text-scale-corrected, 1))`}
+						style:line-height={transcriptFit.lineHeight}
+					>
 						{#if showsParts}
 							<CorrectedPassages
 								text={attempt.correctedText}
@@ -510,20 +552,23 @@
 					onToggle={() => toggleTrack('explanation')}
 					peekHeight={explanationPeekHeight}
 				>
-					<ExplanationText
-						markup={attempt.explanation}
-						{question}
-						translation={attempt.followUp?.translation ?? ''}
-						targetLocale={language?.locale ?? 'und'}
-						instructionLanguage={instructionName}
-						followUpAudio={{
-							playing: trackPlaying('followUp'),
-							loading: trackLoading('followUp'),
-							onToggle: () => toggleTrack('followUp')
-						}}
-						questionMeanings={meaningsOf(question)}
-						class="text-[0.9375rem] leading-relaxed [text-wrap:pretty]"
-					/>
+					<div class="explanation-size">
+						<ExplanationText
+							markup={attempt.explanation}
+							{question}
+							translation={attempt.followUp?.translation ?? ''}
+							targetLocale={language?.locale ?? 'und'}
+							instructionLanguage={instructionName}
+							followUpAudio={{
+								playing: trackPlaying('followUp'),
+								loading: trackLoading('followUp'),
+								onToggle: () => toggleTrack('followUp')
+							}}
+							questionMeanings={meaningsOf(question)}
+							translationShown={showsEveryText}
+							class="leading-relaxed [text-wrap:pretty]"
+						/>
+					</div>
 				</AttemptTrack>
 			{/if}
 		</div>
@@ -562,7 +607,7 @@
 					</p>
 				{:else}
 					<!-- One ruled row per translation: tag, text, and that row's own toggle on its first line. -->
-					<ul class="translation-rows">
+					<ul class="translation-rows" data-text-section="translation">
 						{#each visibleTranslations as translation (translation.kind)}
 							<li class="translation-row">
 								<span class="translation-label">{translation.label}</span>
@@ -593,7 +638,7 @@
 										<NeoCollapse transition={quickCollapse} open={showWordBreakdown}>
 											{#if vocabulary.length > 0}
 												<!-- A vocabulary list from a notebook: the word, a dotted leader, its meaning. -->
-												<ol class="vocab-list">
+												<ol class="vocab-list" data-text-section="words">
 													{#each vocabulary as item, position (`${item.source}-${position}`)}
 														<li class="vocab-entry">
 															<span class="vocab-source">{item.source}</span>
@@ -732,6 +777,11 @@
 	 * the ruled lines, a soft lift at the bottom, a folded corner. Each
 	 * variant's label sits in the note's margin (above the text on phones).
 	 */
+	/* The explanation and its follow-up question: 15px (EXPLANATION_FONT_PX); ExplanationText scales each by the learner's size for it. */
+	.explanation-size {
+		font-size: 0.9375rem;
+	}
+
 	.card-translation {
 		--note-paper: #fff6bf;
 		--note-paper-shade: #f8e9a0;
@@ -829,7 +879,7 @@
 		grid-column: 1 / -1;
 	}
 	.translation-text {
-		font-size: 0.9375rem;
+		font-size: calc(0.9375rem * var(--text-scale-translation, 1));
 		line-height: 1.6;
 		overflow-wrap: anywhere;
 	}
@@ -881,7 +931,7 @@
 		margin: 0.375rem 0 0;
 		padding: 0;
 		list-style: none;
-		font-size: 0.8125rem;
+		font-size: calc(0.8125rem * var(--text-scale-words, 1));
 	}
 	.vocab-entry {
 		display: flex;

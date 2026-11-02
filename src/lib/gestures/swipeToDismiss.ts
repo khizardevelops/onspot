@@ -11,8 +11,23 @@
  * is left to the browser for the whole touch. Touch events, not pointer
  * events, because only a cancelled `touchmove` can take a touch away from
  * the browser's scrolling after it began.
+ *
+ * A slow drag is claimed early: every move towards the way out is cancelled
+ * from the first one, before it has gone far enough to count as a swipe. The
+ * browser's own scroll threshold (about 8 px) is shorter than ours, so a
+ * slow drag otherwise became a scroll first (the list stretched at its top)
+ * and the sheet and the list both moved, flickering.
  */
 import { FlingVelocity, TOUCH_SCREEN_QUERY, TOUCH_SLOP_PX, keepsItsOwnDrag } from './touch';
+import {
+	ARRIVING,
+	FLING_PX_PER_MS,
+	LEAVING,
+	MIN_FLING_PX,
+	SETTLE_FRACTION,
+	SheetMover,
+	applyStylesNow
+} from './sheetMotion';
 
 /** Which way the surface leaves the screen. */
 export type DismissDirection = 'down' | 'right';
@@ -31,18 +46,6 @@ export interface SwipeToDismissOptions {
 	onProgress?: (progress: number) => void;
 }
 
-/** Dragged past this share of its way off the screen, the surface leaves when the finger lifts. */
-const DISMISS_FRACTION = 0.3;
-/** A flick this fast (px/ms) away from the screen dismisses it however short it was (vaul's drawers use 0.4 too). */
-const FLING_PX_PER_MS = 0.4;
-/** A flick also has to travel this far, so a twitch on lifting does not count. */
-const MIN_FLING_PX = 24;
-/** Leaving and springing back, in ms; reduced motion makes both immediate. */
-const LEAVE_MS = 180;
-const RETURN_MS = 220;
-const LEAVE_EASING = 'cubic-bezier(0.4, 0, 1, 1)';
-const RETURN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
-
 /**
  * Touches an inner gesture has taken (the stats sheet inside Feedback). The
  * inner listener runs first as the touch bubbles, so the outer one leaves them.
@@ -53,17 +56,20 @@ type Phase = 'idle' | 'deciding' | 'dragging';
 
 export class SwipeToDismiss {
 	#options: SwipeToDismissOptions;
+	#mover: SheetMover;
 	#phase: Phase = 'idle';
 	#startX = 0;
 	#startY = 0;
+	/** How far along the finger had gone when the drag began; the surface moves from there, so it does not jump. */
+	#dragStart = 0;
 	/** How far the surface can travel before it is off the screen, measured when the drag starts. */
 	#travel = 1;
 	#offset = 0;
 	#velocity = new FlingVelocity();
-	#settling: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(options: SwipeToDismissOptions) {
 		this.#options = options;
+		this.#mover = new SheetMover(options.surface, options.direction === 'down' ? 'y' : 'x');
 	}
 
 	/**
@@ -87,7 +93,7 @@ export class SwipeToDismiss {
 			root.removeEventListener('touchmove', this.#move);
 			root.removeEventListener('touchend', this.#release);
 			root.removeEventListener('touchcancel', this.#abandon);
-			this.#clearSettling();
+			this.#mover.stop();
 		};
 	}
 
@@ -109,16 +115,20 @@ export class SwipeToDismiss {
 
 		if (this.#phase === 'deciding') {
 			const across = this.#acrossDirection(touch);
+			// Towards the way out, and more along than across.
+			const headingOut = along > 0 && Math.abs(across) < along;
+			// Claimed before the browser can start a scroll of its own (see above).
+			if (headingOut && event.cancelable) event.preventDefault();
 			if (Math.hypot(along, across) < TOUCH_SLOP_PX) return;
-			// The first move decides: towards the way out, and more along than across.
-			if (along <= 0 || Math.abs(across) >= along || !this.#begin()) {
+			// The first move past the slop decides.
+			if (!headingOut || !this.#begin(along)) {
 				this.#phase = 'idle';
 				return;
 			}
 		}
 
 		event.preventDefault();
-		this.#follow(Math.max(0, along));
+		this.#follow(Math.max(0, along - this.#dragStart));
 	};
 
 	#release = (event: TouchEvent): void => {
@@ -131,7 +141,7 @@ export class SwipeToDismiss {
 		this.#phase = 'idle';
 
 		const velocity = this.#velocity.current();
-		const draggedFar = this.#offset >= this.#travel * DISMISS_FRACTION;
+		const draggedFar = this.#offset >= this.#travel * SETTLE_FRACTION;
 		const flicked = velocity >= FLING_PX_PER_MS && this.#offset >= MIN_FLING_PX;
 		if (draggedFar || flicked) this.#leave();
 		else this.#springBack();
@@ -158,32 +168,29 @@ export class SwipeToDismiss {
 		return this.#options.direction === 'down' ? touch.clientX - this.#startX : touch.clientY - this.#startY;
 	}
 
-	/** Starts following the finger; false when there is no surface to move. */
-	#begin(): boolean {
-		const surface = this.#options.surface();
+	/**
+	 * Starts following the finger; false when there is no surface to move.
+	 *
+	 * @param along How far the finger has already gone; the surface starts from there.
+	 */
+	#begin(along: number): boolean {
+		const surface = this.#mover.grab();
 		if (!surface) return false;
-		this.#clearSettling();
 		this.#phase = 'dragging';
+		this.#dragStart = along;
 		this.#velocity.reset();
 
 		// Measured from where the surface is now to the edge of the screen it leaves by.
 		const box = surface.getBoundingClientRect();
 		this.#travel = Math.max(1, this.#options.direction === 'down' ? innerHeight - box.top : innerWidth - box.left);
-		surface.style.transition = 'none';
 		return true;
 	}
 
 	#follow(offset: number): void {
 		this.#offset = offset;
 		this.#velocity.add(offset);
-		this.#place(offset);
+		this.#mover.follow(offset);
 		this.#options.onProgress?.(Math.min(1, offset / this.#travel));
-	}
-
-	#place(offset: number): void {
-		const surface = this.#options.surface();
-		if (!surface) return;
-		surface.style.translate = this.#options.direction === 'down' ? `0 ${offset}px` : `${offset}px 0`;
 	}
 
 	/**
@@ -193,62 +200,27 @@ export class SwipeToDismiss {
 	 * only then is the offset dropped, so it stays out of sight throughout.
 	 */
 	#leave(): void {
-		const duration = this.#settle(LEAVE_MS, LEAVE_EASING);
-		this.#place(this.#travel);
 		this.#options.onProgress?.(1);
-		this.#afterSettling(duration, () => {
+		this.#mover.settle(this.#travel, LEAVING, () => {
 			const surface = this.#options.surface();
 			if (surface) surface.style.transition = 'none';
 			this.#options.onDismiss();
 			// The next frame: the component has rendered the closed state by then.
 			requestAnimationFrame(() => {
 				if (surface) applyStylesNow(surface);
-				this.#restoreStyles();
+				this.#restore();
 			});
 		});
 	}
 
 	#springBack(): void {
-		const duration = this.#settle(RETURN_MS, RETURN_EASING);
-		this.#place(0);
 		this.#options.onProgress?.(0);
-		this.#afterSettling(duration, () => this.#restoreStyles());
+		this.#mover.settle(0, ARRIVING, () => this.#restore());
 	}
 
-	/** Animates the surface's next move; returns how long it takes. */
-	#settle(duration: number, easing: string): number {
-		const surface = this.#options.surface();
-		const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-		const ms = reducedMotion ? 0 : duration;
-		if (surface) surface.style.transition = ms ? `translate ${ms}ms ${easing}` : 'none';
-		return ms;
-	}
-
-	/** A timer rather than `transitionend`, which never comes when nothing moved. */
-	#afterSettling(duration: number, then: () => void): void {
-		this.#clearSettling();
-		this.#settling = setTimeout(() => {
-			this.#settling = null;
-			then();
-		}, duration);
-	}
-
-	#clearSettling(): void {
-		if (this.#settling) clearTimeout(this.#settling);
-		this.#settling = null;
-	}
-
-	#restoreStyles(): void {
-		const surface = this.#options.surface();
+	#restore(): void {
 		this.#offset = 0;
 		this.#options.onProgress?.(0);
-		if (!surface) return;
-		surface.style.removeProperty('translate');
-		surface.style.removeProperty('transition');
+		this.#mover.release();
 	}
-}
-
-/** Makes the browser compute an element's styles now, so later style changes do not transition from earlier ones. */
-function applyStylesNow(element: HTMLElement): void {
-	element.getBoundingClientRect();
 }

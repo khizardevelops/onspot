@@ -4,11 +4,11 @@
 	import {
 		audioPlayer,
 		seek,
-		setRate,
 		toggleLoop,
 		togglePlay
 	} from '#lib/stores/audio.js';
 	import { Pause, Play, Repeat } from '@lucide/svelte';
+	import PlaybackSpeed from './PlaybackSpeed.svelte';
 
 	interface Props {
 		attemptId: string;
@@ -17,7 +17,6 @@
 	let { attemptId }: Props = $props();
 
 	const active = $derived($audioPlayer.track?.attemptId === attemptId);
-	const rates = [0.75, 1, 1.25];
 
 	const KIND_LABEL: Record<string, string> = {
 		said: 'You said',
@@ -80,19 +79,7 @@
 		</span>
 
 		<div class="flex shrink-0 items-center gap-0.5">
-			{#each rates as rate (rate)}
-				<button
-					type="button"
-					aria-label="Playback speed {rate}x"
-					aria-pressed={$audioPlayer.rate === rate}
-					class="rounded border border-transparent px-1.5 py-0.5 text-[11px] font-medium {$audioPlayer.rate === rate
-						? 'bg-[var(--brand-soft)] text-[var(--brand)]'
-						: 'text-muted-foreground hover:bg-[var(--surface-2)]'}"
-					onclick={() => setRate(rate)}
-				>
-					{rate}×
-				</button>
-			{/each}
+			<PlaybackSpeed />
 			<button
 				type="button"
 				aria-label="Loop"

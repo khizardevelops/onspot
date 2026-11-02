@@ -23,6 +23,18 @@
 	}
 
 	let { id, label, options, value, onchange, class: className = '@md/field-group:w-72' }: Props = $props();
+
+	let open = $state(false);
+
+	/**
+	 * A pick closes the list, as a native picker does. neo keeps it open while
+	 * focus is inside it (on the option just picked), so focus goes back to
+	 * the field, where a keyboard user was.
+	 */
+	function closeAfterPick(): void {
+		open = false;
+		document.getElementById(id)?.focus({ preventScroll: true });
+	}
 </script>
 
 <div class="setting-select w-full {className}">
@@ -34,6 +46,8 @@
 		bind:value={() => value, (next) => {
 			if (typeof next === 'string' && next !== value) onchange(next);
 		}}
+		bind:open
+		onSelect={closeAfterPick}
 		rounded
 		width="100%"
 		aria-label={label}

@@ -31,6 +31,19 @@ const SELECTION_SETTLE_MS = 350;
 /** The transcript whose label is on screen: one at a time, across every card. */
 let activeOwner = $state<symbol | null>(null);
 
+/**
+ * A selected range of words as the label's anchor: its box to place the label
+ * by, its line boxes (the label checks that the first line is not covered),
+ * and the text it belongs to, whose scrolling moves it.
+ */
+function rangeAnchor(range: Range, root: HTMLElement): VirtualElement {
+	return {
+		getBoundingClientRect: () => range.getBoundingClientRect(),
+		getClientRects: () => range.getClientRects(),
+		contextElement: root
+	};
+}
+
 type Status = 'idle' | 'loading' | 'failed';
 
 /** What the learner is pointing at: one word, or a selected range of words. */
@@ -216,7 +229,9 @@ export class TranscriptMeanings {
 	 * The text scrolled. A word's meaning goes: the word moved away from the
 	 * pointer (or the finger that tapped it), and the word that comes to rest
 	 * under the pointer shows its own once scrolling stops. A selection's
-	 * meaning stays and follows its words.
+	 * meaning stays with its words until it is put away: it follows them, and
+	 * hides while they are out of sight or covered, such as by a newer take
+	 * dropped onto their card (see `WordGloss`).
 	 */
 	textScrolled(): void {
 		this.#stopHoverTimer();
@@ -270,7 +285,7 @@ export class TranscriptMeanings {
 		const words = rangeOfWords(root, start, end);
 		if (!words) return;
 
-		this.#selectWords(start, end, { getBoundingClientRect: () => words.getBoundingClientRect(), contextElement: root });
+		this.#selectWords(start, end, rangeAnchor(words, root));
 	}
 
 	/** The selection was put away (or a new one is being chosen): its meaning goes too. */
@@ -300,7 +315,7 @@ export class TranscriptMeanings {
 
 		// A copy, so the label stays put while the live selection keeps changing.
 		const selected = getSelection()!.getRangeAt(0).cloneRange();
-		this.#selectWords(range.start, range.end, { getBoundingClientRect: () => selected.getBoundingClientRect(), contextElement: root });
+		this.#selectWords(range.start, range.end, rangeAnchor(selected, root));
 	}
 
 	/** Shows the meaning of words `start`..`end`: one word's own, or the whole range translated. */

@@ -3,6 +3,7 @@
 <script lang="ts">
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { quickDialog } from '#lib/neo.js';
 	import {
 		OFFERED_LANGUAGES,
 		DEFAULT_LANGUAGE_ID,
@@ -49,6 +50,7 @@
 </script>
 
 <NeoDialog
+	{...quickDialog}
 	bind:open
 	modal
 	closedby="none"

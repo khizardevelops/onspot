@@ -52,6 +52,11 @@ export function trackPageHistory(): void {
 	closeOnBack(() => !onPractice() && pagesBehind === 0, goToPractice);
 }
 
+/** Whether an onspot page is behind this one in the history, so going back stays in the app. */
+export function hasPageBehind(): boolean {
+	return pagesBehind > 0;
+}
+
 /** What the header's Back button does: exactly what Android Back does. */
 export function goBack(): void {
 	if (closeTopmost()) return;

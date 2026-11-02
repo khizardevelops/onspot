@@ -16,6 +16,7 @@
 	} from '#lib/stores/ttsPreview.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { quickDialog } from '#lib/neo.js';
 	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
@@ -148,6 +149,7 @@
 <!-- neo-svelte 1.2.0 does not export NeoDialogConfirm, so the confirm is composed from NeoDialog. -->
 <!-- Portaled: the frosted settings card's backdrop-filter would otherwise contain the fixed dialog. -->
 <NeoDialog
+	{...quickDialog}
 	bind:open={regenerateOpen}
 	portal
 	rounded

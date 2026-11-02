@@ -23,8 +23,8 @@ import { tokenizeWords, type TextToken } from '#lib/utils/words.js';
 /** An expression longer than this is a clause, not something to read as one word. */
 const MAX_EXPRESSION_WORDS = 6;
 
-/** A meaning is one to four words: a few output tokens each, with room for punctuation. */
-const TOKENS_PER_GLOSS = 7;
+/** A meaning is one to four words: a few output tokens each, with room for punctuation and its word number key. */
+const TOKENS_PER_GLOSS = 10;
 /** GPT-OSS reasons before answering, even at low effort (130–440 tokens measured). */
 const REASONING_HEADROOM = 512;
 const MIN_GLOSS_TOKENS = 256;
@@ -159,7 +159,7 @@ For every numbered word, give its meaning in ${target} as it is used in that sen
 - A name stays as it is. A misspoken or non-existent word gets its most likely intended meaning in brackets with a question mark, e.g. "[late?]".
 Also list the expressions: runs of 2 to ${MAX_EXPRESSION_WORDS} consecutive words that must be read together because translating them word by word gives a wrong or misleading meaning, such as compound nouns ("pomme de terre" → "potato"), fixed expressions ("tout à fait" → "absolutely", "il y a" → "there is", "en retard" → "late", "tout à coup" → "suddenly") and verb phrases ("avoir besoin de" → "to need").
 If the word-by-word meanings already read correctly together, it is NOT an expression: ordinary phrases such as "avec ma sœur", "nous avons acheté", "dans un petit café", "c'était très bon" or "au marché" are not, and neither is any verb in a compound tense (an auxiliary plus a past participle, such as "j'ai préféré" or "nous sommes allés"). Most sentences have none or one. Give each expression as its first and last word number and its meaning in context, translating all of its words, subject included ("il y a" → "there is", never just "is").
-Return only JSON: { "glosses": [string, ...], "expressions": [ { "from": number, "to": number, "meaning": string } ] }, with exactly one gloss per numbered word, in the same order.`;
+Return only JSON: { "glosses": { "1": string, "2": string, ... }, "expressions": [ { "from": number, "to": number, "meaning": string } ] }, with a gloss for every word number, keyed by that number.`;
 
 	const numberedWords = words.map((word, wordIndex) => `${wordIndex + 1}. ${word}`);
 	const user = [`Text: """${sectionText.trim()}"""`, 'Words:', ...numberedWords].join('\n');
@@ -170,10 +170,34 @@ Return only JSON: { "glosses": [string, ...], "expressions": [ { "from": number,
 	];
 }
 
-/** One gloss per word: a short list is padded with blanks, a long one cut, so indexes always line up. */
+/**
+ * One gloss per word, found by its word number. Glosses used to come back as
+ * a plain list matched by position, so a model that skipped one word (a short
+ * "à") gave every later word the next word's meaning ("à" → "university",
+ * "suis" → "in"). Keyed by number, a skipped word is only blank.
+ *
+ * A plain list is still accepted when it has exactly one gloss per word;
+ * any other length cannot be lined up, so none of it is used.
+ *
+ * @param raw The model's `glosses`: an object keyed by 1-based word number, or a list.
+ * @param wordCount How many words were numbered.
+ * @returns A gloss for each word, blank where there is none.
+ */
 function alignedGlosses(raw: unknown, wordCount: number): string[] {
-	const glosses = Array.isArray(raw) ? raw.map((gloss) => (typeof gloss === 'string' ? gloss.trim() : '')) : [];
-	return Array.from({ length: wordCount }, (_, index) => glosses[index] ?? '');
+	const glosses: string[] = Array.from({ length: wordCount }, () => '');
+	const asText = (gloss: unknown): string => (typeof gloss === 'string' ? gloss.trim() : '');
+
+	if (Array.isArray(raw)) {
+		if (raw.length === wordCount) raw.forEach((gloss, index) => (glosses[index] = asText(gloss)));
+		return glosses;
+	}
+	if (raw && typeof raw === 'object') {
+		for (const [number, gloss] of Object.entries(raw)) {
+			const index = Number(number) - 1;
+			if (Number.isInteger(index) && index >= 0 && index < wordCount) glosses[index] = asText(gloss);
+		}
+	}
+	return glosses;
 }
 
 /**

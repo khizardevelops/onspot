@@ -4,7 +4,7 @@
 	import { onMount, tick } from 'svelte';
 	import { get } from 'svelte/store';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { practice, setActiveAttempt } from '#lib/stores/practice.js';
+	import { practiceSession } from '#lib/stores/practiceSession.js';
 	import AttemptCard from './AttemptCard.svelte';
 	import PaperTimeline, { type TimelineEntry } from './PaperTimeline.svelte';
 	import {
@@ -48,11 +48,22 @@
 
 	let { activeCorrectionId = null, onSelectCorrection, timelineOpen = $bindable(false) }: Props = $props();
 
+	/** The session the screen shows: the learner's own, or the text-size preview's sample. */
+	const session = practiceSession();
+	const practice = session.state;
+
 	const attempts = $derived($practice.attempts);
 
 	/** A new take drops onto the pile at a known pace (native smooth scrolling has none). */
 	const ARRIVAL_DURATION_MS = 1050;
-	/** Scrolling has stopped when no scroll event came for this long; the stack then locks onto a card. */
+	/**
+	 * Where the browser reports the end of a scroll, momentum included
+	 * (`scrollend`), the stack locks onto a card right then. Elsewhere scrolling
+	 * has stopped when no scroll event came for `SETTLE_DELAY_MS`; that wait
+	 * showed as a pause before the glide to the card (a 75 ms gap after every
+	 * fling on a phone).
+	 */
+	const REPORTS_SCROLL_END = typeof window !== 'undefined' && 'onscrollend' in window;
 	const SETTLE_DELAY_MS = 120;
 	/*
 	 * Jumping to a card (timeline, a click on the pile) and locking onto one
@@ -167,7 +178,15 @@
 			frameRequested = true;
 			requestAnimationFrame(updateStack);
 		}
-		scheduleSettle();
+		if (!REPORTS_SCROLL_END) scheduleSettle();
+	}
+
+	/** The scroll is over, momentum included: lock onto a card now (see `REPORTS_SCROLL_END`). */
+	function onStageScrollEnd() {
+		if (settleTimer) clearTimeout(settleTimer);
+		// The last scroll event's frame may not have posed the cards yet.
+		updateStack();
+		settleStack();
 	}
 
 	function scheduleSettle() {
@@ -195,7 +214,7 @@
 
 		restedOn = card;
 		const attempt = attempts[card];
-		if (attempt && attempt.id !== $practice.activeAttemptId) setActiveAttempt(attempt.id);
+		if (attempt && attempt.id !== $practice.activeAttemptId) session.setActiveAttempt(attempt.id);
 	}
 
 	/** A finger or the mouse came off the stage: the stack can settle now. */
@@ -248,7 +267,7 @@
 		const offsetFor = (position: number) => scrollTopForCard(position, attempts.length, scrollRange());
 		const land = () => {
 			restedOn = index;
-			setActiveAttempt(attempt.id);
+			session.setActiveAttempt(attempt.id);
 		};
 		if (Math.abs(distance) < 0.001 || reducedMotion) {
 			stage.scrollTop = offsetFor(index);
@@ -305,7 +324,7 @@
 			// reading the stage's size now would force a layout of every card while the page is still being built.
 			stack = restingOn(newestIndex);
 			restedOn = newestIndex;
-			setActiveAttempt(attempts[newestIndex].id);
+			session.setActiveAttempt(attempts[newestIndex].id);
 			requestAnimationFrame(scrollToNewest);
 			return;
 		}
@@ -399,6 +418,7 @@
 		aria-label="Attempts"
 		bind:this={stage}
 		onscroll={onStageScroll}
+		onscrollend={onStageScrollEnd}
 		onwheel={() => takeOver(false)}
 		onpointerdown={() => takeOver(true)}
 		ontouchstart={() => takeOver(true)}

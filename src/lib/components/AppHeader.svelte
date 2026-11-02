@@ -19,6 +19,10 @@
 	 * Every page but Practice starts its heading with a Back button: the
 	 * previous onspot page, or Practice when there is none (see
 	 * `navigation/back.svelte.ts`; Android's Back does the same).
+	 *
+	 * A page can give the bar a second row (`below`; Practice on phones: the
+	 * prompt above, every button below). The navigation menu then starts that
+	 * row, so the first row is the heading alone.
 	 */
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -31,7 +35,7 @@
 	import { theme, toggleTheme } from '#lib/stores/theme.svelte.js';
 	import PopMenu from '#lib/components/PopMenu.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
-	import type { NeoMenuItem } from '@dvcol/neo-svelte/floating/menu';
+	import type { NeoMenuItem, NeoMenuProps } from '@dvcol/neo-svelte/floating/menu';
 	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
 	import { ArrowLeft, BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
 
@@ -42,11 +46,19 @@
 		heading?: Snippet;
 		/** The page's own controls, at the end of the bar. */
 		actions?: Snippet;
-		/** A second row inside the same bar, full width (Practice on phones: the session line and its small controls). */
+		/** A second row inside the same bar, full width, after the navigation menu (Practice on phones: its buttons). */
 		below?: Snippet;
+		/** The bar's element (Practice on phones pulls Feedback up from it). */
+		element?: HTMLElement;
+		/**
+		 * The bar of Settings → Text size's live preview, a copy of Practice's:
+		 * no Back key (Practice has none), and its navigation looks the same but
+		 * is inert, so it cannot leave the preview (its own Done does).
+		 */
+		preview?: boolean;
 	}
 
-	let { title = '', heading, actions, below }: Props = $props();
+	let { title = '', heading, actions, below, element = $bindable(), preview = false }: Props = $props();
 
 	const SECTIONS = [
 		{ href: pageHref('/'), label: 'Practice', icon: Mic },
@@ -93,9 +105,20 @@
 	<Icon size={17} strokeWidth={1.8} />
 {/snippet}
 
-<header class="app-header paper-surface relative z-20 border-b">
+<!-- A narrow bar: the navigation is one menu, so the bar keeps its room for the page. -->
+{#snippet navigationMenu(placement: NeoMenuProps['placement'])}
+	<div class="app-menu shrink-0" inert={preview}>
+		<PopMenu items={menuItems} bind:open={menuOpen} {placement} onSelect={onMenuSelect} rounded>
+			<NeoButton class="menu-trigger" aria-label="Open navigation menu" aria-expanded={menuOpen} rounded elevation={2}>
+				{#snippet icon()}<Menu size={18} strokeWidth={1.8} />{/snippet}
+			</NeoButton>
+		</PopMenu>
+	</div>
+{/snippet}
+
+<header class="app-header paper-surface relative z-20 border-b" bind:this={element}>
 	<div class="app-header-row">
-		<nav class="app-nav flex shrink-0 items-center gap-1.5" aria-label="Primary navigation">
+		<nav class="app-nav flex shrink-0 items-center gap-1.5" aria-label="Primary navigation" inert={preview}>
 			<!-- The app icon cropped to its tile (brand-assets/app-icon-tile.svg), as the favicon. -->
 			<img class="mr-1 size-9 shrink-0" src={asset('app-icon.svg')} alt="onspot" width="36" height="36" />
 
@@ -139,7 +162,7 @@
 
 		<span class="nav-divider shrink-0" aria-hidden="true"></span>
 
-		{#if !onPractice()}
+		{#if !onPractice() && !preview}
 			<NeoTooltip tooltip="Back" placement="bottom" {...quickTooltip}>
 				<NeoButton aria-label="Back" class="back-key" rounded elevation={2} onclick={goBack}>
 					{#snippet icon()}<ArrowLeft size={16} strokeWidth={1.8} />{/snippet}
@@ -159,18 +182,14 @@
 		<div class="flex shrink-0 items-center gap-1.5">{@render actions()}</div>
 	{/if}
 
-	<!-- A narrow bar: the navigation is one menu, so the bar keeps its room for the page. -->
-	<div class="app-menu shrink-0">
-		<PopMenu items={menuItems} bind:open={menuOpen} placement="bottom-end" onSelect={onMenuSelect} rounded>
-			<NeoButton class="menu-trigger" aria-label="Open navigation menu" aria-expanded={menuOpen} rounded elevation={2}>
-				{#snippet icon()}<Menu size={18} strokeWidth={1.8} />{/snippet}
-			</NeoButton>
-		</PopMenu>
-	</div>
+	{#if !below}{@render navigationMenu('bottom-end')}{/if}
 	</div>
 
 	{#if below}
-		<div class="app-header-below">{@render below()}</div>
+		<div class="app-header-below">
+			{@render navigationMenu('top-start')}
+			{@render below()}
+		</div>
 	{/if}
 </header>
 
@@ -219,8 +238,11 @@
 		/* Neutral ink, so the accent marks only the current section. */
 		color: var(--muted-foreground);
 	}
-	.app-nav :global(.neo-button.nav-key:hover) {
-		color: var(--foreground);
+	/* Pointers that hover only: a tapped key would keep the look until the next tap. */
+	@media (hover: hover) {
+		.app-nav :global(.neo-button.nav-key:hover) {
+			color: var(--foreground);
+		}
 	}
 	/* neo recolours a key's content on hover/press; the current section stays accent throughout. */
 	.app-nav :global(.neo-button.nav-key.current),
@@ -244,8 +266,10 @@
 		justify-content: center;
 		color: var(--muted-foreground);
 	}
-	.app-header-row :global(.neo-button.back-key:hover) {
-		color: var(--foreground);
+	@media (hover: hover) {
+		.app-header-row :global(.neo-button.back-key:hover) {
+			color: var(--foreground);
+		}
 	}
 
 	.app-menu {

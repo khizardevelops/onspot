@@ -4,6 +4,7 @@
 	import { AlertTriangle, CloudDownload, CloudUpload } from '@lucide/svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { quickDialog } from '#lib/neo.js';
 	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
 	import type { SyncChoice, SyncComparison } from '#lib/adapters/sync/index.js';
 
@@ -63,6 +64,7 @@
 
 <!-- Portalled: a frosted ancestor would otherwise trap the fixed dialog. -->
 <NeoDialog
+	{...quickDialog}
 	bind:open
 	portal
 	filled

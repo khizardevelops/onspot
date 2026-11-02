@@ -10,7 +10,7 @@
 	 * the serif face the app uses for target-language text. The question's words
 	 * show their meanings and can be selected like a transcript's.
 	 */
-	import type { ComponentProps } from 'svelte';
+	import { untrack, type ComponentProps } from 'svelte';
 	import { quickCollapse } from '#lib/neo.js';
 	import { separateFollowUp } from '#lib/adapters/llm/index.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
@@ -42,6 +42,8 @@
 		followUpAudio?: FollowUpAudio;
 		/** Hover meanings and selection translations for the question; without them it is plain text. */
 		questionMeanings?: QuestionMeanings;
+		/** Starts with the question's translation shown (Settings → Text size's sample card). */
+		translationShown?: boolean;
 		class?: string;
 	}
 
@@ -53,6 +55,7 @@
 		instructionLanguage,
 		followUpAudio,
 		questionMeanings,
+		translationShown = false,
 		class: className = ''
 	}: Props = $props();
 
@@ -63,12 +66,12 @@
 
 	const explanation = $derived(separateFollowUp(markup));
 
-	let showTranslation = $state(false);
+	let showTranslation = $state(untrack(() => translationShown));
 </script>
 
 <div class="min-w-0">
 	{#if explanation.parts.length > 0}
-		<p class="explanation-text {className}" dir="auto">
+		<p class="explanation-text {className}" data-text-section="explanation" dir="auto">
 			{#each explanation.parts as part, position (position)}
 				{#if part.highlight}<mark class="learner-highlight" data-highlight={part.highlight} lang={targetLocale}>{part.text}</mark>{:else}{part.text}{/if}
 			{/each}
@@ -77,7 +80,7 @@
 
 	{#if question}
 		<!-- Corner marks (⛶) frame the follow-up, setting it apart from the explanation above it. -->
-		<div class="follow-up" class:after-explanation={explanation.parts.length > 0}>
+		<div class="follow-up" class:after-explanation={explanation.parts.length > 0} data-text-section="followUp">
 			<div class="flex min-h-6 flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
 				<div class="flex items-center gap-1">
 					{#if followUpAudio}
@@ -118,6 +121,15 @@
 </div>
 
 <style>
+	/* Each at the card's explanation size times the learner's own size for it (Settings → Text size). */
+	.explanation-text {
+		font-size: calc(1em * var(--text-scale-explanation, 1));
+	}
+	.follow-up-question,
+	.follow-up-translation {
+		font-size: calc(1em * var(--text-scale-follow-up, 1));
+	}
+
 	/* Ink stays the foreground colour on every tint, so contrast never depends on the highlight. */
 	.learner-highlight {
 		padding: 0 0.2em;

@@ -5,6 +5,7 @@
 	import { Check, HardDrive, Mic, X } from '@lucide/svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { quickDialog } from '#lib/neo.js';
 	import { isTauri } from '#lib/platform/runtime.js';
 	import { toast } from '#lib/stores/toast.js';
 
@@ -173,6 +174,7 @@
 {/snippet}
 
 <NeoDialog
+	{...quickDialog}
 	bind:open
 	portal
 	filled

@@ -245,7 +245,8 @@
 						</p>
 					</div>
 				{:else}
-					<div class="grid gap-8 sm:grid-cols-2">
+					<!-- One shrinkable column on phones (`grid-cols-1`): an implicit column grew to the longest one-line title and pushed every row off the screen. -->
+					<div class="grid grid-cols-1 gap-8 sm:grid-cols-2">
 						<div>
 							<h2 class="mb-3 flex items-center gap-3 px-1">
 								<span class="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Exam patterns</span>

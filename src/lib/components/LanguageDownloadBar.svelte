@@ -113,7 +113,9 @@
 		justify-content: center;
 		color: var(--muted-foreground);
 	}
-	.download-card :global(.neo-button.download-cancel:hover) { color: var(--foreground); }
+	@media (hover: hover) {
+		.download-card :global(.neo-button.download-cancel:hover) { color: var(--foreground); }
+	}
 	@media (min-width: 640px) {
 		.download-card { padding: 16px 14px 16px 16px; column-gap: 16px; }
 	}

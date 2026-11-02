@@ -25,10 +25,10 @@
 		changedWords?: ReadonlySet<number>;
 		removedBefore?: ReadonlyMap<number, string>;
 		replacedBefore?: ReadonlyMap<number, string>;
-		/** Word meanings of the whole correct version, as `Transcript` takes them. */
-		glosses: TextGlosses | null;
-		requestGlosses: (wordIndex: number) => Promise<void>;
-		requestPhrase: (start: number, end: number, phrase: string) => Promise<string>;
+		/** Word meanings of the whole correct version, as `Transcript` takes them (without them, plain text). */
+		glosses?: TextGlosses | null;
+		requestGlosses?: (wordIndex: number) => Promise<void>;
+		requestPhrase?: (start: number, end: number, phrase: string) => Promise<string>;
 		/** Reads selected words aloud, as `Transcript` takes it. */
 		speak?: (words: string) => void;
 		class?: string;

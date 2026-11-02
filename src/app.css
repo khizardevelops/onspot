@@ -137,6 +137,20 @@
 	--page-gutter: 28px;
 	/* The desktop app's own title bar (WindowBar): macOS's standard title bar height, where its traffic lights sit. */
 	--window-bar-height: 28px;
+
+	/*
+	 * Motion, as native controls move: state changes show at once, and what
+	 * moves comes in decelerating and leaves accelerating. JS transitions use
+	 * the same timings (src/lib/neo.ts).
+	 */
+	/* A control answering a press (a key's slight shrink). */
+	--motion-press: 70ms;
+	/* A small piece sliding into place (a tab's key, a chevron turning). */
+	--motion-slide: 120ms;
+	/* A sheet or panel sliding in or out of view. */
+	--motion-sheet: 200ms;
+	--motion-ease-out: cubic-bezier(0.2, 0, 0, 1);
+	--motion-ease-in: cubic-bezier(0.3, 0, 1, 1);
 }
 
 [data-theme='dark'] {
@@ -317,12 +331,21 @@ html[neo-theme-root] :is(h1, h2, h3, h4, h5, h6) {
  *   well  recessed controls (inputs, selects, sliders, pressed buttons, tab tracks)
  * Flat/text, tinted and glass variants keep the library's own backgrounds.
  */
+/*
+ * The card stock's grain is drawn at the size it was rendered for, the
+ * viewport (`--paper-key-size`), but moves with its control. Attached to the
+ * viewport instead (`background-attachment: fixed`), every control inside a
+ * scrolling list was repainted on each frame of a scroll: Settings scrolled at
+ * 110 fps with 500+ tiles redrawn per fling on a phone, 120 fps with none.
+ */
+html[neo-theme-root] {
+	--paper-key-size: 100vw 100vh;
+}
 html[neo-theme-root] .neo-button.neo-button:not(.neo-flat, .neo-tinted, .neo-glass, .neo-filled, .neo-inset, .neo-tab-button, .neo-list-item-content, .solid-action),
 html[neo-theme-root] .neo-input-group.neo-input-group:not(.neo-flat, .neo-inset, .neo-tinted, .neo-glass) {
 	background-color: var(--key);
 	background-image: var(--paper-key, none);
-	background-size: cover;
-	background-attachment: fixed;
+	background-size: var(--paper-key-size);
 	background-blend-mode: var(--key-blend);
 	border-color: var(--key-line);
 }
@@ -336,8 +359,7 @@ html[neo-theme-root] .neo-tabs .neo-tabs-group.neo-button-group,
 html[neo-theme-root] .neo-button-group.neo-button-group:not(.neo-tinted, .neo-glass, .neo-flat) {
 	background-color: var(--well);
 	background-image: var(--paper-key, none);
-	background-size: cover;
-	background-attachment: fixed;
+	background-size: var(--paper-key-size);
 	background-blend-mode: var(--key-blend);
 }
 /* The selected tab is the one raised key on its recessed track. */
@@ -407,16 +429,60 @@ html[neo-theme-root] .neo-card.neo-card.neo-inset:not(.neo-tinted) {
 }
 
 /*
- * neo transitions run 0.15–1s, some with delays, so pressing one control and
- * then another, or sweeping across menu items, visibly lags. Every neo element
- * (and its pseudo-elements) answers in ≤ 70ms with no delay. Looping loaders
- * are animations, not transitions, so they are unaffected.
+ * neo transitions run 0.15–1s, some with delays, and most of them on colours,
+ * borders and shadows, which the browser must repaint on every frame of the
+ * transition. Native controls change state at once. So every neo element (and
+ * its pseudo-elements) changes those at once, and animates only what the
+ * compositor runs off the main thread (opacity and transforms: a pressed key's
+ * slight shrink, a fade), briefly and without delay. Looping loaders are
+ * animations, not transitions, so they are unaffected.
  */
 html[neo-theme-root] [class*='neo-'],
 html[neo-theme-root] [class*='neo-']::before,
 html[neo-theme-root] [class*='neo-']::after {
-	transition-duration: 70ms !important;
+	transition-property: opacity, transform, translate, scale, rotate !important;
+	transition-duration: var(--motion-press) !important;
+	transition-timing-function: var(--motion-ease-out) !important;
 	transition-delay: 0s !important;
+}
+/*
+ * neo gives every button's label its own compositor layer (`will-change:
+ * scale`) for the press shrink; dozens of always-on layers cost the GPU on
+ * every frame of every scroll. The shrink is a transition, which gets a layer
+ * of its own while it runs.
+ */
+html[neo-theme-root] .neo-button .neo-content {
+	will-change: auto;
+}
+/*
+ * Touch screens cannot hover: the browser leaves a tapped control in `:hover`
+ * until the next tap, so neo's hover look (raised, or inset like a press)
+ * stayed on a key after it had done its job, e.g. the bar's Feedback key after
+ * its sheet was swiped away. There, a key's hover look is its resting look.
+ * Keyboard focus keeps its ring (`:focus-visible` is not hover), and a press
+ * still shows (see gestures/pressFeedback.ts).
+ */
+@media (hover: none) {
+	html[neo-theme-root] .neo-button {
+		--neo-btn-box-shadow-hover: var(--neo-btn-box-shadow, var(--neo-box-shadow-raised-3)) !important;
+		--neo-btn-text-color-hover: var(--neo-btn-text-color, currentColor) !important;
+		--neo-btn-bg-color-hover: var(--neo-btn-bg-color, transparent) !important;
+	}
+	/* A flat key outlines itself on hover. */
+	html[neo-theme-root] .neo-button.neo-button.neo-flat-hover:hover:not(.neo-pressed, :active) {
+		border-color: transparent;
+	}
+	/* The raised keys' own hover shade (above). */
+	html[neo-theme-root] .neo-button.neo-button:not(.neo-flat, .neo-tinted, .neo-glass, .neo-filled, .neo-inset, .neo-tab-button, .neo-list-item-content, .solid-action):hover {
+		background-color: var(--key);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	html[neo-theme-root] [class*='neo-'],
+	html[neo-theme-root] [class*='neo-']::before,
+	html[neo-theme-root] [class*='neo-']::after {
+		transition-duration: 0s !important;
+	}
 }
 /*
  * Keyboard focus. neo's own focus state is a 1px accent outline that reads
@@ -429,9 +495,19 @@ html[neo-theme-root] :is(a, button, [role='button'], [role='radio'], [role='tab'
 	outline-offset: 3px !important;
 }
 
-/* The tabs' sliding key is a keyframe animation. */
+/*
+ * The tabs' sliding key is a keyframe animation (neo's own, which also sizes
+ * the key as it slides; it is one pseudo-element, so it stays): quick, and
+ * decelerating into place.
+ */
 html[neo-theme-root] .neo-tabs .neo-tab::before {
-	animation-duration: 120ms !important;
+	animation-duration: var(--motion-slide) !important;
+	animation-timing-function: var(--motion-ease-out) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+	html[neo-theme-root] .neo-tabs .neo-tab::before {
+		animation-duration: 1ms !important;
+	}
 }
 
 @media (max-width: 640px) {
@@ -569,16 +645,14 @@ html[neo-theme-root] .neo-tabs .neo-tab::before {
 
 @layer components {
 	/*
-	 * A surface cut from the app's paper: the page texture (published by the
-	 * layout as --paper-page) attached to the viewport, so it lines up exactly
-	 * with the paper behind the app. Plain page colour until the texture is ready.
+	 * A surface cut from the app's paper (the page, its bar, the window bar):
+	 * transparent, so the paper behind the app (the layout's fixed
+	 * `.paper-page`, already on its own layer) shows through and lines up
+	 * exactly. It used to paint the same texture again, attached to the
+	 * viewport, which repainted the page on every frame of any scroll inside it.
 	 */
 	.paper-surface {
-		background-color: var(--background);
-		background-image: var(--paper-page, none);
-		background-size: cover;
-		background-position: center;
-		background-attachment: fixed;
+		background: transparent;
 	}
 
 	/*
@@ -601,9 +675,7 @@ html[neo-theme-root] .neo-tabs .neo-tab::before {
 	 */
 	.paper-grain {
 		background-image: var(--paper-page, none);
-		background-size: cover;
-		background-position: center;
-		background-attachment: fixed;
+		background-size: 100vw 100vh;
 		background-blend-mode: var(--paper-blend);
 	}
 

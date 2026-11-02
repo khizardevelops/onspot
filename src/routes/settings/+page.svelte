@@ -9,6 +9,7 @@
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import SettingSelect from '#lib/components/settings/SettingSelect.svelte';
 	import ProcessingSection from '#lib/components/settings/ProcessingSection.svelte';
+	import TextSizeSettings from '#lib/components/settings/TextSizeSettings.svelte';
 	import DataSettings from '#lib/components/settings/DataSettings.svelte';
 	import UsageMonitor from '#lib/components/settings/UsageMonitor.svelte';
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
@@ -29,6 +30,7 @@
 		'#ai-provider': 'learning',
 		'#transcription': 'learning',
 		'#voice': 'learning',
+		'#text-size': 'learning',
 		'#usage': 'usage',
 		'#storage': 'data',
 		'#cloud-sync': 'data'
@@ -181,6 +183,8 @@
 				</SettingsSection>
 
 				<ProcessingSection focus={focusTarget} {focusNonce} />
+
+				<TextSizeSettings />
 			</div>
 
 			<div class:hidden={tab !== 'usage'}>
