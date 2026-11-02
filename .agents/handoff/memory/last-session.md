@@ -1,5 +1,31 @@
 # Last Session
 
+## 2026-11-02: v0.2.2 released, then the user's phone list
+- **Asked:** "go ahead with the procedure" (test build, bump, tag 0.2.2): done, see state.md
+  "Release v0.2.2". "why do i have a seperate branch?": explained (it equals main; offered to
+  delete it and four old local branches, all contained in main; no answer yet).
+- **Then a list:** APK "still doesn't have the app icon" (the APK is right, device not reachable;
+  asked for a screenshot / Android version / launcher, see state.md); swipe up on the bar to pull
+  Feedback up; stats put away by a tap elsewhere, plus a pin to keep them; slow-drag flicker;
+  per-section font size; one control for 0.75/1/1.25×; phone bar in two rows (prompt above,
+  buttons below); word pop-up persisting over a buried card.
+- **How:** three forks in worktrees (speed button :4181, text size :4182, pop-up :4183), each
+  verified with Playwright on its own port, patches applied to the main tree and the worktrees
+  removed; the bar, pull-up, stats and drag done here on :5173. Gotchas: `git apply --3way`
+  refuses files whose working copy differs from the index (plain `git apply` applied by context);
+  /tmp (5.8 GB tmpfs) filled up, so finished downloads were cleared from the scratchpad.
+- **State:** all uncommitted (state.md first entry). Not committed or pushed: the user has not
+  asked yet.
+- **Then, with the phone connected over USB** (it disconnects now and then): the APK icon (Theme
+  Park), tried every change on the device, profiled with a debuggable build over CDP (state.md
+  "120 fps pass"), and the user's follow-ups: snappy neo animations and the stuck-pressed Feedback
+  key (helper, merged), text size v2 (helper, merged), the select dropdown, shifted word meanings, at
+  least 120 fps everywhere, and a full-screen live text-size canvas (helper running). Device tooling:
+  `adb` + `scripts/android.sh build --apk --debug --target aarch64`, `adb forward tcp:9333
+  localabstract:webview_devtools_remote_<pid>`, Playwright `connectOverCDP`; screenshots over CDP
+  hang in the WebView, use `adb exec-out screencap -p`. The WebView starts 90 px below the top of
+  the screen (status bar) at DPR 2.8125.
+
 ## 2026-11-01 (later): logo and app icon in VectorCraft
 - **Asked:** turn the AI-generated draft logo into a mathematically exact logo and app icon, built in
   VectorCraft (headful, so the user could watch), using its MCP.

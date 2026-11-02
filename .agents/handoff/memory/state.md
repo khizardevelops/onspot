@@ -2,8 +2,157 @@
 
 ## Current State
 
-**Installers branded (2026-11-02, uncommitted; user: "make sure all of these installers use the
-app icon and brand assets"):** v0.2.1's setup .exe still had NSIS's own icon and blue sidebar, the
+**120 fps pass on the phone (2026-11-02, committed 37d2c0d; user: "no less than 120 fps … the whole app,
+on all platforms"):** measured on the user's Galaxy S24 FE (Android 17, 120 Hz) with a debuggable
+build (`scripts/android.sh build --apk --debug --target aarch64`, installs as
+`app.onspot.desktop.debug`), Playwright `connectOverCDP` through `adb forward tcp:9333
+localabstract:webview_devtools_remote_<pid>`, real touch via `adb shell input swipe`, and traces
+counting `Display::DrawAndSwap` (frames shown), `RasterTask` and `Paint`. Takes for it: a backup
+exported from the :5173 test profile (`long-takes.sqlite`) restored through Settings → Data
+(DataTransfer into the hidden file input). Scripts: session scratchpad `device/` (audit.mjs,
+experiment.mjs, inject.mjs, restore.mjs, cdp.mjs). Causes found and fixed:
+- Inline SVG `feTurbulence` backgrounds re-rendered on every frame their surface moved (sheet drag
+  33–37 fps, 1,400 raster tasks per drag). The two all-over grains (Feedback panel `--grain`,
+  timeline paper) measured under 1 grey level on their papers and were dropped; the tape and
+  bookmark textures are WebP tiles now (`src/lib/textures/`, rendered by `scripts/textures.sh` from
+  their SVG sources with resvg, 2x). No `data:image/svg+xml` noise is left in `src/`.
+- `background-attachment: fixed` (`.paper-surface` on main/AppHeader/WindowBar, neo keys and wells,
+  `.paper-grain`) repainted the page on every scroll frame (Settings 500+ raster tasks per fling).
+  Paper surfaces are transparent now (the layout's fixed `.paper-page` shows through); keys and
+  wells draw `--paper-key` at `--paper-key-size: 100vw 100vh`, attached normally.
+- The phone shade fades with swipes: `will-change: opacity`. The phone Feedback sheet stays laid out
+  below the screen when closed (`translate: 0 calc(100% + 24px)`, `will-change: translate`), slid
+  by a transition; from `display: none` its first frame stalled 70–110 ms.
+- `will-change: translate` (what SheetMover sets) measured best: 120 fps, 24 ms GPU per drag.
+Results (before → after the textures; sheet/bg-fixed changes measured by injection): sheet slow drag
+37 → 119 fps, swipe dismiss 69 → 120, pull-up 62 → 116–119, Settings fling 111 (6 missed) → 120
+(0 missed, 0 repaints), takes and Feedback list ~120 before and after. Menu opening was 83–93 fps
+(neo keys and the bar repainting under it); the neo-snappy merge below and the bar's transparency
+address it; not re-measured on the phone yet (phone disconnected; final debug build pending).
+Desktop engines (WebView2, WebKitGTK, WKWebView) not measured; the causes are engine-independent.
+Merged build on the phone: takes slow scroll, Feedback list, sheet drag/dismiss, timeline swipe,
+Settings scroll all 119–120 fps with 0–2 late frames; pull-up 115–118. Remaining "gaps" were idle,
+not work (no thread busy): the menu's first frame after a tap (~22 ms, then steady 7–8 ms frames),
+and the "takes fling", which scrolls inside the long card (`.stack-card-body`, not the stage): scroll
+events every ~8 ms in steady 17–22 px steps until the card's end, then Android's edge stretch, where
+the 35/75 ms present gaps are (nothing scrolls). Separately, `AttemptStream` now settles the stack
+on `scrollend` where the engine reports it (Chromium, Android WebView, WebView2), its 120 ms
+no-scroll timer only as a fallback; checked on :5173 (a 200 px nudge was gliding by 120 ms, locked
+on a card by ~290 ms). The audit's "missed" count includes idle gaps: read them with `gaps.py` or
+`fling-log.mjs` (session scratchpad `device/`) before calling them jank. The display is adaptive
+(60 Hz idle, 120 Hz in motion); 120 Hz is the ceiling on this phone.
+
+**Merged from helper worktrees (2026-11-02, committed 37d2c0d):** `textsize-v2` (2476ca3: Settings → Text
+size is a live preview card, real AttemptCard with a `preview` prop, sizes per layout × take length,
+store `onspot.text-size.v2` migrating the old key; 41 checks) and `neo-snappy` (4af1e6e: neo
+transitions limited to opacity/transforms, motion tokens in app.css and neo.ts, instant press under a
+finger via `gestures/pressFeedback.ts`, no sticky hover/focus look on touch, so the bar's Feedback key
+no longer looks pressed after its sheet is swiped away; dialogs 300 → 160 ms). Merged with `git
+merge-file` per file (base ddafa30); worktrees and branches removed.
+
+**Text size live preview (2026-11-02, committed 37d2c0d; helper branch `textsize-canvas` 835bd77,
+merged with `git merge-file` per file onto the main tree; user: "a dummy canvas which is an exact
+replica as if the user is doing a session … i dont like … all the cards … in a tight box"):**
+Settings → Text size is one line, "Open live preview", the sizes not at 100% and two resets. The
+preview (`/settings/text-size/`) is the real Practice screen: Practice's body is now
+`components/PracticeScreen.svelte` (`routes/+page.svelte` only renders it) taking a session through
+`stores/practiceSession.ts` (the learner's, or `textSize/sampleSession.ts` with `live: false`, which
+turns off recording, playback, providers and the database); AttemptStream, AttemptCard and
+FeedbackPanel read it from context; AppHeader has `preview`. Tap a part → ring + floating control
+(`textSize/TextSizeEditor.svelte`: part menu, A− % A+, reset, Done), per layout × take length, live
+and app-wide; Done/Back/Escape behave. Helper's checks 122/122 on its server (layout matched a real
+seeded Practice page to the pixel; DB counts unchanged). The bookmark textures' relative paths were
+corrected for the move. Not on a phone yet.
+
+**Insights rows ran off the right edge on phones (user, on the debug copy):** the pattern columns'
+grid had no column definition below `sm`, so its one implicit `auto` column grew to the longest
+one-line (`truncate`) pattern title (414 px in a 384 px window on the long test takes), pushing every
+row's count and chevron and the section header off screen. `grid-cols-1` (minmax(0, 1fr)) fixes it;
+checked at 360/390/700/1280 px on :5173 (no element past the edge, titles truncate) and on the phone
+by injecting the same rule. Existing bug, shown by longer titles; the user's release data is short.
+
+**Selects (user: language of instruction list "too big … clips … under some component"):**
+`quickSelect` (neo.ts) renders the list as a portal with `height: { max: 'min(320px, 50dvh)' }`
+(neo's own prop; a floating-ui size middleware was overridden by neo's inline max-height), and
+`SettingSelect` closes the list on a pick (neo kept it open while focus was on the option) and
+returns focus to the field. Checked at 390 and 1280 px: 320 px, scrolls, on top, closes on pick.
+
+**Word meanings shifted by one (user: "à : university", "suis : in"):** meanings were a plain list
+matched by position; one word skipped by the model moved every later meaning. The prompt asks for
+`{"glosses": {"1": …}}` and `alignedGlosses` places them by number (a list only if its length is
+exact). Saved meanings move to a new key (`glossKey` prefix `numbered:`), so old, possibly shifted
+ones are fetched again. Real Groq calls (gpt-oss-120b and 20b) on two takes: every word aligned.
+
+**APK icon cause (2026-11-02):** the phone uses a Samsung Theme Park icon theme
+(`current_sec_appicon_theme_package=com.samsung.android.themedesigner_2026-10-08…`), which drew and
+kept its own icon for `app.onspot.desktop` from the first install (Tauri's default icon). Settings →
+App info shows it too; new versionCodes and reinstalls don't change it. The APK is right (every
+density checked). Fix is on the device (re-apply/refresh the icon theme or switch icons to
+default); not changed without the user.
+
+**Phone bar, pull-up, stats pin, smooth sheet drag, one speed button, text sizes, pop-up under
+covers (2026-11-02, committed 37d2c0d; the user's list after 0.2.2):**
+- Phone bar in two rows (`AppHeader`: with `below`, the navigation menu starts the second row, so
+  row 1 is the heading alone). Practice: the prompt full width on top; menu, New prompt, Takes,
+  Feedback, Session and the main action (`mainAction` snippet; record/stop/setup/cancel) last.
+  Desktop unchanged (`desktopActions`).
+- Swipe up on the bar pulls Feedback up with the finger (`gestures/swipeToOpen.ts`, mirror of
+  SwipeToDismiss; `onPullStart` sets `coachOpen` + `flushSync()` so the sheet is measured and
+  placed at `100%` before it paints; `.pulled-open` turns off the sheet's rise and the scrim's
+  fade-in). Starting on a button does not press it; sideways does nothing.
+- Slow-drag flicker: the sheet waited 10 px then jumped (now moves from where the drag began);
+  the browser's own scroll threshold (~8 px) beat ours (10 px), so a slow drag scrolled/stretched
+  the list too (now every move heading out is cancelled from the first one, and the sheet's list
+  has `overscroll-behavior: none` below 1024 px); every move repainted the textured sheet (now
+  `will-change: translate` while moving, placed once per frame). Shared by both swipes in
+  `gestures/sheetMotion.ts` (`SheetMover`, settle constants). Headless can't show the device's
+  rendering; not yet checked on a phone.
+- Session stats: a tap elsewhere in the panel puts them away (`onclickcapture`; on the cards it
+  only does that, toolbar controls still act). Pin button in the stats header
+  (`stores/statsPin.svelte.ts`, localStorage `onspot.feedback.statsPinned`): pinned = docked under
+  the list (position relative), open from the start, kept open by taps elsewhere.
+- Playback speed (by a parallel agent): `PlaybackSpeed.svelte`, one button showing the speed with
+  three ticks; tap cycles 0.75 → 1 → 1.25, arrows/wheel step without wrapping, number rolls.
+- Text size per section (parallel agent): Settings → Learning → Text size
+  (`settings/TextSizeSettings.svelte`, `stores/textSize.svelte.ts`, localStorage
+  `onspot.text-size`, per device like the theme): Prompt, You said, Did you mean to say?,
+  Explanation, Translation, Feedback; 85–160 %; `--text-scale-<id>` on :root, used as
+  `calc(size * var(--text-scale-x, 1))`; AttemptCard's peek heights read `textScaleOf`.
+- Word pop-up stayed over a buried card (parallel agent): it was a held selection's label;
+  floating-ui `hide` only sees clipping, and a buried card is covered, not clipped. `WordGloss`
+  now hides while `elementFromPoint` at the anchor's first line is not the anchor (inert pile
+  cards never hit) and places again in the next frame (the stack poses cards a frame after the
+  scroll). Selection anchors carry their line boxes (`rangeAnchor`).
+- Verified on :5173 with everything merged (CDP touch at 390 px, desktop 1280 px, light/dark):
+  bar/pull-up/drag/stats 32/32, the earlier gesture suite 34/34, speed button 36/36, text size
+  25/25, pop-up repro 25/25 and selection behaviours 11/11; `bun run check` 0 errors; SPDX ok.
+  Test gotcha: on the user's long-running :5173 server, hot-reloaded modules carry `?t=` URLs, so
+  a script's `import('/src/lib/…')` gets a second, empty instance (empty stores; a second DB that
+  reports "already open in another tab"); import the URL from
+  `performance.getEntriesByType('resource')` instead.
+- Noticed, unchanged: on phones a tap on the faded last line of a folded "You said" excerpt does
+  not put a held selection away (same before).
+
+**Release v0.2.2 (2026-11-02):** `93518c8 Release 0.2.2`; `main` fast-forwarded to it and both
+branches pushed with the tag. A test run on the feature branch first (Desktop release 41363245612,
+all 9 jobs; Android 41363248479) and its Windows artifacts checked: the setup.exe's NSIS
+header/sidebar BMPs, the MSI's WiX banner/dialog and product icon are byte-identical to the repo's,
+the exe's 256 px icon is icon.ico's. Then Desktop release 41383490174, Android (tag 41383490173,
+main 41383490333) and Pages 41383490350 all green; the release has all 15 files (x64 + arm64 exe/
+msi, x64/aarch64 dmg, amd64/arm64 deb, x86_64/aarch64 rpm, AppImage, flatpak, and
+`onspot-0.2.2-93518c8-arm64.apk`, versionCode 10017).
+**APK icon (user, after installing: "still doesn't have the app icon"):** the released APK is right:
+aapt2 shows `mipmap-anydpi-v26/ic_launcher.xml` = background `#151412`, foreground and monochrome
+mipmaps, and their PNGs are pixel-identical to the repo's (legacy ic_launcher too). Not seen on the
+device (no adb connection). Likely device-side: Android 13+ themed icons on (the launcher then
+draws the monochrome mark tinted, new in 0.2.2), a launcher icon cache, or an older debug build
+(`app.onspot.desktop.debug`, Tauri's default icon) beside the release app. Waiting on a screenshot.
+**Branches:** `feature/language-delivery-mode` = `main` (93518c8); the four older local branches
+(`feature/byoc-sync`, `feature/native-speech`, `migration`, `spike/whisper-webgpu`) are all
+contained in main. Offered to delete them all (and the remote feature branch); not yet answered.
+
+**Installers branded (2026-11-02, committed a1900cf, released in 0.2.2; user: "make sure all of
+these installers use the app icon and brand assets"):** v0.2.1's setup .exe still had NSIS's own icon and blue sidebar, the
 MSI WiX's stock images, the DMG a plain window, the .deb/.rpm/AppImage menu entry the old
 "Learn to speak French… desktop-first" comment (Cargo description), and the Flatpak metainfo the
 old teal brand colours. Now: `scripts/brand-assets.sh` renders everything from `brand-assets/`
@@ -16,11 +165,11 @@ as the Linux window icon, which was 32 px) and adds 64x64. Flatpak installs 32�
 scalable SVG; metainfo branding Light #FFC24D / #714D1D. Verified locally: config passes Tauri's
 schema; a real `tauri build --bundles deb` has 32/64/128/256/512 icons, the new Comment,
 Description and Homepage; the Flatpak build commands run against it; appstreamcli and
-desktop-file-validate pass; aapt2 compiles and links the adaptive icon (minSdk 24). Not yet
-verified: the NSIS/WiX/DMG builds themselves (CI only) and the icon on a phone.
+desktop-file-validate pass; aapt2 compiles and links the adaptive icon (minSdk 24). NSIS/WiX
+verified in the built installers (see Release v0.2.2); the DMG window and the icon on a phone not.
 **APK on releases:** Android signing secrets set 2026-11-02 (see below).
 
-**Phone gestures and Back (2026-11-02, uncommitted; user: Feedback sheet "collapsable via swiping
+**Phone gestures and Back (2026-11-02, committed a44b657, released in 0.2.2; user: Feedback sheet "collapsable via swiping
 it down", "supports all of these touch swips and mobile gestures", "the setting page and other page
 also needs a back button"):** touch-only gesture classes in `src/lib/gestures/` (touch events,
 following `TouchWordSelection`; no library: neo's NeoDrawer handles only its dialog with handle

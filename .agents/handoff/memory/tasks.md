@@ -1,8 +1,30 @@
 # Tasks
 
+## Phone list after 0.2.2 (2026-11-02)
+- [x] Phone bar in two rows; swipe up on the bar pulls Feedback up; stats tap-away + pin;
+  slow-drag fixes; one playback speed button; text size per section; pop-up hides when its words
+  are covered (state.md first entry; uncommitted).
+- [x] Tried on the user's phone (Galaxy S24 FE): two-row bar, pull-up, stats tap-away and pin, speed
+  button, text size all work; frame rates measured (state.md "120 fps pass").
+- [x] APK icon: cause is the phone's Samsung Theme Park icon theme (state.md); the APK is right.
+- [ ] User: re-apply/update the Theme Park icon theme (or let the assistant do it on the phone).
+- [x] 120 fps pass: SVG noise textures → WebP/dropped, no fixed backgrounds, shade and sheet layers,
+  sheet kept laid out, stack settles on `scrollend`; neo-snappy and textsize-v2 merged.
+- [x] Language-of-instruction dropdown (all selects): portal, capped height, closes on pick.
+- [x] Word meanings shifted by one: glosses keyed by word number; old saved meanings re-fetched.
+- [x] Text size live canvas merged (state.md); worktree removed. Regression on :5173 after the merge:
+  phone bar 32/32, gestures 34/34, speed 36/36, pop-up 25/25 + 11/11, live preview 122/122.
+- [ ] Try the live preview on the phone (debug APK with everything is built:
+  `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`).
+- [x] Insights rows overflowing on phones (grid-cols-1).
+- [ ] Measure the desktop engines (WebView2, WebKitGTK, WKWebView) at their refresh rates.
+- [ ] Commit, push and release when the user asks.
+- [ ] Delete `feature/language-delivery-mode` (local + remote) and four old local branches?
+  Offered; waiting for the user.
+
 ## Every installer on x64 and ARM64 (2026-11-01)
 - [x] release.yml: Intel Mac, ARM Linux (+ Flatpak), ARM Windows (.exe + .msi); test run green.
-- [ ] Merge to main and tag a release so the new installers are published (user to decide).
+- [x] Merged to main and released as v0.2.1, then v0.2.2 (2026-11-02).
 - [ ] Try the ARM and Intel builds on real hardware (none here).
 
 ## Automatic model choice + "Did you mean" changes toggle (2026-11-01)

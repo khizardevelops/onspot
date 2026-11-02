@@ -82,6 +82,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.2.3" date="2026-11-03">
+      <description>
+        <p>Smoother on phones, text sizes you set on a live preview, and fixes.</p>
+        <ul>
+          <li>Sheets, lists and scrolling keep up with 120 Hz screens: paper textures are images now, and nothing repaints the page while it scrolls.</li>
+          <li>On phones the bar has two rows, swiping up on it opens Feedback, and the session stats close on a tap or stay pinned.</li>
+          <li>Set the text size of each part of a take on a live preview of a session, per screen size and take length.</li>
+          <li>One button for the playback speed, word meanings that match their words, and dropdowns that fit the screen.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-11-02">
       <description>
         <p>Phone gestures, a Back button and branded installers.</p>
