@@ -21,8 +21,8 @@ speaker would say it.
 
 <br>
 
-<!-- Dark mode is shown first; the light versions are one click away under Screenshots. -->
-<img src="docs/screenshots/practice-dark.png" width="100%"
+<!-- Light mode is shown first; the dark versions are one click away under Screenshots. -->
+<img src="docs/screenshots/practice-light.png" width="100%"
      alt="onspot's practice screen: a spoken French take on an index card with its mistakes highlighted, the corrected sentences, a teacher's explanation and colour-coded feedback cards">
 
 </div>
@@ -49,21 +49,6 @@ which is talking, making mistakes and being corrected. onspot is built entirely 
 Click a theme to show or hide it.
 
 <details open>
-<summary><b>🌙 Dark mode</b></summary>
-<br>
-
-<p align="center"><img src="docs/screenshots/practice-dark.png" width="100%" alt="French practice, dark mode"></p>
-<p align="center"><b>Practice</b>: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.</p>
-
-<p align="center"><img src="docs/screenshots/phone-dark.png" width="72%" alt="Practice and feedback on a phone, dark mode"></p>
-<p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
-
-<p align="center"><img src="docs/screenshots/history-dark.png" width="100%" alt="History, dark mode"></p>
-<p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
-
-</details>
-
-<details>
 <summary><b>☀️ Light mode</b></summary>
 <br>
 
@@ -74,6 +59,21 @@ Click a theme to show or hide it.
 <p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
 
 <p align="center"><img src="docs/screenshots/history-light.png" width="100%" alt="History, light mode"></p>
+<p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
+
+</details>
+
+<details>
+<summary><b>🌙 Dark mode</b></summary>
+<br>
+
+<p align="center"><img src="docs/screenshots/practice-dark.png" width="100%" alt="French practice, dark mode"></p>
+<p align="center"><b>Practice</b>: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.</p>
+
+<p align="center"><img src="docs/screenshots/phone-dark.png" width="72%" alt="Practice and feedback on a phone, dark mode"></p>
+<p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
+
+<p align="center"><img src="docs/screenshots/history-dark.png" width="100%" alt="History, dark mode"></p>
 <p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
 
 </details>

@@ -1,5 +1,19 @@
 # Last Session
 
+## 2026-11-03: v0.2.3 tagged, branches, README light first
+- **Release:** test runs on main passed, so `Release 0.2.3` (29fe647) was committed on `main` and
+  tagged `v0.2.3`; the tag's Desktop release and Android runs were started (check the release
+  page has 15 files).
+- **"merge all branches":** nothing to merge. Every branch had 0 commits outside `main`;
+  `feature/language-delivery-mode` was moved to `main` (identical). Work is on `main` now. Offered
+  to delete the five old branches; no answer yet.
+- **"why is an ios build not possible?":** answered (decisions.md "iOS is deferred": needs a Mac,
+  `tauri ios init`, Apple signing via the $99 developer account for TestFlight; the web app in
+  Safari works today).
+- **README:** light mode first (hero and Screenshots, light open by default). The metainfo listing
+  pointed at deleted `fr-light.png` / `jap-dark.png`; now practice/phone/history light. Takes effect
+  in the Flatpak from the next release.
+
 ## 2026-11-02: v0.2.2 released, then the user's phone list
 - **Asked:** "go ahead with the procedure" (test build, bump, tag 0.2.2): done, see state.md
   "Release v0.2.2". "why do i have a seperate branch?": explained (it equals main; offered to
