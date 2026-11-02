@@ -1,6 +1,6 @@
 [package]
 name = "onspot"
-version = "0.2.1"
+version = "0.2.2"
 description = "Practise speaking a language and get a teacher's feedback"
 authors = ["onspot contributors"]
 license = "AGPL-3.0-or-later"

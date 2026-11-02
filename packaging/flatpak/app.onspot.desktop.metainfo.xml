@@ -82,6 +82,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.2.2" date="2026-11-02">
+      <description>
+        <p>Phone gestures, a Back button and branded installers.</p>
+        <ul>
+          <li>On phones, swipe the Feedback sheet down to close it, and swipe sideways between feedback filters and Settings tabs.</li>
+          <li>A Back button on every page but Practice; it closes what is open first, like Android's Back.</li>
+          <li>The installers for Windows and macOS carry the onspot icon and artwork, and the Android icon fits every launcher shape.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-11-02">
       <description>
         <p>Installers for ARM and Intel, an own title bar, and automatic model choice.</p>
