@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- onspot light-mode version. Recolourable: every part is drawn in currentColor, and the svg's color attribute (#000000) is the default. Inline, set CSS color on the svg for any colour (opacity fades it as one); as a file, edit that attribute. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="703.365" height="556.831" viewBox="0 0 703.365 556.831" color="#000000">
+  <defs>
+    <linearGradient id="onspot-mark-light-linear-gradient-1" x1="351.682" y1="29.308" x2="351.682" y2="498.218" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="currentColor" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="currentColor" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="onspot-mark-light-radial-gradient-1" cx="0" cy="0" r="351.682" gradientTransform="matrix(1 0 0 0.167 351.682 498.218)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="currentColor" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0.08"/>
+    </radialGradient>
+  </defs>
+  <title>Mark (light mode)</title>
+  <g id="onspot-mark-light-Mark__light_mode_" data-name="Mark (light mode)">
+    <path id="onspot-mark-light-Beam__tangent_hull_of_lamp_and_pool_" data-name="Beam (tangent hull of lamp and pool)" d="M527.18 27.476 L702.677 494.554 C710.858 516.327 645.805 537.056 533.834 548.356 C421.862 559.656 281.503 559.656 169.531 548.356 C57.56 537.056 -7.493 516.327 0.688 494.554 L176.185 27.476 C181.986 12.031 258.834 -0.001 351.682 -0.001 C444.531 -0.001 521.379 12.031 527.18 27.476 Z" fill="url(#onspot-mark-light-linear-gradient-1)"/>
+    <ellipse id="onspot-mark-light-Pool__18_m_x_3_m_" data-name="Pool (18 m x 3 m)" cx="351.682" cy="498.218" rx="351.682" ry="58.614" fill="url(#onspot-mark-light-radial-gradient-1)"/>
+    <ellipse id="onspot-mark-light-Lamp__9_m_x_1.5_m_" data-name="Lamp (9 m x 1.5 m)" cx="351.682" cy="29.308" rx="175.841" ry="29.307" fill="currentColor"/>
+    <path id="onspot-mark-light-Bar_1__3_m_" data-name="Bar 1 (3 m)" d="M156.303 283.301 C167.094 283.301 175.841 292.048 175.841 302.839 L175.841 380.99 C175.841 391.78 167.094 400.528 156.303 400.528 C145.512 400.528 136.765 391.78 136.765 380.99 L136.765 302.839 C136.765 292.048 145.512 283.301 156.303 283.301 Z" fill="currentColor"/>
+    <path id="onspot-mark-light-Bar_2__5_m_" data-name="Bar 2 (5 m)" d="M253.993 244.225 C264.784 244.225 273.531 252.972 273.531 263.763 L273.531 420.066 C273.531 430.856 264.784 439.604 253.993 439.604 C243.202 439.604 234.455 430.856 234.455 420.066 L234.455 263.763 C234.455 252.972 243.202 244.225 253.993 244.225 Z" fill="currentColor"/>
+    <path id="onspot-mark-light-Bar_3__8_m_" data-name="Bar 3 (8 m)" d="M351.682 185.611 C362.473 185.611 371.22 194.358 371.22 205.149 L371.22 478.68 C371.22 489.47 362.473 498.218 351.682 498.218 C340.892 498.217 332.145 489.47 332.145 478.68 L332.145 205.149 C332.145 194.358 340.892 185.611 351.682 185.611 Z" fill="currentColor"/>
+    <path id="onspot-mark-light-Bar_4__5_m_" data-name="Bar 4 (5 m)" d="M449.372 244.225 C460.163 244.225 468.91 252.972 468.91 263.763 L468.91 420.066 C468.91 430.856 460.163 439.604 449.372 439.604 C438.581 439.604 429.834 430.856 429.834 420.066 L429.834 263.763 C429.834 252.972 438.581 244.225 449.372 244.225 Z" fill="currentColor"/>
+    <path id="onspot-mark-light-Bar_5__3_m_" data-name="Bar 5 (3 m)" d="M547.062 283.301 C557.852 283.301 566.599 292.048 566.599 302.839 L566.599 380.99 C566.599 391.78 557.852 400.527 547.062 400.528 C536.271 400.528 527.524 391.78 527.524 380.99 L527.524 302.839 C527.524 292.048 536.271 283.301 547.062 283.301 Z" fill="currentColor"/>
+  </g>
+</svg>

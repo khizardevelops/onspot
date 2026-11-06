@@ -24,6 +24,9 @@ or wordmark changes, copy the new paths into them.
 
 ## Where the app uses it
 
+No longer: since 2026-11-06 the app, the platforms and the README use v2 (`../v2/README.md`, "Where the
+app uses it"). This section records how v1 was wired.
+
 The macOS master is the app icon on every desktop platform (a deliberate choice; it keeps Apple's
 margin everywhere). `scripts/brand-assets.sh` renders everything below from this folder; it needs
 bun, resvg and ImageMagick 7.

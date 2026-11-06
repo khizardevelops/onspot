@@ -1,32 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="824" height="824" viewBox="100 100 824 824">
+<svg xmlns="http://www.w3.org/2000/svg" width="938.667" height="938.667" viewBox="42.667 42.667 938.667 938.667">
+<title>onspot app icon (tile)</title>
+<g color="#0f766e">
   <defs>
-    <linearGradient id="linear-gradient-1" x1="512" y1="246" x2="512" y2="750" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffc24d" stop-opacity="0.6"/>
-      <stop offset="0.5" stop-color="#f6a531" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#f6a531" stop-opacity="0.04"/>
-    </linearGradient>
-    <radialGradient id="radial-gradient-1" cx="0" cy="0" r="252" gradientTransform="matrix(1 0 0 0.167 512 750)" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f6a531" stop-opacity="0.6"/>
-      <stop offset="1" stop-color="#f6a531" stop-opacity="0.15"/>
+    <radialGradient id="onspot-icon-glare" cx="0.3" cy="0.24" r="0.6">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <title>App icon</title>
-  <g id="App_icon" data-name="App icon">
-    <path id="Tile__824_squircle__r_185.4_" data-name="Tile (824 squircle, r 185.4)" d="M383.414 100 L640.586 100 C722.193 100 762.997 100 799.794 112.143 L806.921 113.888 C854.878 131.344 892.656 169.122 910.112 217.079 L911.857 224.206 C924 261.003 924 301.807 924 383.414 L924 640.586 C924 722.193 924 762.997 911.857 799.794 L910.112 806.921 C892.656 854.878 854.878 892.656 806.921 910.112 L799.794 911.857 C762.997 924 722.193 924 640.586 924 L383.414 924 C301.807 924 261.003 924 224.206 911.857 L217.079 910.112 C169.122 892.656 131.344 854.878 113.888 806.921 L112.143 799.794 C100 762.997 100 722.193 100 640.586 L100 383.414 C100 301.807 100 261.003 112.143 224.206 L113.888 217.079 C131.344 169.122 169.122 131.344 217.079 113.888 L224.206 112.143 C261.003 100 301.807 100 383.414 100 Z" fill="#151412"/>
-    <g id="Mark__m___28_" data-name="Mark (m = 28)">
-      <path id="Beam__tangent_hull_of_lamp_and_pool_" data-name="Beam (tangent hull of lamp and pool)" d="M595.87 245.222 L763.611 747.667 C768.798 763.205 722.008 777.948 642.022 785.978 C562.035 794.007 461.965 794.007 381.978 785.978 C301.992 777.948 255.202 763.205 260.389 747.667 L428.13 245.222 C430.606 237.804 467.421 232 512 232 C556.579 232 593.394 237.804 595.87 245.222 Z" fill="url(#linear-gradient-1)"/>
-      <ellipse id="Pool__18_m_x_3_m_" data-name="Pool (18 m x 3 m)" cx="512" cy="750" rx="252" ry="42" fill="url(#radial-gradient-1)"/>
-      <ellipse id="Lamp__6_m_x_1_m_" data-name="Lamp (6 m x 1 m)" cx="512" cy="246" rx="84" ry="14" fill="#ffc24d"/>
-      <path id="Bar_1__3_m_" data-name="Bar 1 (3 m)" d="M372 596 L372 596 C379.732 596 386 602.268 386 610 L386 666 C386 673.732 379.732 680 372 680 L372 680 C364.268 680 358 673.732 358 666 L358 610 C358 602.268 364.268 596 372 596 Z" fill="#ffc24d"/>
-      <path id="Bar_2__5_m_" data-name="Bar 2 (5 m)" d="M442 568 L442 568 C449.732 568 456 574.268 456 582 L456 694 C456 701.732 449.732 708 442 708 L442 708 C434.268 708 428 701.732 428 694 L428 582 C428 574.268 434.268 568 442 568 Z" fill="#ffc24d"/>
-      <path id="Bar_3__8_m_" data-name="Bar 3 (8 m)" d="M512 526 L512 526 C519.732 526 526 532.268 526 540 L526 736 C526 743.732 519.732 750 512 750 L512 750 C504.268 750 498 743.732 498 736 L498 540 C498 532.268 504.268 526 512 526 Z" fill="#ffc24d"/>
-      <path id="Bar_4__5_m_" data-name="Bar 4 (5 m)" d="M582 568 L582 568 C589.732 568 596 574.268 596 582 L596 694 C596 701.732 589.732 708 582 708 L582 708 C574.268 708 568 701.732 568 694 L568 582 C568 574.268 574.268 568 582 568 Z" fill="#ffc24d"/>
-      <path id="Bar_5__3_m_" data-name="Bar 5 (3 m)" d="M652 596 L652 596 C659.732 596 666 602.268 666 610 L666 666 C666 673.732 659.732 680 652 680 L652 680 C644.268 680 638 673.732 638 666 L638 610 C638 602.268 644.268 596 652 596 Z" fill="#ffc24d"/>
+  <circle cx="512" cy="512" r="469.333" fill="#faf6ef"/>
+  <circle cx="512" cy="512" r="469.333" fill="url(#onspot-icon-glare)"/>
+  <defs>
+    <linearGradient id="onspot-app-icon-circle-light-linear-gradient-1" x1="512" y1="232.961" x2="512" y2="701.871" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="currentColor" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="currentColor" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="onspot-app-icon-circle-light-radial-gradient-1" cx="0" cy="0" r="351.682" gradientTransform="matrix(1 0 0 0.167 512 701.871)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="currentColor" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0.08"/>
+    </radialGradient>
+  </defs>
+  <g id="onspot-app-icon-circle-light-App_icon__circle__light_mode_" data-name="App icon (circle, light mode)">
+    <path id="onspot-app-icon-circle-light-Outline__circle_keyline_176_192__stroke_0.75_m_" data-name="Outline (circle keyline 176/192, stroke 0.75 m)" d="M966.68 512 C966.68 632.589 918.776 748.238 833.507 833.507 C748.238 918.776 632.589 966.68 512 966.68 C391.411 966.68 275.762 918.776 190.493 833.507 C105.224 748.238 57.32 632.589 57.32 512 C57.32 391.411 105.224 275.762 190.493 190.493 C275.762 105.224 391.411 57.32 512 57.32 C632.589 57.32 748.238 105.224 833.507 190.493 C918.776 275.762 966.68 391.411 966.68 512 Z" fill="none" stroke="currentColor" stroke-width="29.307"/>
+    <g id="onspot-app-icon-circle-light-Mark__m___39.076_" data-name="Mark (m = 39.076)">
+      <path id="onspot-app-icon-circle-light-Beam__tangent_hull_of_lamp_and_pool_" data-name="Beam (tangent hull of lamp and pool)" d="M687.497 231.129 L862.995 698.207 C871.173 719.98 806.119 740.709 694.149 752.008 C582.179 763.308 441.821 763.308 329.851 752.008 C217.881 740.709 152.827 719.98 161.005 698.207 L336.503 231.129 C342.308 215.685 419.154 203.654 512 203.654 C604.846 203.654 681.692 215.685 687.497 231.129 Z" fill="url(#onspot-app-icon-circle-light-linear-gradient-1)"/>
+      <ellipse id="onspot-app-icon-circle-light-Pool__18_m_x_3_m_" data-name="Pool (18 m x 3 m)" cx="512" cy="701.871" rx="351.682" ry="58.614" fill="url(#onspot-app-icon-circle-light-radial-gradient-1)"/>
+      <ellipse id="onspot-app-icon-circle-light-Lamp__9_m_x_1.5_m_" data-name="Lamp (9 m x 1.5 m)" cx="512" cy="232.961" rx="175.841" ry="29.307" fill="currentColor"/>
+      <path id="onspot-app-icon-circle-light-Bar_1__3_m_" data-name="Bar 1 (3 m)" d="M316.621 486.954 C327.412 486.954 336.159 495.701 336.159 506.492 L336.159 584.643 C336.159 595.434 327.412 604.181 316.621 604.181 C305.83 604.181 297.083 595.434 297.083 584.643 L297.083 506.492 C297.083 495.701 305.83 486.954 316.621 486.954 Z" fill="currentColor"/>
+      <path id="onspot-app-icon-circle-light-Bar_2__5_m_" data-name="Bar 2 (5 m)" d="M414.31 447.878 C425.101 447.878 433.848 456.625 433.848 467.416 L433.848 623.719 C433.848 634.51 425.101 643.257 414.31 643.257 C403.52 643.256 394.773 634.509 394.773 623.719 L394.773 467.416 C394.773 456.626 403.52 447.879 414.31 447.878 Z" fill="currentColor"/>
+      <path id="onspot-app-icon-circle-light-Bar_3__8_m_" data-name="Bar 3 (8 m)" d="M512 389.264 C522.791 389.264 531.538 398.011 531.538 408.802 L531.538 682.333 C531.538 693.124 522.791 701.871 512 701.871 C501.209 701.871 492.462 693.124 492.462 682.333 L492.462 408.802 C492.462 398.011 501.209 389.264 512 389.264 Z" fill="currentColor"/>
+      <path id="onspot-app-icon-circle-light-Bar_4__5_m_" data-name="Bar 4 (5 m)" d="M609.69 447.878 C620.48 447.879 629.227 456.626 629.227 467.416 L629.227 623.719 C629.227 634.509 620.48 643.256 609.69 643.257 C598.899 643.257 590.152 634.51 590.152 623.719 L590.152 467.416 C590.152 456.625 598.899 447.878 609.69 447.878 Z" fill="currentColor"/>
+      <path id="onspot-app-icon-circle-light-Bar_5__3_m_" data-name="Bar 5 (3 m)" d="M707.379 486.954 C718.17 486.954 726.917 495.701 726.917 506.492 L726.917 584.643 C726.917 595.434 718.17 604.181 707.379 604.181 C696.588 604.181 687.841 595.434 687.841 584.643 L687.841 506.492 C687.841 495.701 696.588 486.954 707.379 486.954 Z" fill="currentColor"/>
     </g>
   </g>
-  <g id="Logo">
-  </g>
-  <g id="Construction">
-  </g>
+</g>
 </svg>

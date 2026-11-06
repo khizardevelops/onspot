@@ -49,10 +49,10 @@
     <keyword>pronunciation</keyword>
   </keywords>
 
-  <!-- The banner behind the icon in software centres (brand-assets/README.md). -->
+  <!-- The banner behind the icon in software centres: the app's pale and deep teal (brand-assets/v2/README.md). -->
   <branding>
-    <color type="primary" scheme_preference="light">#ffc24d</color>
-    <color type="primary" scheme_preference="dark">#714d1d</color>
+    <color type="primary" scheme_preference="light">#c9ddd5</color>
+    <color type="primary" scheme_preference="dark">#1e4a43</color>
   </branding>
 
   <supports>

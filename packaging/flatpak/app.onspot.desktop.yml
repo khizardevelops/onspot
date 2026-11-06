@@ -45,7 +45,7 @@ modules:
       - type: file
         path: app.onspot.desktop.metainfo.xml
       - type: file
-        path: ../../brand-assets/app-icon.svg
+        path: ../../brand-assets/v2/platform/app-icon.svg
     build-commands:
       - ar -x onspot.deb data.tar.gz
       - tar -xf data.tar.gz
