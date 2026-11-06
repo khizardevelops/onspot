@@ -151,6 +151,12 @@ that leaves the device.
   `.deb`/`.AppImage` bundles on `v*` tags or a manual run. `.github/workflows/android.yml` builds
   the arm64 release APK on push to main (not for md/docs/.agents-only changes),
   `workflow_dispatch`, and `v*` tags (tag → GitHub Release).
+  **Release notes:** write `docs/releases/<tag>.md` before pushing the tag; release.yml's verify
+  job fails without it. Its `notes` job publishes the file (minus the `# onspot X` heading, via
+  `scripts/release-notes.sh`) as the description. Upload jobs only add files: never set
+  `generate_release_notes` on them, since softprops appends the notes on every upload (that made
+  v0.2.0–v0.2.3 up to seven copies of "Full Changelog"). Fix a published release's notes with
+  `scripts/release-notes.sh v0.2.3 | gh release edit v0.2.3 --notes-file -`.
   versionCode = 10000 + run number (via `--config`). Artifact `onspot-android-apk`. Signing
   secrets: `base64 -w0 /mnt/data/not_synced/dev-cache/onspot-release.jks | gh secret set
   ANDROID_KEYSTORE_BASE64`, `gh secret set ANDROID_KEY_ALIAS -b onspot`,

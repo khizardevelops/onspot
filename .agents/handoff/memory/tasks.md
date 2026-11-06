@@ -142,8 +142,8 @@
 - [ ] Fix the GitHub repo description typo ("langugae" → "language"; keep "inturn" as the author's
       wording) and add topics (language-learning, french, tauri, svelte, offline-first, privacy,
       whisper).
-- [x] Draft release notes for v0.2.3 in `docs/releases/v0.2.3.md`; publish them on GitHub when the
-      user asks (`gh release edit v0.2.3 --notes-file docs/releases/v0.2.3.md`).
+- [x] Draft release notes for v0.2.3 in `docs/releases/v0.2.3.md`. Published 2026-11-06 with new
+      notes for v0.2.0–v0.2.2; release.yml now publishes `docs/releases/<tag>.md` itself.
 - [x] Author CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, bug/feature/language issue templates
       and a PR template. Still to do: add `good first issue` / `help wanted` / platform labels.
 - [ ] Enable GitHub Discussions with Announcements, General, Feature requests, Language requests

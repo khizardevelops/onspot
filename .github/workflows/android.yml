@@ -7,7 +7,9 @@
 #   ANDROID_KEY_PASSWORD      keystore and key password
 # Without them the build still runs and uploads an unsigned APK.
 #
-# Pushing a tag like v0.2.0 also publishes the APK on a GitHub Release.
+# Pushing a tag like v0.2.0 also publishes the APK on a GitHub Release. It only
+# adds the file: release.yml's notes job writes the description from
+# docs/releases/<tag>.md.
 name: Android APK
 
 on:
@@ -119,7 +121,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.apk.outputs.path }}
-          generate_release_notes: true
 
       - name: Remove signing material
         if: always()

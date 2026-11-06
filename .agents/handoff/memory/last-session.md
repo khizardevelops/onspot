@@ -1,5 +1,22 @@
 # Last Session
 
+## 2026-11-06: one branch on GitHub; release notes fixed
+
+- **Asked:** "why tf are everything on the release page" and "merge all the branches so that the
+  github only has one branch"; then "fix the notes and keep all the files".
+- **Branches:** every branch was already fully merged into `main`. Deleted remote
+  `fix/dark-mode-visual-depth` and the local `feature/byoc-sync`, `feature/native-speech`,
+  `migration`, `spike/whisper-webgpu` and `fix/dark-mode-visual-depth`. GitHub has only `main`.
+- **Releases:** v0.2.0–v0.2.3 descriptions were three to seven copies of "Full Changelog": each
+  upload job ran softprops with `generate_release_notes: true`, which appends on every upload.
+  Wrote `docs/releases/v0.2.0.md`, `v0.2.1.md` and `v0.2.2.md` from the commits between tags and
+  published all four with `scripts/release-notes.sh` (drops the `# onspot X` heading). All files
+  kept (7 on v0.2.0, 15 on the others); v0.1.0's hand-written notes left as they were.
+- **Workflows:** release.yml's verify job requires `docs/releases/<tag>.md` on tags; a new `notes`
+  job publishes it; the upload jobs in release.yml and android.yml only add files.
+- **Push:** over SSH (`git@github.com:khizardevelops/onspot.git`). The gh token still lacks the
+  `workflow` scope, so HTTPS pushes of workflow files fail.
+
 ## 2026-11-06: iOS PWA foundation (installable web app)
 
 - **Asked:** start `docs/prompts/ios-focused-pwa.md`, then deploy with the `cf` CLI. Answers: no

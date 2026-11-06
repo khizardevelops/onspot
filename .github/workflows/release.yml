@@ -2,6 +2,12 @@
 # (.dmg for Apple Silicon and Intel) and Linux (.deb/.AppImage/.rpm, and a
 # .flatpak made from each .deb). Push a v* tag to publish them on a GitHub
 # Release, or run the workflow manually from the Actions tab.
+#
+# A tag needs docs/releases/<tag>.md first: the notes job publishes it as the
+# release description. Every upload job (here and in android.yml) only adds
+# files, so the description is written in one place. When each upload job
+# generated its own notes, the description became up to seven copies of the
+# same "Full Changelog" line.
 name: Desktop release
 
 on:
@@ -39,6 +45,30 @@ jobs:
 
       - name: SPDX headers
         run: bun run spdx:check
+
+      # Checked before the long builds start, so no installer is published
+      # without its release notes.
+      - name: Release notes exist
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > /dev/null
+
+  # Creates the release with docs/releases/<tag>.md as its description. It runs
+  # long before any upload job finishes, and they keep the description.
+  notes:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the description
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Publish the release notes
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: ${{ runner.temp }}/release-notes.md
 
   bundle:
     needs: verify
@@ -191,12 +221,12 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      # Files only: the notes job writes the description.
       - name: Publish to a GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          generate_release_notes: true
 
   # Repackages each Linux job's .deb as a Flatpak on the GNOME runtime
   # (packaging/flatpak/app.onspot.desktop.yml), natively on each architecture.

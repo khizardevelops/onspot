@@ -16,6 +16,7 @@ one-for-one. Active docs are not logs. See the archive README for when and how t
 | [`research/`](./research/) | Open problems and how to evaluate fixes: [`model_problem.md`](./research/model_problem.md) (STT RAM usage, all models in use) and [`model-vetting.md`](./research/model-vetting.md) (checks before adopting a model). |
 | [`reference/`](./reference/) | Raw external data, e.g. [`groq_free/`](./reference/groq_free/) (Groq free-tier rate-limit CSVs). |
 | [`screenshots/`](./screenshots/) | App screenshots shown in the root README, each in a `-dark` and a `-light` version. Replace a screen by keeping the file name. |
+| [`releases/`](./releases/) | Release notes, one file per tag (`v0.2.3.md`). The release workflow publishes the file as the GitHub release description (via `scripts/release-notes.sh`), so write it before pushing the tag. |
 | [`prompts/`](./prompts/) | Prompts given to AI tools: the product inception brief, the UI-capture request and the iOS PWA brief ([`ios-focused-pwa.md`](./prompts/ios-focused-pwa.md)). |
 | [`scratch/`](./scratch/) | Throwaway text, e.g. sample French dialogue. Nothing here is authoritative. |
 | [`archive/`](./archive/README.md) | **Archived** content from any folder above, at its mirrored path (`docs/X/Y.md` → `docs/archive/X/Y.md`). Frozen; read only for history. |

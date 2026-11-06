@@ -175,7 +175,8 @@ download and first-run sections repeat the requirement. Contributor scaffolding 
 locally: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
 `SECURITY.md`, issue templates, PR template and `docs/releases/v0.2.3.md`. All new docs use British
 English. Still needed on GitHub: description fix (keep "inturn", fix "langugae"), topics,
-Discussions, labels, publishing the release notes, and committing/pushing these files. The launch
+Discussions and labels. (Release notes for v0.2.0–v0.2.3 were published 2026-11-06; the files are
+committed and pushed.) The launch
 verdict was a soft launch to French/privacy niches first; see `last-session.md`.
 
 **120 fps pass on the phone (2026-11-02, committed 37d2c0d; user: "no less than 120 fps … the whole app,
