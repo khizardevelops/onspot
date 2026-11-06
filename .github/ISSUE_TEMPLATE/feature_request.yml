@@ -1,0 +1,72 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem first, then the solution you have in
+        mind. Features that fit the core loop — speak, get corrected, hear the fix, try again — are
+        the easiest to accept.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the learner's problem, not only the feature.
+      placeholder: "When I review an old take, I cannot..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should onspot do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workarounds, other apps, or a smaller version of the idea.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Practice and recording
+        - Feedback and corrections
+        - Audio and pronunciation
+        - History and insights
+        - Settings and onboarding
+        - Languages and models
+        - Privacy, storage and sync
+        - Documentation
+        - Developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Anything else?
+      description: Mockups, screenshots, links or examples are welcome.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help test this.
+          required: false
+        - label: I would be willing to help implement this.
+          required: false

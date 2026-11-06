@@ -1,0 +1,140 @@
+name: Bug report
+description: Something broke, behaved unexpectedly, or does not match the documentation.
+title: "[Bug]: "
+labels: ["bug", "needs-reproduction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search the existing issues first, and
+        remove any API keys or personal data from logs and screenshots.
+
+        For security problems, do **not** open a public issue. Read
+        [SECURITY.md](https://github.com/khizardevelops/onspot/blob/main/SECURITY.md) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: onspot version
+      description: The version shown in Settings, or the release tag you downloaded.
+      placeholder: "0.2.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows 10/11 (x64)
+        - Windows 10/11 (ARM64)
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x64)
+        - Linux (ARM64)
+        - Android
+        - Web browser
+    validations:
+      required: true
+
+  - type: input
+    id: install-source
+    attributes:
+      label: How did you install it?
+      description: GitHub release asset, Flatpak, built from source, Android APK, or the web build.
+      placeholder: "GitHub release .dmg"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stt-mode
+    attributes:
+      label: Speech-to-text mode
+      options:
+        - Local (Whisper)
+        - Cloud (Groq)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: llm-mode
+    attributes:
+      label: LLM mode
+      options:
+        - Cloud (Groq, DeepSeek or another OpenAI-compatible API)
+        - Local OpenAI-compatible server (Ollama, LM Studio, llama.cpp, vLLM)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tts-mode
+    attributes:
+      label: Text-to-speech mode
+      options:
+        - Local (Piper)
+        - Cloud (ElevenLabs)
+        - Cloud (OpenAI-compatible)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language being studied
+      options:
+        - French
+        - Japanese (development build only)
+        - Other or not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest sequence that shows the problem.
+      placeholder: |
+        1. Open Settings → Language data
+        2. Download French
+        3. Start a take and speak for 10 seconds
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, console output or screenshots
+      description: Remove keys, tokens and personal data before pasting.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find the same problem.
+          required: true
+        - label: I removed API keys, tokens and personal data from this report.
+          required: true
+        - label: I can reproduce this on the latest release, or I have explained why I cannot.
+          required: true

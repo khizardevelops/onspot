@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and general discussion
+    url: https://github.com/khizardevelops/onspot/discussions
+    about: Ask a question, share feedback, or show your progress. (Discussions must be enabled in the repository settings.)
+  - name: Security report
+    url: https://github.com/khizardevelops/onspot/security/policy
+    about: Please report vulnerabilities privately, not in a public issue.
+  - name: Documentation and setup help
+    url: https://github.com/khizardevelops/onspot#readme
+    about: Read the README and the troubleshooting notes first.
