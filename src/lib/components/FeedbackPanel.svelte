@@ -678,27 +678,35 @@
 		background-color: var(--notebook);
 	}
 	:global([data-theme='dark']) .feedback-shell {
-		--pinned-paper: #24211c;
-		--card-paper: #2b2823;
-		--index-stock: #28231b;
-		--error-stock: oklch(0.285 0.018 15);
-		--warning-stock: oklch(0.295 0.02 85);
-		--suggestion-stock: oklch(0.285 0.015 160);
-		--index-hairline: rgb(255 240 215 / 0.07);
-		--index-edge: rgb(0 0 0 / 0.38);
-		--index-wear: rgb(0 0 0 / 0.25);
+		/*
+		 * The panel is a sheet above the page, not the page itself: the raw
+		 * background made it read as a dark hole beside the takes. Its cards
+		 * then sit one clear step above the notebook.
+		 */
+		--notebook: #24211d;
+		--pinned-paper: #2a2621;
+		--card-paper: #302c26;
+		--index-stock: #2d2821;
+		--error-stock: oklch(0.3 0.018 15);
+		--warning-stock: oklch(0.31 0.02 85);
+		--suggestion-stock: oklch(0.3 0.015 160);
+		--index-hairline: rgb(255 240 215 / 0.14);
+		--index-edge: rgb(0 0 0 / 0.42);
+		--index-wear: rgb(0 0 0 / 0.28);
+		--paper-top-light: rgb(255 240 215 / 0.1);
+		border-color: rgb(255 245 225 / 0.1);
 		--foxing: rgb(200 160 100 / 0.05);
-		--ruled-blue: rgb(140 170 210 / 0.12);
-		--margin-red: rgb(229 140 130 / 0.38);
+		--ruled-blue: rgb(140 170 210 / 0.14);
+		--margin-red: rgb(229 140 130 / 0.42);
 		--binder-hole: #0d0c0a;
 		--neu-dark: rgb(0 0 0 / 0.6);
-		--neu-light: rgb(255 240 215 / 0.06);
+		--neu-light: rgb(255 240 215 / 0.08);
 		--pinned-shadow: 0 12px 24px rgb(0 0 0 / 0.45), 0 4px 8px rgb(0 0 0 / 0.3);
-		--card-shadow: 0 8px 16px rgb(0 0 0 / 0.35), 0 2px 4px rgb(0 0 0 / 0.25), 0 0 0 1px rgb(255 240 215 / 0.04);
-		--card-shadow-lifted: 0 12px 24px rgb(0 0 0 / 0.45), 0 4px 8px rgb(0 0 0 / 0.3), 0 0 0 1px rgb(255 240 215 / 0.05);
+		--card-shadow: 0 8px 16px rgb(0 0 0 / 0.35), 0 2px 4px rgb(0 0 0 / 0.25), 0 0 0 1px rgb(255 240 215 / 0.06);
+		--card-shadow-lifted: 0 12px 24px rgb(0 0 0 / 0.45), 0 4px 8px rgb(0 0 0 / 0.3), 0 0 0 1px rgb(255 240 215 / 0.08);
 		--tape: rgb(200 185 150 / 0.3);
 		--label-tape: rgb(92 84 68 / 0.96);
-		--stat-edge: rgb(255 240 215 / 0.1);
+		--stat-edge: rgb(255 240 215 / 0.14);
 	}
 	:global([data-theme='dark']) .stats-sheet {
 		background-color: color-mix(in srgb, var(--notebook) 92%, #000);
@@ -1071,8 +1079,9 @@
 	.feedback-card {
 		--severity-ink: var(--muted-foreground);
 		--severity-paper: var(--index-stock);
+		--paper-top-light: transparent;
 		--paper-depth:
-			inset 0 0 0 1px var(--index-hairline), inset 0 0 3px 1px var(--index-wear), inset 0 0 26px var(--index-edge);
+			inset 0 1px 0 var(--paper-top-light), inset 0 0 0 1px var(--index-hairline), inset 0 0 3px 1px var(--index-wear), inset 0 0 26px var(--index-edge);
 		--foxing-spots:
 			radial-gradient(circle at 88% 18%, var(--foxing), transparent 22%),
 			radial-gradient(ellipse 30% 45% at 6% 92%, var(--foxing), transparent 70%);

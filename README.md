@@ -1,31 +1,52 @@
 <div align="center">
 
-# <img src="brand-assets/app-icon-tile.svg" width="52" height="52" align="absmiddle" alt="onspot app icon: a spotlight shining on a sound wave"> onspot
+<div style="display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;">
+  <img src="brand-assets/v2/platform/app-icon-tile.svg" width="52" height="52" alt="onspot app icon: a spotlight shining on a sound wave">
+  <h1 style="margin: 0; font-size: 2rem; line-height: 1; display: flex; align-items: center;">onspot</h1>
+</div>
 
-### The language learning app that makes you *speak*, then coaches you like a teacher.
+### Stop tapping flashcards. Open your mouth.
 
-**Stop tapping flashcards. Open your mouth.** onspot gives you a topic, listens to you talk for
-a minute, then marks your spoken French the way a good teacher would: every mistake pinned to
-the exact words you said, explained in plain English, and read back to you the way a native
-speaker would say it.
+**The language learning app that makes you *speak*, then coaches you like a teacher.** onspot
+gives you a prompt, listens to you talk for 60 seconds, then marks your spoken French the way a
+good teacher would: every mistake pinned to the exact words you said, explained in plain English,
+and read back to you the way a native speaker would say it.
 
-[Why onspot](#why-onspot) · [Screenshots](#screenshots) · [Features](#what-it-does) · [How it works](#how-a-session-works) ·
-[Privacy](#private-by-design) · [Getting started](#getting-started) · [Languages](#languages) ·
-[Tech](#under-the-hood)
+[**Download the app**](https://github.com/khizardevelops/onspot/releases/latest) ·
+[How it works](#how-a-session-works) ·
+[Features](#what-it-does) ·
+[Build from source](#build-from-source)
 
-![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-0f766e)
+![Free and open source](https://img.shields.io/badge/free%20and%20open%20source-AGPL--3.0-0f766e)
+![No onspot account](https://img.shields.io/badge/onspot%20account-none-0f766e)
+![Setup: free Groq key](https://img.shields.io/badge/setup-free%20Groq%20key-b7791f)
 ![Runs locally](https://img.shields.io/badge/speech-runs%20on%20your%20device-0f766e)
-![SvelteKit](https://img.shields.io/badge/SvelteKit-SPA-ff3e00)
-![Tauri v2](https://img.shields.io/badge/Tauri-v2-24c8db)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-0f766e)
 ![Status](https://img.shields.io/badge/status-early%20release-b7791f)
 
-<br>
+</div>
+
+> [!IMPORTANT]
+> **Setup (2 Minutes)**:
+> To get feedback, onspot needs to connect to an AI provider. This is **completely free** and requires **no payment** info or loaded credits.
+> Just grab a **free Groq key** from [console.groq.com](https://console.groq.com/keys), paste it into **Settings → LLM**, and you're ready to speak!
+> 
+>
+> **That's it!** Speech recognition and voices run locally on your device by default however you do have the option to use cloud text-to-speech and cloud speech-to-text too
+> *(Optional: If you prefer premium cloud voices over the local ones, you can add a free ElevenLabs key in Settings later. Full guide [here](https://www.google.com/search?q=%23get-your-keys-two-minutes)).*
+
+
+<div align="center">
 
 <!-- Light mode is shown first; the dark versions are one click away under Screenshots. -->
-<img src="docs/screenshots/practice-light.png" width="100%"
-     alt="onspot's practice screen: a spoken French take on an index card with its mistakes highlighted, the corrected sentences, a teacher's explanation and colour-coded feedback cards">
+![onspot's practice screen: a spoken French take on an index card with its mistakes highlighted, the corrected sentences, a teacher's explanation and colour-coded feedback cards](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/practice-light.png)
 
 </div>
+
+> **Early release, and honest about it.** French is the only language that is fully approved today;
+> Japanese is in development. The French experience is ready for daily practice, and more
+> languages are the main item on the roadmap. If that is the trade-off you can live with, you can
+> be speaking within a few minutes of downloading.
 
 ---
 
@@ -44,6 +65,28 @@ which is talking, making mistakes and being corrected. onspot is built entirely 
   goes in through your ears as well as your eyes.
 - **You do it again.** Retake the same prompt and watch your takes improve side by side.
 
+It also replaces the two things that usually stop people from practising out loud: **a tutor costs
+money**, and **a classroom costs courage**. onspot is free, private, and patient. It does not care
+how silly your story is; it only cares whether your French is right.
+
+## How a session works
+
+```
+  Prompt ──▶ You speak ──▶ Transcript ──▶ Teacher-style feedback ──▶ Hear it said right ──▶ Retake
+   (topic)    (30–60 s)    (on-device)     (your chosen LLM)          (on-device voice)
+```
+
+1. **Pick a prompt** in exam or casual mode.
+2. **Speak** about the topic in your target language. True story, made-up story or wild
+   exaggeration: it doesn't matter, as long as you keep talking and aim for accuracy. Your audio
+   is transcribed **on your device** by Whisper.
+3. **Get marked.** The transcript, never your audio, is sent to the language-model provider you
+   chose; onspot picks its most accurate model with room for your languages. It returns
+   corrections, the correct version of what you meant, a spoken explanation and translations.
+4. **Listen.** The explanation plays straight away; replay what you said or the correct version
+   whenever you like.
+5. **Go again.** Each take slides into place in your timeline, so you can compare attempts.
+
 ## Screenshots
 
 Click a theme to show or hide it.
@@ -52,14 +95,17 @@ Click a theme to show or hide it.
 <summary><b>☀️ Light mode</b></summary>
 <br>
 
-<p align="center"><img src="docs/screenshots/practice-light.png" width="100%" alt="French practice, light mode"></p>
-<p align="center"><b>Practice</b>: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.</p>
+![French practice, light mode](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/practice-light.png)
 
-<p align="center"><img src="docs/screenshots/phone-light.png" width="72%" alt="Practice and feedback on a phone, light mode"></p>
-<p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
+**Practice**: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.
 
-<p align="center"><img src="docs/screenshots/history-light.png" width="100%" alt="History, light mode"></p>
-<p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
+![Practice and feedback on a phone, light mode](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/phone-light.png)
+
+**On a phone**: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.
+
+![History, light mode](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/history-light.png)
+
+**History**: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.
 
 </details>
 
@@ -67,14 +113,17 @@ Click a theme to show or hide it.
 <summary><b>🌙 Dark mode</b></summary>
 <br>
 
-<p align="center"><img src="docs/screenshots/practice-dark.png" width="100%" alt="French practice, dark mode"></p>
-<p align="center"><b>Practice</b>: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.</p>
+![French practice, dark mode](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/practice-dark.png)
 
-<p align="center"><img src="docs/screenshots/phone-dark.png" width="72%" alt="Practice and feedback on a phone, dark mode"></p>
-<p align="center"><b>On a phone</b>: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.</p>
+**Practice**: Each take is an index card. Mistakes are highlighted on the words you actually said, "Did you mean to say?" lists only the sentences that needed fixing, and a teacher explains why, then asks a follow-up question in French. Hover any word for its meaning, or open a translation note. The feedback cards are tinted by how serious each mistake is.
 
-<p align="center"><img src="docs/screenshots/history-dark.png" width="100%" alt="History, dark mode"></p>
-<p align="center"><b>History</b>: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.</p>
+![Practice and feedback on a phone, dark mode](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/phone-dark.png)
+
+**On a phone**: The same card edge to edge, with the controls in a bar at the bottom. Feedback slides up as a sheet.
+
+![History, dark mode](https://raw.githubusercontent.com/khizardevelops/onspot/main/docs/screenshots/history-dark.png)
+
+**History**: Every session, grouped by day and searchable by title or transcript. Replay, rename or delete any of them.
 
 </details>
 
@@ -82,8 +131,7 @@ Click a theme to show or hide it.
 
 ### 🎙️ Speak, don't tap
 Get a speaking prompt ("Describe your morning routine", "Talk about a book that changed your
-perspective"), hit record and talk for 30–60 seconds, or up to five minutes if you're on a roll.
-A live waveform and timer keep you honest.
+perspective"), hit record and talk for 30–60 seconds. A live waveform and timer keep you honest.
 
 ### 🎭 The real skill: making it up on the spot
 **The skill is being able to lie, make up a story and tell it coherently in your target
@@ -169,24 +217,6 @@ Back up the whole database to Google Drive's app-private folder or to any WebDAV
 (Nextcloud, ownCloud, pCloud). Sync is manual, compares both copies first, and **never replaces a
 device without asking**. There is no onspot server in the middle.
 
-## How a session works
-
-```
-  Prompt ──▶ You speak ──▶ Transcript ──▶ Teacher-style feedback ──▶ Hear it said right ──▶ Retake
-   (topic)    (30–60 s)    (on-device)     (your chosen LLM)          (on-device voice)
-```
-
-1. **Pick a prompt** in exam or casual mode.
-2. **Speak** about the topic in your target language. True story, made-up story or wild
-   exaggeration: it doesn't matter, as long as you keep talking and aim for accuracy. Your audio
-   is transcribed **on your device** by Whisper.
-3. **Get marked.** The transcript, never your audio, is sent to the language-model provider you
-   chose; onspot picks its most accurate model with room for your languages. It returns
-   corrections, the correct version of what you meant, a spoken explanation and translations.
-4. **Listen.** The explanation plays straight away; replay what you said or the correct version
-   whenever you like.
-5. **Go again.** Each take slides into place in your timeline, so you can compare attempts.
-
 ## Private by design
 
 onspot has **no server, no account and no tracking**. It was built privacy-first from day one:
@@ -212,6 +242,11 @@ onspot has **no server, no account and no tracking**. It was built privacy-first
 
 ## Languages
 
+**French is the only language that is fully approved today.** Japanese is in development and is
+hidden in production builds until a human has listened to its voices and checked its transcripts.
+Adding a language is not a settings toggle: it needs model selection, prompt work and a quality
+pass. That is the bottleneck, and it is being worked through one language at a time.
+
 | Language | Status | Speech recognition | Voice |
 |---|---|---|---|
 | 🇫🇷 French | ✅ Ready | Whisper small (q4) | Piper Tom + 3 more voices |
@@ -227,17 +262,98 @@ Model choices are made by measurement, not marketing: French speech recognition 
 word error rate** across human-transcribed clips, and the voice won a human listening test against the alternatives. The
 evidence is in [`docs/benchmarks/`](docs/benchmarks/README.md).
 
-## Getting started
+## Get onspot
 
-### Requirements
+### Get your keys (two minutes)
+
+You can install onspot first, but you cannot get feedback until you add a key. onspot has no server
+and no subscription; the key is how the app reaches a language model. Both providers have free
+tiers.
+
+#### 1. Groq — required for the default setup
+
+Groq runs the language model that marks your speaking. The free tier is enough to try onspot. If
+you prefer to use DeepSeek or a local OpenAI-compatible server, skip this step and configure that
+instead.
+
+1. Open [console.groq.com/keys](https://console.groq.com/keys) and create a free account.
+2. Click **Create API Key**, name it `onspot`, and copy the key. It starts with `gsk_`.
+3. In onspot, open **Settings → LLM**.
+4. Paste the key and press **Test connection**. You should see a short reply.
+5. If it fails, copy the whole key again. The app shows the provider's error message in full.
+
+#### 2. ElevenLabs — optional, cloud voice only
+
+The default voice is local Piper and needs no key. Add ElevenLabs only if you want its voices.
+
+1. Open [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys) and
+   create a free account.
+2. Create an API key and copy it.
+3. In onspot, open **Settings → Text-to-speech**, switch to **Cloud**, and choose **ElevenLabs**.
+4. Paste the key and pick a voice. On a free plan, use the app's **premade** voices; library
+   voices require a paid plan.
+5. Press **Preview** to check it works. If you do not want cloud voices, leave text-to-speech on
+   **Local**.
+
+**If a key does not work:** open an issue at
+[github.com/khizardevelops/onspot/issues](https://github.com/khizardevelops/onspot/issues) with the
+exact error message. Never post your key.
+
+### Option 1 — Download the ready-to-use app (most people)
+
+Grab the latest build for your platform from the
+**[releases page](https://github.com/khizardevelops/onspot/releases/latest)**. Nothing to compile,
+no terminal, no developer tools.
+
+| Platform | Download | Notes |
+|---|---|---|
+| **Windows 10/11** | `.exe` installer or `.msi` | x64 and ARM64 builds |
+| **macOS 10.15+** | `.dmg` | Apple Silicon and Intel builds |
+| **Linux** | `.deb`, `.rpm`, `.AppImage` or Flatpak | x64 and ARM64 builds |
+| **Android 7+** | `.apk` | arm64 phones and tablets |
+| **Web / iPhone & iPad** | [onspot.khizardevelops.workers.dev](https://onspot.khizardevelops.workers.dev) | Install from Safari: Share → Add to Home Screen |
+
+**Before you start, you need:**
+
+- A **microphone** (the one in your laptop or phone is fine).
+- About **400 MB of free space** for the French speech model and voice; they download once, on
+  demand, and stay cached.
+- A **free Groq API key** for feedback. [Create one here](https://console.groq.com/keys); the
+  walkthrough is [above](#get-your-keys-two-minutes). You can also use DeepSeek or a local
+  OpenAI-compatible server instead.
+- *(Optional)* A **free ElevenLabs key** if you want cloud voices. The default local voice needs
+  no key.
+- Internet access for that first model download. After it, the speech parts work offline.
+
+**First run, in five steps:**
+
+1. **Create a free Groq key** at [console.groq.com/keys](https://console.groq.com/keys).
+2. **Settings → Language data → Download** (about 363 MB for French, one time).
+3. **Settings → LLM**: paste the key and press **Test connection**.
+4. Allow the **microphone** when your system asks.
+5. Pick a prompt and start talking.
+
+> **A note on early-release builds.** The installers are not code-signed yet. On macOS, you may
+> need to allow the app in **System Settings → Privacy & Security** the first time; on Windows,
+> SmartScreen may ask you to confirm. On Android, you may need to allow installs from your browser
+> or file manager. These warnings are expected and are being worked on.
+
+### Option 2 — Build from source (developers)
+
+Everything below is for running the app from this repository. If you just want to use onspot, use
+the downloads above.
+
+#### Requirements
 
 - **Node.js 20.19+ or 22.12+** and npm
-- A modern browser (Chromium or Firefox). Speech runs on **WebAssembly**, so no GPU is needed.
+- A modern browser (Chromium, Firefox or Safari). On iPhone/iPad, install the web app from Safari
+  with Share → Add to Home Screen. Speech runs on **WebAssembly**, so no GPU is needed.
 - About **400 MB** of free space for a language's models
-- An API key from an LLM provider for feedback. [Groq](https://console.groq.com) has a free tier.
+- An API key from an LLM provider for feedback. [Groq](https://console.groq.com/keys) has a free
+  tier; see [Get your keys](#get-your-keys-two-minutes).
 - *(Desktop only)* the [Rust toolchain and Tauri prerequisites](https://tauri.app/start/prerequisites/)
 
-### Run it
+#### Run it
 
 ```sh
 git clone <this-repo> onspot && cd onspot
@@ -253,11 +369,12 @@ bun run tauri dev    # desktop app
 
 Then, in the app:
 
-1. **Settings → Language data → Download** (one-time, cached afterwards)
-2. **Settings → AI provider**: paste your API key and press **Test connection**
-3. Allow the **microphone** when asked, pick a prompt, and start talking
+1. **Create a free Groq key** at [console.groq.com/keys](https://console.groq.com/keys).
+2. **Settings → Language data → Download** (one-time, cached afterwards)
+3. **Settings → LLM**: paste the key and press **Test connection**
+4. Allow the **microphone** when asked, pick a prompt, and start talking
 
-### Build
+#### Build
 
 ```sh
 bun run build        # static web build in build/
@@ -278,7 +395,7 @@ bun run android:dev            # live reload on a connected device
 Release signing reads `src-tauri/gen/android/keystore.properties` (gitignored).
 
 Every push to `main` also builds the arm64 APK on GitHub Actions
-(`.github/workflows/android.yml`); download it from the run's artifacts. Pushing a `v*` tag
+(`.github/workflows/android.yml`); download it from the run's uploaded files. Pushing a `v*` tag
 attaches the APK to a GitHub Release. To sign CI builds, add the repository secrets
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`; without them the APK is
 unsigned.
@@ -321,15 +438,27 @@ speaks.
 ## Roadmap
 
 - **More languages**, each approved through a human listening test and transcript review
+- Longer takes (today the recording stops at 60 seconds)
 - Pronunciation scoring and spaced-repetition drills built from your recurring mistakes
-- An iOS app (the desktop, web and Android builds are available today)
+- iPhone and iPad as an installable PWA, [live here](https://onspot.khizardevelops.workers.dev), not a native App Store app; real-device verification and the install guide are still being polished
 
 ## Contributing
 
-Issues and pull requests are welcome. Before proposing a new model or voice, read
-[`docs/languages.md`](docs/languages.md): a model is only accepted once it has loaded and produced
-output in a real browser and passed a human quality check. The project's working notes,
-decisions and command reference live in [`.agents/handoff/`](.agents/handoff/README.md).
+Issues and pull requests are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
+development setup, the language approval rules and the review process. You do not have to write
+code to help: testing on your machine, reporting a confusing correction, improving the docs and
+adding example prompts are all useful.
+
+- **Found a bug?** Open an issue with your platform, what you did, and what happened.
+- **Want to add a language or voice?** Read [`docs/languages.md`](docs/languages.md) first: a model
+  is only accepted once it has loaded and produced output in a real browser and passed a human
+  quality check.
+- **Looking for a place to start?** Issues labelled `good first issue` are scoped for newcomers.
+- **Security problem?** Do not open a public issue; read [`SECURITY.md`](SECURITY.md).
+- **Code of conduct:** [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+The project's working notes, decisions and command reference live in
+[`.agents/handoff/`](.agents/handoff/README.md).
 
 ## Licence
 

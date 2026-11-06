@@ -1,5 +1,157 @@
 # Decisions
 
+### iOS ships as a PWA, not through the App Store (2026-11-06)
+User: onspot is completely free and is on every platform except iOS, "because it requires a paid
+apple dev account which i dont want to do". Decided: iPhone and iPad get the existing static web
+build as an installable home-screen app (manifest, service worker, iPhone layout, an in-app
+install guide), not a Tauri iOS build. Rejected: the App Store and TestFlight (paid account),
+free sideloading via Xcode, AltStore or SideStore (expires every 7 days, 3-app cap), the EU
+marketplaces (still need the paid account), Apple's fee waiver (organisations only). Known costs:
+no background work or system reminders without a push server, downloads only while the app is on
+screen, local Whisper probably too heavy for iOS memory (about 2 GB, `docs/research/model_problem.md`),
+and Safari has never been tested. The hosting must move off GitHub Pages before learners install,
+because a PWA's storage belongs to its origin. Live at
+**https://onspot.khizardevelops.workers.dev** as Cloudflare Workers static assets; not
+device-verified. The brief is `docs/prompts/ios-focused-pwa.md`, tracked in
+`docs/planning/ideas.md`. This replaces the Tauri iOS route in "iOS is deferred, not partially
+built" (2026-10-25) below.
+
+### The PWA is deployed as Cloudflare Workers static assets via `cf` (2026-11-06)
+User chose Cloudflare (over Netlify/GitHub Pages), has no iPhone/iPad yet (only a macOS VM on an
+external drive), wants iOS launch images, and wants local STT/voice downloads kept while cloud is
+recommended on iPhone. The original Pages plan was superseded by the `cf` CLI's current path:
+- **Host:** `cf pages deploy` reports legacy Pages unsupported; `cf deploy` detects SvelteKit and
+  refuses to build it. `cf deploy --prebuilt` accepts a Build Output Specification, so
+  `scripts/cf-deploy.sh` builds the SPA, assembles `.cloudflare/output/v0`, and deploys a Worker
+  named `onspot` at the account's `workers.dev` origin. The legacy Pages project
+  `onspot-4k1.pages.dev` created while probing is empty and unused; `wrangler.toml` was removed.
+- **SPA fallback:** `worker.config.json` uses
+  `assets.notFoundHandling: "single-page-application"`. The Pages `_redirects` rule is rejected as
+  an infinite loop by Workers assets and was removed. `static/_headers` **is** applied (verified
+  live).
+- **Headers:** COOP `same-origin-allow-popups` + COEP `credentialless` keeps the Google Identity
+  Services popup working, at the cost of cross-origin isolation. Local WASM stays single-threaded
+  on production. Do not switch to `same-origin` without testing Drive in Chrome and Safari.
+- **Asset limit:** Workers caps a file at 25 MiB. The WebGPU-only ORT binary is 26.5 MiB and is
+  omitted; the default WASM runtime (23.5 MiB) stays. Local WebGPU is unavailable on this host.
+- **Service worker API:** SvelteKit 3 removed `$service-worker`; use
+  `$app/service-worker` (`self`), `$app/manifest` (`immutable`/`assets`) and `$app/env`
+  (`version`), with `resolve('/')` for the registration path. It registers only in production web
+  builds (`serviceWorker.register: false` + manual registration), never dev/Tauri.
+- **Precache policy:** small app shell only. Exclude `piper-wasm`, launch images, sample audio/MP3s
+  and the ORT runtimes; cache WASM runtimes on first use. Never cache cross-origin API/model
+  traffic. Offline navigations get a cached shell with an absolute app-root `<base>`.
+- **Updates wait:** no automatic `skipWaiting`; the learner presses Reload. A waiting worker
+  prompts, first install does not.
+- **Install UI:** a dismissible card on Apple touch browser tabs (hidden on welcome/Settings and
+  once installed), plus a permanent Settings → iPhone and iPad section. Local models remain
+  offered; cloud speech is a recommendation, not a forced default.
+- **Icons/launch:** generated from `src-tauri/icons/ios/AppIcon-512@2x.png` by
+  `scripts/pwa-assets.sh`; splash images are wanted, so 28 portrait/landscape files are committed.
+- **CI:** `.github/workflows/cloudflare.yml` installs `cf`, runs the deploy script, and stays
+  warning-only until `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secrets exist. GitHub Pages
+  stays up as the old origin until an export-and-move notice and migration period are agreed.
+
+### First run is a `/welcome/` guide, and a key is saved only after it answers (2026-11-06)
+User's idea: a first-run onboarding flow asking for a free Groq key, or a ChatGPT / Claude /
+DeepSeek / custom key, an ElevenLabs key only if they want cloud TTS, an honest note that cloud TTS
+sounds better, and a way back if skipped. Built as a **route**, not a modal: it can be deep-linked,
+reopened from Settings → Learning → **Setup guide**, and used by Practice's "Set up LLM" gate. The
+`onspot.onboarding.v1` localStorage flag holds `done` or `skipped`; the root layout redirects after
+settings and Practice load only when the flag is null and `llmConfigured` is false. The top action
+marks skipped only if the guide was never completed, so reopening a finished guide cannot undo it.
+The coach step tests the key with `testConnection` on a temporary endpoint; it writes settings only
+after a successful answer (or when the learner explicitly chooses "Skip the check"), so a failed
+key is never saved. Groq can also become the speech-to-text provider from the same key; the other
+providers leave speech local and the final step links to the one-time language-data download. The
+voice step asks for ElevenLabs only when cloud is chosen, and says plainly that cloud voices sound
+better while on-device voices are private, free and flatter. **Claude is honest:** there is no native
+Anthropic adapter in the app, so the "Claude · custom endpoint" card uses an OpenAI-compatible gateway
+(OpenRouter or another), states that, and points local servers to Settings → LLM → Local.
+
+### Practice glare follows the live mode and drifts slowly (2026-11-06)
+User's idea: blue-green glare in casual, red in exam, app accent outside a session; then "changing
+the session mode from exam to casual should change the background glare"; then the red read dimmer
+than the blue and should move slowly like Apple's tinted backgrounds. `PracticeScreen` sets
+`data-glare` from `$practice.mode` directly: `casual` (brand + brand-2 + brand-3) or `exam` (error
++ destructive). The mode switch only exists in a draft, so the glare reacts there; once a session
+has takes the mode is locked. Three large soft blobs sit low in the visible page under the cards and
+drift on transform-only animations (38s/46s/52s, negative delays, `will-change: transform`), so the
+compositor moves them and the paper never repaints; `prefers-reduced-motion` stops them. Red has a
+lower perceived lightness than cyan, so exam uses higher colour strengths (22/18/16%) than casual
+(14/12/10%) and a stronger top-left wash (16% vs 10%). The earlier "accent outside a session" state
+was superseded by the mode-switch follow-up; the base `--glare-*` values remain only as a fallback.
+
+### Dark depth is a surface ladder plus white catchlights, not shadow (2026-11-06)
+User: light mode has depth; dark mode looked like one filter over everything, with components hard
+to separate. Measured in the browser: the dark paper texture rendered around `#2c2823` (its
+`colorShadow` `#3d3830` lifted it) while the attempt card was `#24211c` and sheets `#1e1c19`; every
+surface was within a couple of lightness steps, and black drop shadows are invisible on dark.
+Decision: depth comes from **surface lightness**, with a small white catchlight because shadow cannot
+describe an edge. The ladder is page `#12110f` → sheet/card `#24211d` → raised key `#332e27`; insets
+`#1a1815` and wells `#0d0c0b` sit below the sheet. Borders are light (`#3d372f`, sheet/key lines at
+12%) and `--sheet-frost` is 90% card so the blurred paper cannot flatten a card back toward the page.
+The dark paper params were darkened (`PAGE.dark` `#12110f / #141210 / #26231f`, `KEY.dark` shadow
+`#211d18`). White catchlights: `--shade-light` 0.20, `--glass-shade-light` 0.18, a lit top border on
+glass cards, top highlights on attempt/feedback cards, and light header seams. Light tokens and
+unshared component styles are deliberately untouched (the `--index-highlight` and `--paper-top-light`
+defaults are transparent). Contrast re-checked: foreground/card 13.6:1, muted 7.2:1, faint 5.8:1,
+brand 6.2:1, error 6.0:1, warn 8.3:1, good 7.4:1.
+
+### The translation note is a paged sticky note (2026-11-06)
+User: take inspiration from a sticky-note mockup (washi tape, folded corner, tab header, typewriter
+source, stitched word pairs); then put "Each word" at the far right; then keep alternatives from
+stacking when long. Implemented:
+- **Paper and tool header.** Pastel note paper, washi tape at the top-left, folded bottom-right
+  corner, a slight `-0.4deg` tilt (none on phones), dashed header rule. The active variant is a
+  dark ink tab (light tab in dark); "Translation" is muted; the disclosure controls are handwritten
+  Caveat in wavy blue.
+- **Order.** The close X leads the header; the variant control gets `margin-inline-start: auto` and
+  ends exactly at the note's right edge (verified at 390px: toggle right = heading right = 357px).
+  On phones the decorative mark is hidden so the longer "Hide each word" label still fits the row.
+- **Type.** Translation lines use Courier Prime regular (400 face imported); word-pair source and
+  meaning stay bold for mapping clarity. The connector is one clean 1.5px line fading at both ends,
+  not a dashed/dotted stitched line, which rendered badly at small sizes.
+- **Variants are paged, primary first.** Every idiomatic rendering is a page: page 1 is
+  `translations.idiomatic`, pages 2+ are `idiomaticVariants`. Only the current page is rendered
+  (`idiomaticPageIndex`, `currentIdiomatic`) with a compact `‹ 1 / 4 ›` pager at the right of the
+  note header. The default is page 1; the pager resets on a view change or translation regeneration,
+  wraps at both ends, and the note height stays constant. Alternatives after page 1 carry the small "or" prefix;
+  a single rendering has no pager. Controls are 24px on desktop and the 36px touch floor on coarse
+  pointers. The translation line is `aria-live="polite"`. The old "+N alternatives" disclosure was
+  removed: the pager itself is the progressive disclosure, and it saves more space.
+
+### Reminders are checked when the app is open; voice is a setting, not a default (2026-11-06)
+User idea: optional Duolingo-like practice reminders, off/on, frequent or infrequent. Built as an
+opt-in, off-by-default preference: Frequent ≈ one day, Infrequent ≈ three days after the last take.
+The clock is the newest saved session's latest attempt (plus a device-local timestamp written when
+a take is saved, so it resets immediately). A due reminder shows in Practice's normal notice strip
+with **Start speaking** and **Not now** (snooze one cadence); it is checked on launch, on return to
+visibility and every five minutes. With notification permission, one system notification per due
+period is sent only while the app is hidden (`platform/notifications.ts`). Deliberately **not**
+built: background scheduling while the app is closed, which would need a Tauri notification plugin
+and platform scheduling (and web push needs a server). The Settings copy says the nudge appears when
+onspot is opened, so it does not promise a wake-up. Download completion uses the same notification
+path plus a 6 s toast, because the progress bar may be out of sight.
+
+### Word-for-word mapping reads left to right (2026-11-06)
+The **Each word** breakdown under a Word-for-word translation is a wrapping row of columns, not a
+vertical list: each column holds the source word, a 1px rule, then its translation, all centred
+(`AttemptCard.svelte` `.vocab-list` / `.vocab-entry`). The pairs follow the sentence order, which a
+vertical list lost. The same layout is used on phones; a five-pair example fits one row at 390px.
+The learner asked to see the mobile result and may later want phones reverted to the earlier
+vertical list; that would be a `@media (max-width: 640px)` override, not a change to the markup.
+
+### A session export is Markdown, built from the stored take (2026-11-06)
+Session transcript export (`utils/sessionTranscript.ts`) reads the session, its attempts and each
+attempt's corrections from the database rather than the live view, so History and Practice export
+the same thing. It writes Markdown: title/date/mode, then each take's prompt, "You said", the
+correct version, the explanation with tags stripped (`speakableExplanation`), the follow-up, stored
+translation variants and the correction list. Markdown was chosen over `.txt` because headings and
+bold labels stay readable in a browser, an editor or a printout. It uses the Tauri save dialog where
+one exists and `browser-fs-access` elsewhere, matching the database export. The capability guide
+lives in Settings → Learning because it describes the coach itself, not a per-session action.
+
 ### Automatic model choice replaces manual picking and the rotation setting (2026-11-01)
 User: "why tf is this even an error warning? … look at all the daily and per minute limits and
 intelligently rotate … in order of accuracy", then "the user shouldn't really have to manually

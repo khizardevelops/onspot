@@ -17,7 +17,7 @@ prompts, scratch, and any folder added later.
 everything that ever happened in the project. When information stops being useful day to day,
 it moves here. That keeps space free and the active documents readable.
 
-## The archive mirrors `docs/`
+## The archive mirrors `docs/` (with one exception)
 
 `docs/archive/` replicates the exact folder tree of `docs/`. Archived content goes to the same
 path it had when active, with `archive/` inserted after `docs/`:
@@ -28,9 +28,6 @@ docs/<folder>/<subfolder>/<file>   →   docs/archive/<folder>/<subfolder>/<file
 
 ```
 docs/                                     docs/archive/
-├── planning/                             ├── planning/
-│   ├── ideas.md            ──────────►   │   ├── ideas.md
-│   └── bugs.md             ──────────►   │   └── bugs.md
 ├── benchmarks/                           ├── benchmarks/
 │   └── stt.md              ──────────►   │   └── stt.md
 ├── research/                             ├── research/
@@ -40,16 +37,28 @@ docs/                                     docs/archive/
 ```
 
 Create the folders in `archive/` as needed, matching `docs/` one-for-one. The tree is the
-lookup: anything archived from `docs/X/Y.md` is always at `docs/archive/X/Y.md`.
+lookup: anything archived from `docs/X/Y.md` is at `docs/archive/X/Y.md` — with one exception.
+
+**Exception — planning.** The planning backlog keeps its history inside its own folder, so all
+planning data stays together:
+
+```text
+docs/planning/ideas.md   ->   docs/planning/archive/ideas.md
+docs/planning/bugs.md    ->   docs/planning/archive/bugs.md
+```
+
+Do not create `docs/archive/planning/`. The workflow is documented in
+[`docs/planning/README.md`](../planning/README.md).
 
 This applies to two cases:
 
-- **A whole file or folder is retired.** Move it to its mirrored path. Nothing stays behind in
-  the active tree, except an optional pointer (below).
+- **A whole file or folder is retired.** Move it to its mirrored path (or, for planning, to
+  `docs/planning/archive/`). Nothing stays behind in the active tree, except an optional pointer
+  (below).
 - **Part of a file is archived.** Cut the old part and append it to the mirrored file at the
-  same path, e.g. old sections of `docs/planning/ideas.md` go into
-  `docs/archive/planning/ideas.md`. The newest archived batch goes at the top under a dated
-  heading, `## Archived 2026-10-01`. The active file keeps only what is current.
+  same path, e.g. old sections of `docs/research/model_problem.md` go into
+  `docs/archive/research/model_problem.md`. The newest archived batch goes at the top under a
+  dated heading, `## Archived 2026-10-01`. The active file keeps only what is current.
 
 ## When to archive
 
@@ -71,7 +80,7 @@ detail.
 1. **Move, don't copy.** The content leaves the active document. Having it in both places
    defeats the purpose.
 2. **Use the mirrored path.** Same folders, same subfolders, same file name, under
-   `docs/archive/`.
+   `docs/archive/`. The planning backlog is the exception: use `docs/planning/archive/`.
 3. **Mark it.** A file archived whole starts with a note; an appended batch has its dated heading:
 
    ```markdown
@@ -93,5 +102,6 @@ detail.
   one wins.
 - **Only the archive tree lives here.** No new documents are written here directly. Everything
   in `archive/` arrived by being moved out of `docs/`. This README is the only exception.
+  Planning keeps its own archive in `docs/planning/archive/`.
 - **Not read by default.** People and agents open a specific archived file only when a task
   needs historical context. The same rule applies to `.agents/handoff/archive/`.

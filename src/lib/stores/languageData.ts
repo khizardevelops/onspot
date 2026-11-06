@@ -17,7 +17,9 @@ import {
 import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/speech/tts/service.js';
 import { isCached } from '#lib/speech/tts/piper/cachedFetch.js';
 import { voiceAssets } from '#lib/speech/tts/piper/assets.js';
+import { notify } from '#lib/platform/notifications.js';
 import { appSettings } from './settings';
+import { toast } from './toast';
 
 export type LanguageDataStatus = 'checking' | 'missing' | 'downloading' | 'ready' | 'error';
 
@@ -119,6 +121,16 @@ function downloadContents(language: LanguageDefinition, languageParts: boolean, 
 /** True when every required part is cached. */
 function allInstalled(installed: LanguageParts): boolean {
 	return installed.stt && installed.voice && installed.explanationVoice;
+}
+
+/**
+ * Tells the learner a download ended. The in-app toast is the primary notice;
+ * when the app is in the background, the device notification reaches them too
+ * (if they allowed notifications), because the progress bar is out of sight.
+ */
+function announceDownloadFinished(message: string): void {
+	toast(message, 6000);
+	if (typeof document !== 'undefined' && document.hidden) notify('onspot', message);
 }
 
 /** The voice's downloads that are not cached yet (a Japanese voice also needs its dictionary). */
@@ -330,14 +342,17 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 			running = null;
 			phase = null;
 			await refreshLanguageData();
+			announceDownloadFinished(`${language.name} data is ready. You can practise offline now.`);
 		} catch (error) {
 			if (token !== jobToken) return;
+			const message = error instanceof Error ? error.message : 'Language data download failed.';
 			store.update((state) => ({
 				...state,
 				status: 'error',
 				statusText: '',
-				error: error instanceof Error ? error.message : 'Language data download failed.'
+				error: message
 			}));
+			announceDownloadFinished(`Language data download failed: ${message}`);
 		} finally {
 			if (token === jobToken) {
 				running = null;

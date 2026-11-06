@@ -24,6 +24,20 @@ function storedTheme(): Theme {
 let current = $state<Theme>(storedTheme());
 document.documentElement.setAttribute('data-theme', current);
 
+/**
+ * The installed iOS app's status bar has dark text on a light page and light
+ * text on a dark one. The meta tag is set before the first paint in app.html;
+ * this keeps it right after a theme switch.
+ */
+function syncStatusBar(next: Theme): void {
+	const meta = document.querySelector<HTMLMetaElement>(
+		'meta[name="apple-mobile-web-app-status-bar-style"]'
+	);
+	if (meta) meta.content = next === 'dark' ? 'black-translucent' : 'default';
+}
+
+syncStatusBar(current);
+
 /** The current appearance, readable reactively as `theme.current`. */
 export const theme = {
 	get current(): Theme {
@@ -35,6 +49,7 @@ export const theme = {
 export function applyTheme(next: Theme): void {
 	current = next;
 	document.documentElement.setAttribute('data-theme', next);
+	syncStatusBar(next);
 	try {
 		localStorage.setItem(STORAGE_KEY, next);
 	} catch {

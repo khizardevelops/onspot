@@ -2,6 +2,54 @@
 
 Foundational technology limits that require replacement or architectural change to resolve.
 
+## iOS PWA Limits (foundation built, device-verify pending)
+
+The installable layer is in the web build but has not run on an Apple device. The user has no
+iPhone/iPad; only a macOS VM on an external drive. Treat these as **verify on device** until the
+brief's Phase 0 walk-through is done (`docs/prompts/ios-focused-pwa.md`).
+
+- **No Apple hardware.** Real Safari/WebKit, iOS memory limits, launch images, status bar, silent
+  switch and the home-screen install flow are unverified. Chromium iPhone/iPad emulation is not
+  evidence for WebKit.
+- **Storage can disappear.** Safari may delete script-writable storage after about seven days
+  without use; a home-screen app is treated separately, and its storage is separate from Safari's.
+  The install guide tells learners to install first and to export/restore.
+- **No background work or Web Push.** iOS suspends the app when it leaves the screen, so model
+  downloads, timers and recordings stop; reminders are in-app only. There is no server and no
+  system notification for a closed app. The download-finished toast is the iOS signal.
+  `notificationsSupported()` deliberately returns false on Apple touch devices, so Reminder
+  Settings uses the in-app copy and does not request a system permission.
+- **Local Whisper is probably too heavy.** Transformers.js `whisper-small` holds about 2 GB and is
+  likely killed. Local Piper is much smaller. Keep the local download option but warn honestly; do
+  not offer a 299 MB model that cannot run on the device.
+- **No cross-origin isolation on Cloudflare.** `_headers` uses COOP
+  `same-origin-allow-popups` (for the Google Identity Services popup) and COEP
+  `credentialless`, so `crossOriginIsolated` is false and local WASM is single-threaded. Moving to
+  `same-origin` needs a live Drive test; do not claim multi-threaded local inference.
+- **Audio.** The Ring/Silent switch may mute playback; `navigator.audioSession.type`
+  (`play-and-record` while recording, `playback` for read-back) needs a device check. WebKit's
+  `MediaRecorder` containers, Opus playback, WebCodecs Opus encode/decode, autoplay after an async
+  feedback request, and interruption/lock behaviour are all unverified.
+- **Microphone permission** may be asked again on each launch of a home-screen app; if so,
+  `PermissionsPrompt` copy must say it rather than looking broken.
+- **Service worker updates cannot be tested with `bun run preview`.** A rebuild deletes
+  `.svelte-kit/output` and Vite preview exits. Use a static server over `build/` for the update
+  flow (the 2026-11-06 check did). This is a tooling limit, not a product defect.
+- **Interaction details to check:** `scrollend` support in the card stack; ProMotion's default
+  60 Hz script cap; `display-mode: standalone`/`navigator.standalone` detection on iPadOS (Mac UA
+  + `maxTouchPoints`); safe areas in landscape/notch; keyboard covering fields; selection/callout
+  for hover meanings; sheet/card gestures versus edge/home swipes; Back inside the installed app.
+- **Cloudflare deployment and headers are live** at
+  `https://onspot.khizardevelops.workers.dev` (root/`/history/` 200, manifest, service worker,
+  `_headers`, offline). **Google Drive popup in the installed app, WebDAV CORS, Screen Wake Lock,
+  Web Share files, export to Files and the splash/status-bar appearance** have not been run.
+- **Workers asset cap:** the 26.5 MiB WebGPU-only ORT binary exceeds the 25 MiB per-file limit and
+  is omitted by `scripts/cf-deploy.sh`; the 23.5 MiB WASM runtime is included. Local WebGPU is
+  unavailable on this host; default local WASM is unchanged.
+- **`cf` deployment shape:** `cf pages deploy` is disabled and `cf deploy` refuses SvelteKit. The
+  live site is a Workers static-assets Worker (`cf deploy --prebuilt`), not the empty legacy Pages
+  project `onspot-4k1.pages.dev`. The Pages-only `_redirects`/`wrangler.toml` were removed.
+
 ## French TTS in the Browser: G2P Is the Bottleneck
 
 Everything below was verified in headful Chrome before being accepted or rejected.

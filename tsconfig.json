@@ -6,6 +6,8 @@
 	},
 	"include": ["src", "vite.config.ts"],
 	"exclude": [
+		// The service worker runs in its own typed context (src/service-worker/tsconfig.json).
+		"src/service-worker",
 		// Vendored wasm-bindgen glue, byte-matched to its .wasm; typed by the sibling .d.ts.
 		"src/lib/speech/tts/piper/vendor/**/*.js",
 		// Emscripten output of tools/whisper-webgpu/build.sh (model lab only, gitignored).

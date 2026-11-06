@@ -22,12 +22,14 @@
 	import { LEARNER_SESSION, providePracticeSession, type PracticeSession } from '#lib/stores/practiceSession.js';
 	import { appSettings } from '#lib/stores/settings.js';
 	import { languageData } from '#lib/stores/languageData.js';
+	import { reminders, snoozeReminders } from '#lib/stores/reminders.js';
 	import {
 		firstMissingRequirement,
 		processingReady,
 		processingRequirements
 	} from '#lib/stores/processing.js';
 	import { getLanguage } from '#lib/languages/index.js';
+	import { exportSessionTranscript } from '#lib/utils/sessionTranscript.js';
 	import { usageWarnings } from '#lib/usage/monitor.js';
 	import { pacingWait } from '#lib/adapters/llm/index.js';
 	import { toast } from '#lib/stores/toast.js';
@@ -47,6 +49,7 @@
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 	import {
 		AlertTriangle,
+		Bell,
 		Check,
 		Download,
 		KeyRound,
@@ -103,7 +106,7 @@
 		firstMissing?.target === 'speech-to-text'
 			? `${pageHref('/settings')}#speech-to-text`
 			: firstMissing?.target === 'llm'
-				? `${pageHref('/settings')}#llm`
+				? pageHref('/welcome')
 				: `${pageHref('/settings')}#text-to-speech`
 	);
 	const setupLabel = $derived(
@@ -126,6 +129,12 @@
 	});
 	const recording = $derived($practice.phase === 'recording');
 	const locked = $derived($practice.sessionId !== null);
+	/*
+	 * The ambience follows the live practice mode. The mode can only be
+	 * switched in a draft, so the glare has to react there; once a session has
+	 * takes the mode is locked and the glare simply stays with it.
+	 */
+	const glareTone = $derived($practice.mode === 'exam' ? 'exam' : 'casual');
 
 	let activeCorrectionId = $state<string | null>(null);
 	let lastAttemptId: string | null = null;
@@ -287,6 +296,7 @@
 	const sessionActions = $derived<NeoMenuItem[]>(
 		locked
 			? [
+					{ value: 'export', label: 'Export transcript', before: sessionActionIcon, divider: { bottom: true } },
 					{ value: 'rename', label: 'Rename session', before: sessionActionIcon, divider: { bottom: true } },
 					{ value: 'delete', label: 'Delete session', before: sessionActionIcon, color: 'error' }
 				]
@@ -308,9 +318,20 @@
 
 	function onSessionAction(item: NeoMenuItem): void {
 		const key = String(item.value);
-		if (key === 'rename') beginRename();
+		if (key === 'export') void exportCurrentTranscript();
+		else if (key === 'rename') beginRename();
 		else if (key === 'delete') deleteOpen = true;
 		else if (key.startsWith('mode:')) setSessionMode(key.slice(5) as 'exam' | 'casual');
+	}
+
+	async function exportCurrentTranscript(): Promise<void> {
+		const sessionId = $practice.sessionId;
+		if (!live || !sessionId) return;
+		try {
+			if (await exportSessionTranscript(sessionId)) toast('Transcript exported');
+		} catch (error) {
+			toast(error instanceof Error ? `Could not export: ${error.message}` : 'Could not export the transcript.');
+		}
 	}
 
 	const stats = $derived.by(() => {
@@ -328,7 +349,7 @@
 </script>
 
 {#snippet sessionActionIcon({ item }: { item: { value: unknown } })}
-	{#if item.value === 'rename'}<Pencil size={16} />{:else}<Trash2 size={16} />{/if}
+	{#if item.value === 'export'}<Download size={16} />{:else if item.value === 'rename'}<Pencil size={16} />{:else}<Trash2 size={16} />{/if}
 {/snippet}
 
 {#snippet sessionLine()}
@@ -508,6 +529,7 @@
 
 <div
 	class="practice-grid relative grid h-full grid-cols-1"
+	data-glare={glareTone}
 	class:coach-closed={!coachOpen}
 	class:pulled-open={pulledOpen}
 	style:--feedback-content-width={feedbackContentWidthStyle}
@@ -515,6 +537,7 @@
 	<section class="practice-stage relative flex min-h-0 min-w-0 flex-col overflow-hidden">
 		<div class="ambient ambient-one" aria-hidden="true"></div>
 		<div class="ambient ambient-two" aria-hidden="true"></div>
+		<div class="ambient ambient-three" aria-hidden="true"></div>
 
 		<!--
 			One bar for the whole page: navigation, the prompt (or the recording, or
@@ -551,8 +574,8 @@
 			{/snippet}
 		</AppHeader>
 
-		<!-- Setup, usage and errors: a slim strip under the bar, only when there is something to say (and never for a sample session). -->
-		{#if live && ($practice.error || (!busy && !recording && (!sessionReady || usageWarning)))}
+		<!-- Setup, usage, reminders and errors: a slim strip under the bar, only when there is something to say (and never for a sample session). -->
+		{#if live && ($practice.error || (!busy && !recording && (!sessionReady || usageWarning || ($reminders.ready && $reminders.due && sessionReady))))}
 			<div class="bar-notices" in:fly={{ y: -6, duration: 220 }} out:fade={{ duration: 140 }}>
 				{#if $practice.error}
 					<div class="bar-notice" data-tone="error" role="alert">
@@ -597,6 +620,25 @@
 							{#if otherUsageWarnings > 0}<span class="text-muted-foreground"> (+{otherUsageWarnings} more)</span>{/if}
 							<a class="font-medium text-[var(--brand)] underline underline-offset-4" href={`${pageHref('/settings')}#usage`}>See usage</a>
 						</p>
+					</div>
+				{/if}
+				{#if !busy && !recording && sessionReady && $reminders.ready && $reminders.due}
+					<div class="bar-notice reminder-notice" data-tone="note" role="status">
+						<Bell class="mt-0.5 size-4 shrink-0" />
+						<p class="min-w-0 flex-1">
+							A short take now keeps {language?.name ?? 'your language'} fresh.
+						</p>
+						<NeoButton rounded class="reminder-start" onclick={() => startRecording()}>Start speaking</NeoButton>
+						<NeoButton
+							text
+							rounded
+							class="icon-button"
+							aria-label="Dismiss reminder"
+							title="Not now"
+							onclick={snoozeReminders}
+						>
+							{#snippet icon()}<X size={16} />{/snippet}
+						</NeoButton>
 					</div>
 				{/if}
 			</div>
@@ -695,11 +737,37 @@
 		/* How long the Feedback sidebar takes to slide in or out (desktop), or the sheet to rise (tablets). */
 		--feedback-slide-duration: 180ms;
 		--feedback-slide-easing: cubic-bezier(0.22, 1, 0.36, 1);
+		/* The ambience's two inks: brand by default, mode-coloured once a session exists. */
+		--glare-one: var(--brand);
+		--glare-two: var(--brand);
+		--glare-three: var(--brand);
+		--glare-soft: var(--brand);
+		/* Perceptual strength: red needs more colour at the same alpha to read as bright as cyan. */
+		--glare-strength-one: 14%;
+		--glare-strength-two: 12%;
+		--glare-strength-three: 10%;
+		--glare-strength-soft: 10%;
+	}
+	:global(.practice-grid[data-glare='casual']) {
+		--glare-one: var(--brand);
+		--glare-two: var(--brand-2);
+		--glare-three: var(--brand-3);
+		--glare-soft: var(--brand-2);
+	}
+	:global(.practice-grid[data-glare='exam']) {
+		--glare-one: var(--error);
+		--glare-two: var(--destructive);
+		--glare-three: var(--error);
+		--glare-soft: var(--error);
+		--glare-strength-one: 22%;
+		--glare-strength-two: 18%;
+		--glare-strength-three: 16%;
+		--glare-strength-soft: 16%;
 	}
 	.practice-stage {
 		isolation: isolate;
-		/* The app's paper shows through; only the faint brand glow sits on it. */
-		background: radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--brand-2) 10%, transparent), transparent 28%);
+		/* The app's paper shows through; only the faint mode glow sits on it. */
+		background: radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--glare-soft) var(--glare-strength-soft), transparent), transparent 28%);
 	}
 	/* ------------------------------------------------------------------ The bar's prompt and controls */
 
@@ -823,7 +891,22 @@
 	.bar-notice[data-tone='error'] {
 		--tone: var(--error);
 	}
-	.bar-notice :global(svg:first-child) {
+	.bar-notice[data-tone='note'] {
+		--tone: var(--brand);
+	}
+	.reminder-notice {
+		flex-wrap: wrap;
+		align-items: center;
+	}
+	.reminder-notice p {
+		flex: 1 1 10rem;
+	}
+	.bar-notice :global(.neo-button.reminder-start) {
+		height: 28px;
+		padding-inline: 0.625rem;
+		font-size: 0.75rem;
+	}
+	.bar-notice > :global(svg:first-child) {
 		color: var(--tone);
 	}
 
@@ -831,9 +914,66 @@
 	:global(.rename-input) { min-width: 0; flex: 1; }
 	.confirm-dialog { max-width: 24rem; padding: 0.5rem; }
 	.empty-orb { background: linear-gradient(145deg, var(--brand), var(--brand-2) 60%, var(--brand-3)); }
-	.ambient { position: absolute; z-index: -1; border-radius: 999px; pointer-events: none; opacity: 0.5; }
-	.ambient-one { top: 10%; right: 8%; width: 15rem; height: 15rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-2) 14%, transparent), transparent 68%); }
-	.ambient-two { bottom: 18%; left: 2%; width: 12rem; height: 12rem; background: radial-gradient(circle, color-mix(in srgb, var(--brand-3) 12%, transparent), transparent 68%); }
+	/*
+	 * The mode's glow: two large soft colours that drift slowly out of phase,
+	 * the way Apple's tinted backgrounds move. The animation is transform-only,
+	 * so the compositor runs it; the paper underneath never repaints. The
+	 * gradients are the blur; no filter is needed.
+	 */
+	.ambient {
+		position: absolute;
+		z-index: -1;
+		border-radius: 999px;
+		pointer-events: none;
+		opacity: 0.5;
+		will-change: transform;
+	}
+	/* Large and low, where the page is visible under the cards, so the colour actually reads. */
+	.ambient-one {
+		right: 6%;
+		bottom: 2%;
+		width: 24rem;
+		height: 24rem;
+		background: radial-gradient(circle, color-mix(in srgb, var(--glare-one) var(--glare-strength-one), transparent), transparent 68%);
+		animation: glare-drift-one 38s ease-in-out infinite alternate;
+	}
+	.ambient-two {
+		bottom: 16%;
+		left: 2%;
+		width: 20rem;
+		height: 20rem;
+		background: radial-gradient(circle, color-mix(in srgb, var(--glare-two) var(--glare-strength-two), transparent), transparent 68%);
+		animation: glare-drift-two 46s ease-in-out -12s infinite alternate;
+	}
+	.ambient-three {
+		bottom: 6%;
+		left: 30%;
+		width: 26rem;
+		height: 26rem;
+		background: radial-gradient(circle, color-mix(in srgb, var(--glare-three) var(--glare-strength-three), transparent), transparent 70%);
+		animation: glare-drift-three 52s ease-in-out -20s infinite alternate;
+	}
+	@keyframes glare-drift-one {
+		0% { transform: translate3d(0, 0, 0) scale(1); }
+		50% { transform: translate3d(-7%, 5%, 0) scale(1.14); }
+		100% { transform: translate3d(6%, -6%, 0) scale(0.92); }
+	}
+	@keyframes glare-drift-two {
+		0% { transform: translate3d(0, 0, 0) scale(1); }
+		50% { transform: translate3d(8%, -6%, 0) scale(0.9); }
+		100% { transform: translate3d(-6%, 5%, 0) scale(1.16); }
+	}
+	@keyframes glare-drift-three {
+		0% { transform: translate3d(0, 0, 0) scale(1); }
+		50% { transform: translate3d(-8%, -5%, 0) scale(1.1); }
+		100% { transform: translate3d(7%, 4%, 0) scale(0.94); }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.ambient {
+			animation: none;
+			will-change: auto;
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
 		.practice-grid { --feedback-slide-duration: 1ms; }
 		.waveform span { transition-duration: 1ms !important; }

@@ -137,7 +137,7 @@
 	/** Back to Settings: the page it came from, or Settings itself when the preview was opened directly. */
 	function done(): void {
 		if (hasPageBehind()) history.back();
-		else void goto(`${pageHref('/settings')}#text-size`, { replaceState: true });
+		else void goto(`${pageHref('/settings')}#text-size`, { replace: true });
 	}
 	// Android Back does the same when there is no page behind (it would go to Practice otherwise).
 	closeOnBack(() => !hasPageBehind(), done);

@@ -7,6 +7,7 @@
 	import { goto } from '$app/navigation';
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
+	import { exportSessionTranscript } from '#lib/utils/sessionTranscript.js';
 	import { importLegacyJsonBackup } from '#lib/utils/export.js';
 	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
 	import {
@@ -29,6 +30,7 @@
 		CalendarArrowDown,
 		CalendarArrowUp,
 		CaseSensitive,
+		Download,
 		Pencil,
 		Play,
 		Regex,
@@ -44,6 +46,8 @@
 	let loadError = $state('');
 	let restoring = $state(false);
 	let restoreInput = $state<HTMLInputElement | null>(null);
+	/** The session whose transcript is being written, so one row shows the work. */
+	let exportingSessionId = $state<string | null>(null);
 	let query = $state('');
 	let regex = $state(false);
 	let caseSensitive = $state(false);
@@ -251,6 +255,18 @@
 			await goto(pageHref('/'));
 		} catch (error) {
 			failed('Opening the session', error);
+		}
+	}
+
+	async function exportTranscript(session: Session) {
+		if (exportingSessionId) return;
+		exportingSessionId = session.id;
+		try {
+			if (await exportSessionTranscript(session.id)) toast('Transcript exported');
+		} catch (error) {
+			failed('Exporting the transcript', error);
+		} finally {
+			exportingSessionId = null;
 		}
 	}
 
@@ -465,6 +481,18 @@
 												onclick={() => replay(session)}
 											>
 												{#snippet icon()}<Play class="size-3.5" />{/snippet}
+											</NeoButton>
+											<NeoButton
+												class="session-action"
+												text
+												rounded
+												loading={exportingSessionId === session.id}
+												disabled={exportingSessionId !== null && exportingSessionId !== session.id}
+												aria-label={`Export transcript of ${session.title}`}
+												title="Export transcript (.md)"
+												onclick={() => exportTranscript(session)}
+											>
+												{#snippet icon()}<Download class="size-3.5" />{/snippet}
 											</NeoButton>
 											<NeoButton class="session-action" text rounded aria-label={`Rename ${session.title}`} title="Rename" onclick={() => rename(session)}>
 												{#snippet icon()}<Pencil class="size-3.5" />{/snippet}

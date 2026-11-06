@@ -1,5 +1,166 @@
 # Tasks
 
+## iOS PWA live (2026-11-06, branch `fix/dark-mode-visual-depth`)
+- [x] Cloudflare Workers static assets deployed with `cf deploy --prebuilt` at
+      **https://onspot.khizardevelops.workers.dev**; `scripts/cf-deploy.sh`, `.github/workflows/cloudflare.yml`,
+      `static/_headers`; SPA fallback via `worker.config.json`.
+- [x] Drop the Pages-only `_redirects` and `wrangler.toml`; Workers rejects that redirect as an
+      infinite loop and applies the SPA fallback itself.
+- [x] Drop the 26.5 MiB WebGPU-only ORT binary for Workers' 25 MiB asset cap; keep the 23.5 MiB
+      WASM runtime.
+- [x] Live verify: root/`/history/` 200, manifest, service worker no-cache, `_headers`
+      (COOP/COEP/nosniff/referrer), 133 shell entries, SQLite WASM cached, offline History,
+      iPhone 14 card.
+- [ ] Add `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` repository secrets for the CI deploy;
+      set `VITE_GOOGLE_CLIENT_ID_WEB` and add the Worker origin to the Google OAuth web client.
+- [x] Check/build/SPDX, deep-link registration, offline SQLite, update prompt/reload, iPhone 14
+      dark, iPhone SE, iPad Pro, no overflow/errors.
+- [ ] Optional cleanup: delete the empty legacy Pages project `onspot-4k1.pages.dev`.
+- [x] Web app manifest, 192/512/maskable icons, 180 px Apple touch icon, light/dark theme colours,
+      iOS meta and 28 launch images; `scripts/pwa-assets.sh` regenerates them.
+- [x] Production web-only service worker (SvelteKit 3 `$app/service-worker`/`$app/manifest`/
+      `$app/env`): shell precache, small-asset filter, WASM-on-first-use, offline shell with pinned
+      base, no cross-origin API/model caching; `serviceWorker.register: false`.
+- [x] Waiting-worker update card with Later/Reload; no automatic takeover.
+- [x] iPhone/iPad install card plus permanent Settings → Learning section; local STT/voice stays
+      available with a cloud nudge; installed state.
+- [x] Pre-paint theme/status-bar meta and top safe-area padding.
+- [x] Verify: check/build/SPDX, deep-link registration, offline deep link, update prompt/reload,
+      iPhone 14 dark, iPhone SE, iPad Pro, no overflow/errors.
+- [x] Live Chrome verification: root/`/history/`, manifest, service worker no-cache, `_headers`,
+      deep links, 133-entry shell cache, SQLite WASM, offline History.
+- [ ] Add `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` repository secrets for the CI deploy;
+      set `VITE_GOOGLE_CLIENT_ID_WEB` and add the Worker origin to the Google OAuth web client;
+      then verify Safari on a Mac VM if possible.
+- [ ] Real iPhone/iPad: install from Safari (Share → Add to Home Screen), full-screen launch,
+      icon/name/splash, safe areas in portrait/landscape, keyboard, gestures, Back, silent switch,
+      interruptions, export/restore, offline after a language-data download.
+- [ ] Decide the GitHub Pages migration notice period; keep the old origin up and add the
+      export-and-move notice; redirect only after the notice period the user agrees.
+- [ ] Google Drive popup in the installed app; if broken, hide Drive there with an honest note.
+      WebDAV CORS.
+- [ ] Local Piper and Whisper on an iPhone: measure memory/speed; if Whisper is killed, mark it
+      unavailable with the reason but never remove the local download option wholesale.
+- [x] iOS notification honesty: `notificationsSupported()` is false on Apple touch devices, so
+      Reminder Settings offers only the in-app nudge and never requests system permission.
+- [ ] Screen Wake Lock during downloads, clean restart/Retry, free-space display, and Web Share
+      export.
+- [ ] Performance on a ProMotion iPhone/iPad and `crossOriginIsolated`/single-thread note.
+- [ ] README iPhone/iPad install section, `docs/releases/`, and move the idea to the archive when
+      actually shipped and verified.
+- [ ] Commit/push when the user asks (branch remains uncommitted).
+
+## Brand v2 (2026-11-06)
+- [x] Move every v1 asset into `brand-assets/v1/` and repoint its users.
+- [x] v2 in `brand-assets/v2/`: squircle and circle icons, mark, four logos, construction,
+      VectorCraft source, geometry scripts, README.
+- [x] Amended to monochrome: white for dark mode, black for light mode, no colour.
+- [x] Glyph: one shape, `currentColor`, mark alone and in both outlines (for themed icons, favicons, print).
+- [x] Glyph ground dips around bar 3 (minimal 0.25 m gap; bar stays solid).
+- [x] Every SVG recolourable (`currentColor`, default ink as `color`); `source/finish_svgs.py` after each export.
+- [x] In-app logo (header, welcome page) is the v2 squircle tile, light/dark by theme.
+- [x] Applied everywhere (circle): desktop/iOS/Android icons, adaptive layers, installers, favicon,
+      PWA icons and splash, Flatpak icon and branding, README header (`scripts/brand-assets.sh`).
+
+## First-run onboarding + mode glare (2026-11-06, branch `fix/dark-mode-visual-depth`)
+- [x] `/welcome/` three-step guide: coach key (Groq / DeepSeek / ChatGPT / Claude gateway /
+      custom), optional Groq speech-to-text, on-device vs ElevenLabs voice, summary.
+- [x] Test the key on a temporary endpoint before saving; failed keys are never written.
+- [x] ElevenLabs key only for cloud TTS; honest cloud-vs-device copy.
+- [x] `onspot.onboarding.v1` done/skipped flag; first-run redirect only when no LLM and flag null.
+- [x] Settings → Learning → Setup guide; Practice's LLM gate points to `/welcome/`.
+- [x] `data-glare` on Practice follows the live mode: casual blue-green, exam red; a draft's mode
+      switch changes it immediately, and a started session locks it.
+- [x] Boost the exam strength (22/18/16%) over casual (14/12/10%) so red does not read dimmer.
+- [x] Three large soft blobs drift slowly on transform-only animations (38/46/52s), stopped by
+      reduced motion; moved low so they show beneath the cards.
+- [x] Archive both ideas in `docs/planning/archive/ideas.md` (2026-11-06).
+- [x] Verify with Playwright 29/29, light/dark/phone screenshots, check/build/SPDX.
+- [ ] Verify a live key against each provider and a real ElevenLabs key.
+- [ ] Try the guide on a real phone and desktop WebKit; check the first-run redirect there.
+- [ ] Commit/push when the user asks (not done; branch remains uncommitted).
+
+## Dark-mode depth + translation note header (2026-11-06, branch `fix/dark-mode-visual-depth`)
+- [x] Rebuild the dark surface ladder: page `#12110f`, card `#24211d`, inset `#1a1815`, key
+      `#332e27`, well `#0d0c0b`; brighter border and text tokens.
+- [x] Darken the dark paper texture (`PAGE.dark`, `KEY.dark`) so the page no longer renders near the
+      card value.
+- [x] Add subtle white catchlights to dark surfaces: `--shade-light` 0.20, `--glass-shade-light`
+      0.18, lit glass-card top border, attempt-card top highlight, feedback card top light, header
+      seams.
+- [x] Raise the Feedback notebook to `#24211d` and its correction stock/hairlines.
+- [x] Move a translation's tag and toggle onto the note header line; text below; own tag line per
+      variant in Compare-all.
+- [x] Restyle the note from the user's sticky-note mockup: washi tape, pastel paper, folded corner,
+      tilt, dashed header, ink tab, regular Courier Prime, handwritten wavy controls.
+- [x] Put "Each word" / alternatives at the far right (close X moved to lead the header); keep the
+      longer "Hide each word" label on the same line at 390 px by hiding the decorative mark.
+- [x] Replace the dashed/dotted stitched connector with one clean 1.5px line fading at both ends.
+- [x] Stop the translation text being bold: import Courier Prime 400 and use it for translation lines.
+- [x] Paginate the translations themselves: page 1 is the primary idiomatic translation, pages 2+
+      are the alternatives, one at a time with a compact `‹ 1 / 4 ›` pager in the note header; default
+      page 1, reset on view change/regeneration, wrap, constant note height; no pager for a single
+      rendering.
+- [ ] Look at the seeded note/pager screenshots with the user and tune copy or pager density if asked.
+- [ ] Look at the seeded dark screenshots with the user and adjust the catchlight strength if asked.
+- [ ] Verify on a real device / WebKitGTK; run a full-page automated contrast scan.
+- [ ] Commit/push when the user asks (not done; branch is uncommitted).
+
+## Planning ideas shipped (2026-11-06)
+- [x] Settings → Learning capability guide (what onspot can and cannot improve).
+- [x] Export one session's transcript and corrections as Markdown (History row + Practice session
+      menu).
+- [x] Language-data completion/failure notifications (toast; system notification when hidden).
+- [x] Optional practice reminders (off by default; frequent ≈ daily, infrequent ≈ three days;
+      in-app banner + best-effort system notification).
+- [x] Word-for-word breakdown as horizontal pairs: source above rule above translation, each
+      column centred; checked on desktop and at 390 px. Mobile keeps the same layout for now; the
+      user will decide whether to revert phones to the earlier vertical list.
+- [x] Archive the shipped items in `docs/planning/archive/ideas.md` (2026-11-06).
+- [ ] Verify a real language-data download end to end: completion toast, error toast, and the
+      system notification while the app is in the background.
+- [ ] Verify a system reminder notification on a phone/desktop (permission granted, app hidden).
+- [ ] Verify the Tauri `Export transcript` save dialog and the `.md` file on a desktop build.
+- [ ] Decide whether the reminder should also be visible outside Practice (a small dot on History
+      or Settings was not built).
+- [ ] Commit/push when the user asks (not done; changes are uncommitted).
+
+## Docs organisation (2026-11-03)
+- [x] Split `docs/planning` into active `ideas.md` / `bugs.md` and mirrored history in
+      `docs/planning/archive/`; moved fixed bugs and done/rejected ideas; updated `docs/README.md`.
+- [x] Add `docs/planning/README.md` documenting the active/archive workflow for agents.
+- [ ] Keep the active files current: when an idea ships or a bug is fixed, append it to the dated
+      archive batch and remove it from the active file.
+
+## Launch prep (2026-11-03)
+- [x] README rewritten for non-technical learners: hook, Download CTA, download-vs-build split,
+      French-first honesty, unsigned-build note; all dev details kept below.
+- [x] Add an `[!IMPORTANT]` API-key banner and a two-minute Groq/ElevenLabs walkthrough at the top
+      of the README, reinforced in the download and first-run steps.
+- [x] Correct the five-minute recording claim (code caps at 60 s).
+- [ ] Commit and push the README when the user asks.
+- [ ] Fix the GitHub repo description typo ("langugae" → "language"; keep "inturn" as the author's
+      wording) and add topics (language-learning, french, tauri, svelte, offline-first, privacy,
+      whisper).
+- [x] Draft release notes for v0.2.3 in `docs/releases/v0.2.3.md`; publish them on GitHub when the
+      user asks (`gh release edit v0.2.3 --notes-file docs/releases/v0.2.3.md`).
+- [x] Author CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, bug/feature/language issue templates
+      and a PR template. Still to do: add `good first issue` / `help wanted` / platform labels.
+- [ ] Enable GitHub Discussions with Announcements, General, Feature requests, Language requests
+      and Development categories; pin a "Start here / known issues" post.
+- [ ] Publish a language roadmap/status issue (French approved, Japanese in development, others
+      demand-led) and a language-request issue for voting.
+- [ ] Sign/notarize the Windows and macOS builds, or keep the README workaround prominent and add
+      a troubleshooting page.
+- [ ] Install and smoke-test every asset on real Windows, macOS (Intel + ARM), Linux (x64 + ARM)
+      and Android hardware.
+- [ ] Record a 30–60 s demo video/GIF (prompt → speak → feedback → hear the fix).
+- [ ] Add a FAQ/troubleshooting page: getting a Groq key, microphone permission, model download,
+      401/429 errors, SmartScreen/Gatekeeper, Android sideload, where data lives, backup/restore.
+- [ ] Recruit 5–10 French beta testers and run a short task-based feedback script before any public
+      post.
+- [ ] Prepare a press kit: logo, screenshots, one-liner, 100/300-word blurbs, founder bio, links.
+
 ## Phone list after 0.2.2 (2026-11-02)
 - [x] Phone bar in two rows; swipe up on the bar pulls Feedback up; stats tap-away + pin;
   slow-drag fixes; one playback speed button; text size per section; pop-up hides when its words
@@ -18,9 +179,10 @@
   `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`).
 - [x] Insights rows overflowing on phones (grid-cols-1).
 - [ ] Measure the desktop engines (WebView2, WebKitGTK, WKWebView) at their refresh rates.
-- [ ] Commit, push and release when the user asks.
-- [ ] Delete `feature/language-delivery-mode` (local + remote) and four old local branches?
-  Offered; waiting for the user.
+- [x] Release 0.2.3 (tag `v0.2.3`, 2026-11-03): Latest, 15 files.
+- [ ] Commit and push the `goto` `replace` fix (back.svelte.ts, TextSizeEditor.svelte) when asked.
+- [x] GitHub has only `main` (feature branch deleted 2026-11-03).
+- [ ] Delete the four old local branches (all contained in main)? Not asked yet.
 
 ## Every installer on x64 and ARM64 (2026-11-01)
 - [x] release.yml: Intel Mac, ARM Linux (+ Flatpak), ARM Windows (.exe + .msi); test run green.

@@ -22,6 +22,7 @@ import { resolveLlmEndpoint } from './llm';
 import { firstMissingRequirement, processingReady } from './processing';
 import { playTrack, primeAudioPlayback, setAudioLoading, stopAudio, type AudioKind } from './audio';
 import { languageData, refreshLanguageData } from './languageData';
+import { recordPracticeActivity } from './reminders';
 import { VoiceRecorder, type Recording } from '#lib/utils/recorder.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
 import {
@@ -120,6 +121,17 @@ const initialState: PracticeState = {
 
 const store = writable<PracticeState>({ ...initialState });
 export const practice = { subscribe: store.subscribe };
+
+/*
+ * The session mode is the app's accent colour (Exam red, Casual blue: the
+ * [data-mode] tokens in app.css). Mirrored onto <html> here, so every page
+ * follows the live mode, not only the practice screen.
+ */
+if (typeof document !== 'undefined') {
+	store.subscribe(({ mode }) => {
+		document.documentElement.dataset.mode = mode;
+	});
+}
 
 let db: IDatabaseAdapter | null = null;
 let prompts: Prompt[] = [];
@@ -592,6 +604,8 @@ async function persistAttempt(
 		updatedAt: now
 	};
 	await database.putAttempt(attempt);
+	// The take is safely stored; a reminder from before it should not linger.
+	recordPracticeActivity(new Date(now));
 
 	const corrections = buildCorrections(attemptId, transcript, evaluation, now);
 	await database.replaceCorrections(attemptId, corrections);

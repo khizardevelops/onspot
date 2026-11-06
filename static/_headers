@@ -1,0 +1,21 @@
+# Cloudflare Pages headers for the web app and the installed PWA.
+#
+# `same-origin-allow-popups` (not `same-origin`) keeps Google Identity
+# Services' sign-in popup working. It means the page is NOT cross-origin
+# isolated, so local WASM inference stays single-threaded on this host. Moving
+# to `same-origin` needs a live Google Drive test first; see
+# docs/architecture/platforms.md.
+/*
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Embedder-Policy: credentialless
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/index.html
+  Cache-Control: no-cache
+
+/service-worker.js
+  Cache-Control: no-cache
+
+/_app/immutable/*
+  Cache-Control: public, max-age=31536000, immutable

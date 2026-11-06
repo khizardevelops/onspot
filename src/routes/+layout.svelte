@@ -3,9 +3,16 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { pageHref } from '#lib/pages.js';
 	import { initSettings, appSettings, settingsReady } from '#lib/stores/settings.js';
 	import { initPractice } from '#lib/stores/practice.js';
+	import { llmConfigured } from '#lib/stores/llm.js';
+	import { initReminders } from '#lib/stores/reminders.js';
+	import { shouldOfferOnboarding } from '#lib/onboarding.js';
+	import { registerPwa } from '#lib/platform/pwa.js';
 	import { applyTheme, theme } from '#lib/stores/theme.svelte.js';
 	// Applies the learner's text sizes (Settings → Text size) before the first render.
 	import '#lib/stores/textSize.svelte.js';
@@ -14,6 +21,8 @@
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import PermissionsPrompt from '#lib/components/PermissionsPrompt.svelte';
 	import LanguageDownloadBar from '#lib/components/LanguageDownloadBar.svelte';
+	import PwaInstallPrompt from '#lib/components/PwaInstallPrompt.svelte';
+	import PwaUpdate from '#lib/components/PwaUpdate.svelte';
 	import PaperTexture from '#lib/components/PaperTexture.svelte';
 	import NeoThemeSync from '#lib/components/NeoThemeSync.svelte';
 	import WindowBar from '#lib/components/WindowBar.svelte';
@@ -54,7 +63,13 @@
 	};
 	const PAGE: Record<'light' | 'dark', PaperTextureParams> = {
 		light: { ...PAGE_PAPER, colorBack: '#efeae0', colorPaper: '#f2ede3', colorShadow: '#c2b7a2' },
-		dark: { ...PAGE_PAPER, colorBack: '#151412', colorPaper: '#171613', colorShadow: '#3d3830' }
+		/*
+		 * Dark paper stays genuinely dark. The old shadow colour (#3d3830)
+		 * lifted the rendered page to about #2c2823, within a step of the cards;
+		 * the paper now lands near #1b1815, so every surface above it has room
+		 * to read as a separate plane.
+		 */
+		dark: { ...PAGE_PAPER, colorBack: '#12110f', colorPaper: '#141210', colorShadow: '#26231f' }
 	};
 	/*
 	 * Card stock for neo components (--paper-key): fine fibre and tooth, no
@@ -77,18 +92,35 @@
 	};
 	const KEY: Record<'light' | 'dark', PaperTextureParams> = {
 		light: { ...KEY_PAPER, colorBack: '#ffffff', colorPaper: '#ffffff', colorShadow: '#e2d9c8' },
-		dark: { ...KEY_PAPER, colorBack: '#000000', colorPaper: '#000000', colorShadow: '#28241f' }
+		dark: { ...KEY_PAPER, colorBack: '#000000', colorPaper: '#000000', colorShadow: '#211d18' }
 	};
 	const PAGE_PAPERS = [PAGE.light, PAGE.dark];
 
+	/**
+	 * First run: send a learner with no usable LLM to the setup guide. Skipping
+	 * or finishing the guide stops this; Settings can always reopen it.
+	 */
+	function offerOnboarding(): void {
+		if (page.url.pathname === pageHref('/welcome')) return;
+		if (!shouldOfferOnboarding()) return;
+		if (get(llmConfigured)) return;
+		void goto(pageHref('/welcome'));
+	}
+
 	onMount(() => {
 		applyTheme(initialTheme);
+		// Production web builds only; the module skips dev and the Tauri apps.
+		void registerPwa();
 		void initSettings()
 			.then(() => {
+				// Reminders follow the saved preference; start them before Practice so
+				// its bar can show a due nudge as soon as the page appears.
+				initReminders();
 				// Practice needs the persisted language, so it waits for settings.
 				// The language-data status re-checks itself in its store subscription.
 				return initPractice();
 			})
+			.then(() => offerOnboarding())
 			.catch((error) => {
 				console.error('[startup] saved data could not be loaded', error);
 				const message = error instanceof Error ? error.message : '';
@@ -131,6 +163,8 @@
 
 	<Toasts />
 	<LanguageDownloadBar />
+	<PwaUpdate />
+	<PwaInstallPrompt />
 
 	{#if $settingsReady && !$appSettings.targetLanguage}
 		<LanguagePicker />
@@ -151,11 +185,9 @@
 	main.under-window-bar {
 		height: calc(100dvh - var(--window-bar-height));
 	}
-	/* Phones: the bar is at the bottom, so the page itself keeps clear of the status bar. */
-	@media (max-width: 640px) {
-		:global(main.app-page) {
-			padding-top: env(safe-area-inset-top);
-		}
+	/* The installed app draws under a translucent status bar on every width. */
+	:global(main.app-page) {
+		padding-top: env(safe-area-inset-top);
 	}
 	/*
 	 * Each page fades in as it replaces the last. A CSS animation, not a Svelte

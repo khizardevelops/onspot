@@ -18,6 +18,13 @@
   not been observed.
 - Round-trip WER scoring end to end. Never completed a full run.
 - Behaviour on Safari and Firefox. Everything has been tested in Chrome only.
+- **PWA:** manifest, service-worker registration, offline shell, update prompt and the install guide
+  were tested in Chromium, including iPhone/iPad user-agent emulation and the live Worker at
+  `https://onspot.khizardevelops.workers.dev`. The live `_headers` are applied; the SPA fallback is
+  the Worker asset setting, not `_redirects`. No real Apple device, Safari or WebKit run; the
+  update flow used a static server over `build/` because Vite preview exits on a rebuild. Launch
+  images and the iOS status bar are unverified. Google Drive and WebDAV in an installed app are
+  unverified, and local WebGPU is unavailable because its 26.5 MiB binary is omitted.
 - Exact compliance with the stricter translation prompt across every configured LLM. The prompt
   carries a contrastive example and malformed output is repaired, but the browser regression used
   an intercepted provider response rather than a live model.

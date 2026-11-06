@@ -69,7 +69,10 @@ export default defineConfig({
 			// static host does not have a file for is served index.html and the
 			// client router takes over.
 			adapter: adapter({ fallback: 'index.html' }),
-			paths: { base: BASE_PATH }
+			paths: { base: BASE_PATH },
+			// Registered by `platform/pwa.ts` in production web builds only, so
+			// the dev server and the Tauri apps never run a stale cached shell.
+			serviceWorker: { register: false }
 		}),
 		crossOriginIsolation()
 	],

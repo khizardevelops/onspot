@@ -1,6 +1,10 @@
 # Roadmap
 
 ## Near-Term
+- The PWA is live at `https://onspot.khizardevelops.workers.dev` (Cloudflare Workers static
+  assets via `cf`). Add CI secrets and the Worker origin to the Google OAuth client, then verify
+  the install, offline launch, update prompt, Google Drive and local speech on a real iPhone/iPad
+  (or the macOS VM for Safari checks).
 - Complete one real local Whisper + configured LLM practice run after the full model download.
 - Confirm the Piper Tom EQ/loudness processing profile by ear, then approve the next language
   (STT + voice) with a human quality pass and add it to the language registry.
@@ -36,7 +40,8 @@
 - Grow the prompt set and topic generation beyond the prototype's static list.
 - Pronunciation scoring beyond WER (the transcript already gives word-level signal).
 - Spaced-repetition surfacing of recurring corrections (the analytics already aggregate them).
-- An iOS app (needs macOS/Xcode; see `docs/architecture/platforms.md`).
+- iPhone and iPad as an installable PWA, not an App Store app (decided 2026-11-06; foundation
+  built, deployment and device verification pending; brief in `docs/prompts/ios-focused-pwa.md`).
 
 ## Out Of Scope
 - Training, fine-tuning or exporting models.

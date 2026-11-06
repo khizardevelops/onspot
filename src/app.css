@@ -24,6 +24,7 @@
 /* The paper timeline beside the attempt stack: handwriting and typewriter numbers. */
 @import '@fontsource/caveat/latin-400.css';
 @import '@fontsource/caveat/latin-700.css';
+@import '@fontsource/courier-prime/latin-400.css';
 @import '@fontsource/courier-prime/latin-700.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
@@ -154,32 +155,40 @@
 }
 
 [data-theme='dark'] {
-	--background: #151412;
-	--foreground: #ede7dc;
-	--card: #1e1c19;
-	--card-foreground: #ede7dc;
-	--popover: #1e1c19;
-	--popover-foreground: #ede7dc;
+	/*
+	 * Dark depth comes from the surface ladder, not from shadow: the page is
+	 * the darkest plane, content sheets sit clearly above it, raised controls
+	 * above those, and wells sink below the sheet. The old values were all
+	 * within two or three lightness steps, so cards, panels and controls read
+	 * as one fogged surface once the black shadows disappeared.
+	 */
+	--background: #12110f;
+	--foreground: #f1ece2;
+	--card: #24211d;
+	--card-foreground: #f1ece2;
+	--popover: #2b2722;
+	--popover-foreground: #f1ece2;
 	--primary: #2db3a3;
 	--primary-foreground: #06201c;
-	--secondary: #1f2d2a;
-	--secondary-foreground: #bfe3d9;
-	--muted: #1f2d2a;
-	--muted-foreground: #a79f92;
-	--accent: #263834;
-	--accent-foreground: #bfe3d9;
+	--secondary: #2c2823;
+	--secondary-foreground: #d3ece3;
+	--muted: #2c2823;
+	--muted-foreground: #b6ad9f;
+	--accent: #38322b;
+	--accent-foreground: #d3ece3;
 	--destructive: #ee7f6b;
-	--destructive-foreground: #1e1c19;
-	--border: #2f2b26;
-	--input: #3a3530;
+	--destructive-foreground: #1b1815;
+	--border: #3d372f;
+	--input: #4a433a;
 	--ring: #2db3a3;
 
-	--control: #1f2d2a;
-	--control-hover: #263834;
-	--control-line: #33504a;
-	--on-control: #bfe3d9;
-	--surface-2: #24221e;
-	--faint: #8a8276;
+	--control: #2c2823;
+	--control-hover: #38322b;
+	--control-line: #4d453b;
+	--on-control: #d3ece3;
+	/* An inset: darker than the sheet it sits inside, above the page. */
+	--surface-2: #1a1815;
+	--faint: #a29a8d;
 	--brand: #2db3a3;
 	--brand-2: #22d3ee;
 	--brand-3: #38bdf8;
@@ -194,37 +203,74 @@
 	--glow-red: 238, 127, 107;
 	--glow-yellow: 227, 179, 90;
 	--glow-green: 98, 195, 145;
-	--border-strong: #45403a;
+	--border-strong: #575047;
 	--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.32);
 	--shadow-card-hover: 0 20px 54px rgba(0, 0, 0, 0.42);
 	--shadow-float: 0 26px 76px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.3);
-	--sheet-line: rgba(255, 245, 225, 0.07);
+	/* A visible light edge carries the sheet where a black shadow cannot. */
+	--sheet-line: rgba(255, 245, 225, 0.12);
 	--shadow-sheet: 0 1px 1px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.25), 0 8px 16px -6px rgba(0, 0, 0, 0.35), 0 18px 34px -14px rgba(0, 0, 0, 0.4);
 	--shadow-sheet-hover: 0 1px 1px rgba(0, 0, 0, 0.32), 0 3px 6px rgba(0, 0, 0, 0.3), 0 12px 22px -8px rgba(0, 0, 0, 0.42), 0 24px 42px -16px rgba(0, 0, 0, 0.46);
-	--sheet-frost: color-mix(in srgb, var(--card) 72%, transparent);
-	--sheet-highlight: inset 0 1px 0 rgba(255, 245, 225, 0.06);
+	/* Nearly opaque, so the blurred paper cannot flatten the sheet towards the page. */
+	--sheet-frost: color-mix(in srgb, var(--card) 90%, transparent);
+	--sheet-highlight: inset 0 1px 0 rgba(255, 245, 225, 0.1);
 	--paper-blend: screen;
-	--neu-raised: 9px 9px 22px rgba(0, 0, 0, 0.7), -8px -8px 20px rgba(255, 245, 225, 0.075);
-	--neu-raised-hover: 12px 12px 28px rgba(0, 0, 0, 0.75), -10px -10px 26px rgba(255, 245, 225, 0.1);
-	--neu-pressed: inset 6px 6px 14px rgba(0, 0, 0, 0.7), inset -6px -6px 14px rgba(255, 245, 225, 0.06);
-	--neu-raised-sm: 3px 3px 7px rgba(0, 0, 0, 0.8), -3px -3px 7px rgba(255, 245, 225, 0.08);
-	--neu-pressed-sm: inset 3px 3px 6px rgba(0, 0, 0, 0.8), inset -3px -3px 6px rgba(255, 245, 225, 0.06);
-	--paper-emboss: 1.5px 1.5px 3px rgba(0, 0, 0, 0.65), -1px -1px 2px rgba(255, 245, 225, 0.07);
-	--paper-emboss-hover: 2px 2px 5px rgba(0, 0, 0, 0.7), -1.5px -1.5px 3px rgba(255, 245, 225, 0.09);
-	--paper-deboss: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -1.5px -1.5px 4px rgba(255, 255, 255, 0.08);
-	--paper-press-tint: rgba(0, 0, 0, 0.18);
+	--neu-raised: 9px 9px 22px rgba(0, 0, 0, 0.7), -8px -8px 20px rgba(255, 245, 225, 0.09);
+	--neu-raised-hover: 12px 12px 28px rgba(0, 0, 0, 0.75), -10px -10px 26px rgba(255, 245, 225, 0.12);
+	--neu-pressed: inset 6px 6px 14px rgba(0, 0, 0, 0.7), inset -6px -6px 14px rgba(255, 245, 225, 0.08);
+	--neu-raised-sm: 3px 3px 7px rgba(0, 0, 0, 0.8), -3px -3px 7px rgba(255, 245, 225, 0.1);
+	--neu-pressed-sm: inset 3px 3px 6px rgba(0, 0, 0, 0.8), inset -3px -3px 6px rgba(255, 245, 225, 0.08);
+	--paper-emboss: 1.5px 1.5px 3px rgba(0, 0, 0, 0.65), -1px -1px 2px rgba(255, 245, 225, 0.1);
+	--paper-emboss-hover: 2px 2px 5px rgba(0, 0, 0, 0.7), -1.5px -1.5px 3px rgba(255, 245, 225, 0.12);
+	--paper-deboss: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -1.5px -1.5px 4px rgba(255, 255, 255, 0.1);
+	--paper-press-tint: rgba(0, 0, 0, 0.22);
 	--ink-hover: oklch(from currentcolor calc(l + 0.08) c h);
 	--ink-active: oklch(from currentcolor calc(l + 0.05) c h);
 	--neo-depth: 1.6;
-	--key: #2b2723;
-	--key-hover: #332e29;
-	--key-line: rgba(255, 240, 215, 0.07);
-	--well: #121110;
-	--shade-dark: rgba(0, 0, 0, 0.8);
-	--shade-light: rgba(255, 238, 210, 0.11);
-	--glass-shade-dark: rgba(0, 0, 0, 0.62);
-	--glass-shade-light: rgba(255, 238, 210, 0.09);
+	/* Raised keys: card stock clearly lighter than the sheet, with a light edge. */
+	--key: #332e27;
+	--key-hover: #3e3830;
+	--key-line: rgba(255, 240, 215, 0.12);
+	--well: #0d0c0b;
+	--shade-dark: rgba(0, 0, 0, 0.85);
+	/* A white catchlight on raised keys and wells; subtle, not a glow. */
+	--shade-light: rgba(255, 238, 210, 0.2);
+	--glass-shade-dark: rgba(0, 0, 0, 0.7);
+	--glass-shade-light: rgba(255, 238, 210, 0.18);
 	--key-blend: screen;
+}
+
+/*
+ * The session mode is the app's accent: Exam red, Casual the app's own aqua
+ * (the tokens above, so Casual needs no block). The practice store mirrors the
+ * live mode (the Exam / Casual switch) into <html data-mode>, so everything
+ * that reads the accent tokens follows it: Start speaking, the empty
+ * timeline's mic, the current nav key, links, focus rings, neo's primary, the
+ * logo. Exam's red is the app's --error red, as its glare already is.
+ */
+:root[data-mode='exam'] {
+	--primary: #c2412d;
+	--primary-foreground: #fff7f4;
+	--ring: #c2412d;
+	--accent: #ecd5cd;
+	--accent-foreground: #5c2114;
+	--brand: #c2412d;
+	--brand-2: #be123c;
+	--brand-3: #9f1239;
+	--brand-soft: rgba(194, 65, 45, 0.1);
+	--brand-hover: #a5341f;
+}
+:root[data-theme='dark'][data-mode='exam'] {
+	--primary: #ee7f6b;
+	--primary-foreground: #2a0c06;
+	--ring: #ee7f6b;
+	--accent: #38322b;
+	--accent-foreground: #f6d9d1;
+	--brand: #ee7f6b;
+	--brand-2: #fb7185;
+	--brand-3: #f43f5e;
+	--brand-soft: rgba(238, 127, 107, 0.12);
+	--brand-hover: #f39582;
 }
 
 /*
@@ -423,6 +469,10 @@ html[neo-theme-root] .neo-tabs:not(.custom-selection, .custom-selection *) .neo-
 html[neo-theme-root] .neo-card.neo-card.neo-glass:not(.neo-tinted) {
 	background-color: var(--sheet-frost);
 	border-color: var(--sheet-line);
+}
+/* Dark: a lit top edge, where the black drop shadow cannot describe the card's surface. */
+[data-theme='dark'] html[neo-theme-root] .neo-card.neo-card.neo-glass:not(.neo-tinted) {
+	border-top-color: rgba(255, 245, 225, 0.16);
 }
 html[neo-theme-root] .neo-card.neo-card.neo-inset:not(.neo-tinted) {
 	background-color: var(--well);
@@ -677,6 +727,41 @@ html[neo-theme-root] .neo-tabs .neo-tab::before {
 		background-image: var(--paper-page, none);
 		background-size: 100vw 100vh;
 		background-blend-mode: var(--paper-blend);
+	}
+
+	/*
+	 * The brand logo's disc: the card stock of a raised key (the neo buttons'
+	 * colour and grain), raised like one, with a soft glare where the light
+	 * falls (top left). Light in light mode, near-black in dark.
+	 */
+	.logo-tile {
+		--logo-glare: rgba(255, 255, 255, 0.85);
+		border-radius: 9999px;
+		background-color: var(--key);
+		background-image: radial-gradient(circle at 30% 24%, var(--logo-glare), transparent 58%), var(--paper-key, none);
+		background-size: 100% 100%, var(--paper-key-size, 100vw 100vh);
+		background-blend-mode: normal, var(--key-blend);
+		box-shadow: var(--neo-box-shadow-raised-2);
+	}
+	[data-theme='dark'] .logo-tile {
+		--logo-glare: rgba(255, 245, 225, 0.16);
+	}
+	/*
+	 * The logo's art in the accent colour: the icon file (set as mask-image on
+	 * the element) masks the brand ink, so its fades stay and its colour follows
+	 * the session mode.
+	 */
+	.logo-ink {
+		display: block;
+		width: 100%;
+		height: 100%;
+		background-color: var(--brand);
+		-webkit-mask-position: center;
+		mask-position: center;
+		-webkit-mask-size: contain;
+		mask-size: contain;
+		-webkit-mask-repeat: no-repeat;
+		mask-repeat: no-repeat;
 	}
 
 	/*

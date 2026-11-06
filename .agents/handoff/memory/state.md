@@ -2,6 +2,182 @@
 
 ## Current State
 
+**iOS PWA live (2026-11-06, branch `fix/dark-mode-visual-depth`, uncommitted):** the installable
+web app is deployed at **https://onspot.khizardevelops.workers.dev** and has not been run on an
+Apple device. The user has no iPhone/iPad; a macOS virtual machine on an external drive is the
+only Apple hardware available.
+- **Host:** Cloudflare **Workers static assets**, not legacy Pages. `cf deploy` cannot build
+  SvelteKit, so `scripts/cf-deploy.sh` builds, assembles a Build Output Specification, drops the
+  Pages-only `_redirects` and the 26.5 MiB WebGPU ORT binary, and runs `cf deploy --prebuilt`.
+  `.github/workflows/cloudflare.yml` runs the same script; the empty legacy Pages project
+  `onspot-4k1.pages.dev` was created while probing and is unused. `wrangler.toml` and
+  `static/_redirects` were removed because the Worker uses
+  `notFoundHandling: single-page-application`; `static/_headers` is live and supplies COOP
+  `same-origin-allow-popups` + COEP `credentialless`, so production is **not** cross-origin
+  isolated and local WASM is single-threaded. Switching to `same-origin` needs a live Drive test.
+- **Installable app:** `static/manifest.webmanifest` (root-relative id/start/scope, 192/512/
+  maskable icons), `src/app.html` (manifest, 180 px apple-touch-icon, iOS meta, 28 launch images,
+  theme-color light/dark, pre-paint status-bar style), `scripts/pwa-assets.sh` (generates icons and
+  portrait/landscape splash from `src-tauri/icons/ios/AppIcon-512@2x.png` for 14 current devices).
+- **Service worker:** `src/service-worker/index.ts` with SvelteKit 3's `$app/service-worker`,
+  `$app/manifest` and `$app/env` (the old `$service-worker` module is gone). It registers only in
+  production web builds via `src/lib/platform/pwa.ts` (`resolve('/')`, not `import.meta.env`
+  `BASE_URL`, which is `./` and broke deep links; reuses an existing registration and uses an
+  absolute script/scope URL). It precaches the small shell, excludes
+  `piper-wasm`, launch images, sample audio, MP3s and ORT, caches each WASM runtime on first use
+  (SQLite is confirmed), replaces any host-rewritten relative `<base>` with the app root in the
+  cached shell, and never caches cross-origin API/model traffic. The SQLite worker reads the
+  cached WASM itself and passes it as `wasmBinary`, because a dedicated worker's XHR is not
+  reliably handed to the service worker offline; the database now opens offline in a single tab.
+- **Updates:** the worker never calls `skipWaiting` on its own. `PwaUpdate.svelte` shows a fixed
+  "A new version of onspot is ready" card with Later/Reload; Reload posts `SKIP_WAITING`, waits for
+  `controllerchange`, then reloads. First install does not prompt.
+- **Install guide:** `PwaInstallPrompt.svelte` appears only on an Apple touch browser tab, not on
+  `/welcome/` or `/settings`; dismissible, with the localStorage flag. Settings → Learning →
+  **iPhone and iPad** (`IosInstallSection.svelte`) keeps the steps permanently and shows Installed
+  when `navigator.standalone`/display-mode says so. Copy names Safari/Chrome/Firefox/Edge, explains
+  storage clearing and export/restore, and recommends cloud speech as lighter while leaving local
+  STT/voice downloads available (the user's explicit choice). `notificationsSupported()` returns
+  false on Apple touch devices, so Reminder Settings offers only the in-app nudge and never asks
+  for a system permission it cannot deliver.
+- **Status bar and safe area:** a pre-paint script sets `data-theme` and
+  `apple-mobile-web-app-status-bar-style` from the remembered theme (dark →
+  `black-translucent`, light → `default`); `applyTheme` keeps the meta in sync. `main.app-page`
+  now applies `padding-top: env(safe-area-inset-top)` at every width, not only phones.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bunx tsc -p src/service-worker --noEmit`,
+  `bun run spdx:check` (230); `scripts/cf-deploy.sh` dry-run; live HTTP root/`/history/` both 200,
+  manifest `application/manifest+json`, service worker `text/javascript` with `no-cache`, live
+  `_headers` (COOP/COEP/nosniff/referrer) applied. Playwright live: manifest/28 launch links,
+  service-worker activation, 133 shell entries, SQLite WASM cached, offline `History · onspot`
+  with no wasm/SQLite errors, iPhone 14 install card visible. Earlier local checks covered update
+  banner + Reload, dark card/settings, iPhone SE and iPad Pro.
+- **Not verified:** real iPhone/iPad or Safari/WebKit, Google Drive popup in an installed app
+  (the build has no `VITE_GOOGLE_CLIENT_ID_WEB`), WebDAV CORS, local Piper/Whisper on device,
+  downloads in the background, the silent switch, actual iOS launch images/status-bar appearance,
+  and local WebGPU (its 26.5 MiB ORT binary is omitted from the Worker). Vite preview dies when a
+  rebuild replaces `.svelte-kit/output`, so the update test used a small static server; do not
+  treat that as a product bug.
+
+**First-run onboarding + mode glare (2026-11-06, branch `fix/dark-mode-visual-depth`,
+uncommitted):** the two active product/UI ideas from `docs/planning/ideas.md` are now shipped and
+archived.
+- **`/welcome/` setup guide** (`routes/welcome/+page.svelte`): three steps. Coach key = Groq
+  (free, recommended), DeepSeek, ChatGPT/OpenAI, or a Claude/OpenAI-compatible gateway; links to
+  each key page, endpoint/model fields for compatible options, and a Groq-for-speech-to-text
+  checkbox. `Test key` builds a temporary endpoint and calls `testConnection` before saving, so a
+  failed key is never written; `Skip the check` applies without a live call. Voice step = on-device
+  Piper vs ElevenLabs, with the ElevenLabs key shown only for cloud and the honest note that cloud
+  TTS sounds better. Summary shows the final coach, speech, voice and language, plus a Settings link
+  for the one-time local download.
+- **First-run state** (`lib/onboarding.ts`, `onspot.onboarding.v1`): `done` or `skipped`. The root
+  layout redirects after settings + Practice when the flag is null and `llmConfigured` is false. The
+  guide's top action marks skipped only if it was never completed. Settings → Learning →
+  **Setup guide** (`settings/SetupSection.svelte`) reopens it; Practice's LLM gate now points to
+  `/welcome/`. The guide has its own minimal bar, paper/card styling, and works light/dark/390 px.
+- **Mode-coloured glare** (`PracticeScreen.svelte`): `data-glare` follows the live practice mode —
+  `casual` (brand + brand-2 + brand-3, blue-green) or `exam` (error + destructive, red). The switch
+  is only available in a draft, so it changes the glare immediately; once a session has takes the
+  mode is locked. Three large soft blobs sit low where the page shows beneath the card and drift on
+  transform-only animations (38s/46s/52s, out of phase, `will-change: transform`), stopped by
+  `prefers-reduced-motion`. Exam strength is boosted (22/18/16%) over casual (14/12/10%) to correct
+  the red reading dimmer than cyan. `--glare-one/two/three/soft` and their strength vars drive the
+  blobs and the stage's top-left wash; the old "accent outside a session" state is superseded.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (224). Playwright
+  onboarding/glare suite 29/29: first-run redirect, provider cards, key input, conditional
+  ElevenLabs key, summary, completion flag, install gate, live mode-switch glare, boosted exam
+  strength, drift animation and reduced-motion stop, seeded casual/exam sessions, Settings reopen,
+  and no repeat redirect. Light, dark and phone screenshots. Existing tests keep a
+  seeded Groq key, so `llmConfigured` bypasses the guide.
+- **Not verified:** live key tests per provider, a real ElevenLabs key, and the guide on real
+  phone/desktop WebKit.
+
+**Dark-mode depth and translation-note header (2026-11-06, branch `fix/dark-mode-visual-depth`,
+uncommitted):** the light theme was the reference; dark mode looked like one fogged surface because
+the page texture rendered around `#2c2823` (its shadow colour lifted it) and every card, sheet and
+control sat within two or three lightness steps once the black shadows disappeared.
+- **Dark surface ladder** (`src/app.css`): page `#12110f`, sheet/card `#24211d`, inset `#1a1815`,
+  raised key `#332e27`, key hover `#3e3830`, well `#0d0c0b`, border `#3d372f`, input `#4a433a`.
+  Text lifted to `#f1ece2`, muted `#b6ad9f`, faint `#a29a8d`. `--sheet-frost` is 90% card, so the
+  blurred paper cannot flatten the sheet towards the page. `--shade-light` 0.20 and
+  `--glass-shade-light` 0.18 add a subtle white catchlight to raised keys and wells.
+- **Dark paper texture** (`routes/+layout.svelte`): `PAGE.dark` is now `#12110f / #141210 / #26231f`
+  (was `#151412 / #171613 / #3d3830`), so the rendered page lands near `#1b1815`; the key paper's
+  dark shadow is `#211d18`. The page is no longer brighter than the cards.
+- **Cards and panels:** glass cards get a lit top border in dark (`#fff5e1` at 0.16); attempt cards
+  use `#2b2721` with a 0.13 hairline and a 0.10 top highlight; the Feedback notebook is `#24211d`
+  with lighter correction stock, a 0.14 hairline and a 0.10 paper-top light; the header's dark
+  bottom/top seams are `#fff5e1` at 0.07/0.04.
+- **Translation note** (`AttemptCard.svelte`), restyled from the user's sticky-note reference:
+  pastel paper, washi tape, folded corner and a slight tilt; a dashed tool header; the active
+  variant as a dark ink tab; the translation in regular-weight Courier Prime (the 400 face is now
+  imported); handwritten blue wavy toggles. The close X leads the header, so "Each word" is the
+  rightmost control for a Word-for-word note. Word pairs are a wrapping row joined by one clean
+  1.5px connector that fades at both ends (the dashed line with dots was removed as it looked
+  corrupted at small sizes).
+- **Translation variants page** (`AttemptCard.svelte`): when the idiomatic translation has
+  alternatives, all renderings are pages — page 1 is the primary translation, pages 2+ are the
+  alternatives, shown one at a time with a compact `‹ 1 / 4 ›` pager in the note header's right
+  edge. The default is page 1; the pager resets on a view change or regeneration, wraps at both
+  ends, and the note height stays constant. Alternatives after the first carry a small "or"; a single rendering has no pager.
+  Controls are 24px on desktop and the 36px touch floor on coarse pointers. The translation line is
+  `aria-live="polite"`.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (221). Playwright:
+  feature suite 18/18, phone word-list suite, translation-header phone check (closed and open, tag
+  and toggle on one line, text below, no overflow), and the variant-pages suite 10/10 (pager in the
+  header, default 1/4 = primary, next 2/4 and 3/4, previous returns, no height change, phone fits). Seeded light/dark
+  screenshots for Practice, History, Insights, Settings, the translation note and the pager. Key
+  dark contrast pairs: foreground/card 13.6:1, muted/card 7.2:1, faint/card 5.8:1, brand/card
+  6.2:1, error 6.0:1, warn 8.3:1, good 7.4:1.
+- **Not verified:** a real phone/desktop WebKit render, a full-page automated contrast scan, and
+  reduced-motion/screenshot parity on hardware.
+
+**Planning ideas shipped (2026-11-06, uncommitted):** five items from `docs/planning/ideas.md`
+landed, now archived:
+- Settings → Learning gained **What onspot can and cannot improve**
+  (`settings/WhatOnspotDoes.svelte`): helps with spontaneous speaking, grammar, vocabulary and
+  register; does not judge accent, score pronunciation or certify exams.
+- **Export a session transcript** as Markdown from History's row action or Practice's session menu
+  (`utils/sessionTranscript.ts`): title/date/mode, each take's prompt, both texts, explanation
+  (tags stripped), follow-up, stored translation variants and corrections. Desktop uses the save
+  dialog, the browser a download.
+- **Download notifications** (`stores/languageData.ts`, `platform/notifications.ts`): a 6 s toast
+  on success ("…ready. You can practise offline now.") and on failure; the same message goes to a
+  system notification when the app is in the background and permission was already granted. The
+  existing global progress bar is unchanged.
+- **Practice reminders** (`stores/reminders.ts`, `settings/ReminderSettings.svelte`): off by
+  default; Frequent ≈ daily, Infrequent ≈ three days; a completed take or **Not now** restarts the
+  clock. Checked on launch, on return to view and every 5 minutes; a best-effort system
+  notification fires once per due period while the app is hidden. In-app banner in Practice's
+  notice strip with Start speaking / dismiss.
+- **Word-for-word breakdown as horizontal pairs** (`AttemptCard.svelte`): each pair is its own
+  column, source word above a short rule and its translation below, reading left to right. The row
+  wraps when a take has more or longer words.
+- Settings has new fields `practiceReminders` (boolean) and `reminderFrequency`
+  (`frequent` | `infrequent`); no DB migration (settings are key/value, defaults fill gaps).
+- Verified: `bun run check` 0/0, `bun run build`, `bun run spdx:check` (221). Playwright 18/18 on
+  the :5173 dev server with a fresh profile: guide + reminder settings render, reminders become due
+  after a seeded 3-day gap, the banner appears and can be put off, word columns read left to right
+  with each pair stacked source/rule/translation, and a real History export downloaded a `.md`
+  containing both texts, corrections, translations and no explanation tags. The word list was also
+  checked at 390 px: all five pairs fit in one row, each source sits above its rule and translation,
+  and neither the page nor the stage overflows horizontally. Not verified: a real 363 MB language
+  download's completion toast/system notification, a real device notification, and the Tauri
+  save-dialog path.
+
+**Launch prep / README (2026-11-03, uncommitted):** `README.md` now leads with the speaking hook
+and a Download CTA, separates ready-to-use downloads from build-from-source, states French-first
+honestly, and corrects the "up to five minutes" claim (`MAX_RECORDING_SEC` is 60). Every README
+image is now a Markdown image with an absolute raw GitHub URL (the title uses
+`src-tauri/icons/64x64.png`), so previews no longer show raw `<img>` tags or broken relative
+paths. The author's original tagline is restored. An `[!IMPORTANT]` API-key banner now sits above
+the hero screenshot, with a two-minute Groq walkthrough and optional ElevenLabs steps; the
+download and first-run sections repeat the requirement. Contributor scaffolding is now present
+locally: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
+`SECURITY.md`, issue templates, PR template and `docs/releases/v0.2.3.md`. All new docs use British
+English. Still needed on GitHub: description fix (keep "inturn", fix "langugae"), topics,
+Discussions, labels, publishing the release notes, and committing/pushing these files. The launch
+verdict was a soft launch to French/privacy niches first; see `last-session.md`.
+
 **120 fps pass on the phone (2026-11-02, committed 37d2c0d; user: "no less than 120 fps … the whole app,
 on all platforms"):** measured on the user's Galaxy S24 FE (Android 17, 120 Hz) with a debuggable
 build (`scripts/android.sh build --apk --debug --target aarch64`, installs as
@@ -147,9 +323,11 @@ mipmaps, and their PNGs are pixel-identical to the repo's (legacy ic_launcher to
 device (no adb connection). Likely device-side: Android 13+ themed icons on (the launcher then
 draws the monochrome mark tinted, new in 0.2.2), a launcher icon cache, or an older debug build
 (`app.onspot.desktop.debug`, Tauri's default icon) beside the release app. Waiting on a screenshot.
-**Branches:** `feature/language-delivery-mode` = `main` (93518c8); the four older local branches
-(`feature/byoc-sync`, `feature/native-speech`, `migration`, `spike/whisper-webgpu`) are all
-contained in main. Offered to delete them all (and the remote feature branch); not yet answered.
+**Branches (2026-11-03):** GitHub has only `main` (user: "the github page should only have one main
+branch"); `feature/language-delivery-mode` was identical to main and is deleted locally and on
+GitHub. Work happens on `main`. The four older local branches (`feature/byoc-sync`,
+`feature/native-speech`, `migration`, `spike/whisper-webgpu`) were never on GitHub and are all
+contained in main; still local.
 
 **Installers branded (2026-11-02, committed a1900cf, released in 0.2.2; user: "make sure all of
 these installers use the app icon and brand assets"):** v0.2.1's setup .exe still had NSIS's own icon and blue sidebar, the
@@ -254,7 +432,11 @@ it installs over the existing app. Every `v*` tag now publishes the signed APK. 
 skipped (user's choice; no Apple signing). The Flatpak installs fine; Bazaar's UI hung after a
 successful install (its own bug), Discover started a redundant second install.
 
-**Brand (2026-11-01, uncommitted, `brand-assets/` untracked):** logo and app icon rebuilt from the
+**Brand v2 (2026-11-06, uncommitted):** `brand-assets/v1/` holds every v1 asset (still the one in
+use); `brand-assets/v2/` holds the tile-less monochrome redesign (white for dark mode, black for
+light mode; squircle and circle outlines; plus a one-shape glyph whose ground dips around the tallest bar; every SVG is `currentColor`, finished by `source/finish_svgs.py`; see its README). v2 is applied everywhere: the in-app logo (circle, masked over the mode accent) and every platform icon (`brand-assets/v2/platform/`, rendered by `scripts/brand-assets.sh`).
+
+**Brand (2026-11-01; files now in `brand-assets/v1/`):** logo and app icon rebuilt from the
 user's AI draft (`brand-assets/ai-generated-logo.png`) on exact geometry in VectorCraft
 (`brand-assets/onspot-brand.vectorcraft`; artboards App icon, Logo, Construction). Exports:
 `app-icon.svg`/`app-icon-1024.png` (mark only, macOS 1024/824 grid, continuous corner r 185.4),

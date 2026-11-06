@@ -9,7 +9,11 @@
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import SettingSelect from '#lib/components/settings/SettingSelect.svelte';
 	import ProcessingSection from '#lib/components/settings/ProcessingSection.svelte';
+	import SetupSection from '#lib/components/settings/SetupSection.svelte';
+	import IosInstallSection from '#lib/components/settings/IosInstallSection.svelte';
 	import TextSizeSettings from '#lib/components/settings/TextSizeSettings.svelte';
+	import ReminderSettings from '#lib/components/settings/ReminderSettings.svelte';
+	import WhatOnspotDoes from '#lib/components/settings/WhatOnspotDoes.svelte';
 	import DataSettings from '#lib/components/settings/DataSettings.svelte';
 	import UsageMonitor from '#lib/components/settings/UsageMonitor.svelte';
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
@@ -31,6 +35,10 @@
 		'#transcription': 'learning',
 		'#voice': 'learning',
 		'#text-size': 'learning',
+		'#setup': 'learning',
+		'#reminders': 'learning',
+		'#what-onspot-does': 'learning',
+		'#about': 'learning',
 		'#usage': 'usage',
 		'#storage': 'data',
 		'#cloud-sync': 'data'
@@ -130,6 +138,10 @@
 			</div>
 
 			<div class:hidden={tab !== 'learning'}>
+				<SetupSection />
+
+				<IosInstallSection />
+
 				<SettingsSection id="language" title="Language">
 					<SettingRow label="I am studying" for="targetLanguage">
 						<SettingSelect
@@ -185,6 +197,10 @@
 				<ProcessingSection focus={focusTarget} {focusNonce} />
 
 				<TextSizeSettings />
+
+				<ReminderSettings />
+
+				<WhatOnspotDoes />
 			</div>
 
 			<div class:hidden={tab !== 'usage'}>

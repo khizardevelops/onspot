@@ -15,7 +15,20 @@ installed. After switching to a branch with different dependencies, run
   the `@source` directives; stale watcher registrations persist until restart.)
 - `bun run build` — production SPA build to `build/` (single `index.html` + `_app/`).
 - `bun run preview` — serve the production build. COOP/COEP are applied by the Vite plugin.
+  It is **not** suitable for service-worker update testing: a rebuild deletes
+  `.svelte-kit/output` and Vite preview exits. Use a static server over `build/` for that flow.
 - `bun run check` — `svelte-kit sync` + `svelte-check`.
+- `bunx tsc -p src/service-worker --noEmit` — type-check the service worker in its own
+  `$app/tsconfig/service-worker` context (the root tsconfig excludes `src/service-worker`).
+- `scripts/pwa-assets.sh` — regenerate PWA icons and iOS launch images from
+  `src-tauri/icons/ios/AppIcon-512@2x.png` into `static/pwa/` (needs ImageMagick 7).
+- `scripts/cf-deploy.sh` — build and deploy the PWA to Cloudflare Workers static assets with
+  `cf deploy --prebuilt` (the `cf` CLI cannot build SvelteKit). The Worker is `onspot` at
+  `https://onspot.khizardevelops.workers.dev`. `CF_DRY_RUN=1 scripts/cf-deploy.sh` validates the
+  Build Output without uploading. CI uses `.github/workflows/cloudflare.yml` with
+  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secrets; add the Worker origin to the Google OAuth
+  web client before relying on Drive sync. Workers caps assets at 25 MiB, so the 26.5 MiB WebGPU
+  ORT binary is omitted; the default WASM runtime stays.
 - `bun run spdx` — add the AGPL SPDX header to every source file the project owns.
   `bun run spdx:check` fails when one is missing (used by the release workflow).
 - `bun run bundle:ui` — pack the isolated `src/routes/ui-sandbox/` UI with

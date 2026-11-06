@@ -119,8 +119,12 @@
 <header class="app-header paper-surface relative z-20 border-b" bind:this={element}>
 	<div class="app-header-row">
 		<nav class="app-nav flex shrink-0 items-center gap-1.5" aria-label="Primary navigation" inert={preview}>
-			<!-- The app icon cropped to its tile (brand-assets/app-icon-tile.svg), as the favicon. -->
-			<img class="mr-1 size-9 shrink-0" src={asset('app-icon.svg')} alt="onspot" width="36" height="36" />
+			<!-- The v2 circle icon (brand-assets/v2/) in the mode's accent, on a raised paper disc; the light and dark files differ in beam strength. -->
+			<span class="logo-tile size-9 shrink-0" role="img" aria-label="onspot">
+				<span class="logo-ink dark:hidden" style="mask-image: url({asset('app-icon-circle-light-tile.svg')}); -webkit-mask-image: url({asset('app-icon-circle-light-tile.svg')})"></span>
+				<span class="logo-ink hidden dark:block" style="mask-image: url({asset('app-icon-circle-dark-tile.svg')}); -webkit-mask-image: url({asset('app-icon-circle-dark-tile.svg')})"></span>
+			</span>
+			<span class="nav-divider mx-2 shrink-0" aria-hidden="true"></span>
 
 			<NeoTooltip tooltip="New session" placement="bottom" {...quickTooltip}>
 				<NeoButton aria-label="New session" class="nav-key" rounded elevation={2} onclick={startNewSession}>
@@ -202,7 +206,9 @@
 		box-shadow: 0 1px 0 color-mix(in srgb, white 40%, transparent);
 	}
 	:global([data-theme='dark']) .app-header {
-		box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+		box-shadow:
+			0 1px 0 rgba(255, 245, 225, 0.07),
+			inset 0 1px 0 rgba(255, 245, 225, 0.04);
 	}
 
 	.app-header-row {
@@ -312,7 +318,9 @@
 				0 -8px 18px -10px rgb(60 50 35 / 0.25);
 		}
 		:global([data-theme='dark']) .app-header {
-			box-shadow: 0 -8px 18px -10px rgb(0 0 0 / 0.6);
+			box-shadow:
+				0 -1px 0 rgba(255, 245, 225, 0.06),
+				0 -8px 18px -10px rgb(0 0 0 / 0.6);
 		}
 		.app-header-row {
 			gap: 0.375rem;

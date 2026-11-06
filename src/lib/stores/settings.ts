@@ -83,6 +83,10 @@ export interface AppSettings {
 	 * voice's approved processing profile. Keyed by voice id; absent = neutral.
 	 */
 	voiceTunings: Record<string, VoiceTuning>;
+	/** A gentle nudge to practise after a gap; off until the learner asks for it. */
+	practiceReminders: boolean;
+	/** How often reminders may appear: about daily, or every few days. */
+	reminderFrequency: 'frequent' | 'infrequent';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -112,7 +116,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	syncProvider: 'off',
 	webdavUrl: '',
 	webdavPath: '/onspot/onspot.sqlite',
-	voiceTunings: {}
+	voiceTunings: {},
+	practiceReminders: false,
+	reminderFrequency: 'frequent'
 };
 
 const FIELD_PREFIX = 'onspot.setting.';
@@ -136,7 +142,8 @@ const CHOICES = {
 	ttsCloudProvider: ['elevenlabs', 'openai'],
 	correctionMode: ['cloud', 'local'],
 	llmProvider: ['groq', 'deepseek', 'custom'],
-	syncProvider: ['off', 'google-drive', 'webdav']
+	syncProvider: ['off', 'google-drive', 'webdav'],
+	reminderFrequency: ['frequent', 'infrequent']
 } as const satisfies Partial<Record<keyof AppSettings, readonly string[]>>;
 const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
 

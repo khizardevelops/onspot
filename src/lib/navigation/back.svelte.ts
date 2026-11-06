@@ -65,5 +65,5 @@ export function goBack(): void {
 
 function goToPractice(): void {
 	replacingPage = true;
-	void goto(pageHref('/'), { replaceState: true });
+	void goto(pageHref('/'), { replace: true });
 }

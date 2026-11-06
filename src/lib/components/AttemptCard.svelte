@@ -43,6 +43,8 @@
 	import {
 		Check,
 		ChevronDown,
+		ChevronLeft,
+		ChevronRight,
 		Ellipsis,
 		Languages,
 		ListMusic,
@@ -148,8 +150,9 @@
 	let rerendering = $state(false);
 	let generatingTranslations = $state(false);
 	let translationError = $state<string | null>(null);
-	let showIdiomaticVariants = $state(showsEveryText);
 	let showWordBreakdown = $state(showsEveryText);
+	/** Which idiomatic variant is on screen; variants are pages, the primary translation first. */
+	let idiomaticPageIndex = $state(0);
 	/** Off until the learner picks a translation: nothing is translated (or paid for) unasked. */
 	let translationView = $state<TranslationView>(showsEveryText ? 'all' : 'off');
 
@@ -236,6 +239,27 @@
 			: { idiomatic: '', idiomaticVariants: [], literal: '', wordForWord: '', wordBreakdown: [] }
 	);
 
+	/** Every rendering of the idiomatic meaning: the primary translation is page 1. */
+	const idiomaticPages = $derived([translations.idiomatic, ...translations.idiomaticVariants].filter(Boolean));
+	const currentIdiomatic = $derived(idiomaticPages[idiomaticPageIndex] ?? translations.idiomatic);
+	$effect(() => {
+		// A new translation view or a regenerated set starts on the first variant.
+		translationView;
+		translations.idiomatic;
+		translations.idiomaticVariants;
+		idiomaticPageIndex = 0;
+	});
+	$effect(() => {
+		// Never leave the pager on a page a shorter regenerated set no longer has.
+		if (idiomaticPageIndex >= idiomaticPages.length) idiomaticPageIndex = 0;
+	});
+
+	function stepIdiomaticPage(step: number): void {
+		const count = idiomaticPages.length;
+		if (count < 2) return;
+		idiomaticPageIndex = (idiomaticPageIndex + step + count) % count;
+	}
+
 	const translationLabel = $derived.by(() => {
 		if (translationView === 'off') return 'Translate';
 		if (translationView === 'all') return 'Compare';
@@ -246,12 +270,12 @@
 		if (translationView === 'off') return [];
 		if (translationView === 'all') {
 			return [
-				{ kind: 'idiomatic', label: 'Idiomatic', value: translations.idiomatic, italic: false },
+				{ kind: 'idiomatic', label: 'Idiomatic', value: currentIdiomatic, italic: false },
 				{ kind: 'literal', label: 'Literal', value: translations.literal, italic: false },
 				{ kind: 'wordForWord', label: 'Word-for-word', value: translations.wordForWord, italic: true }
 			].filter((entry) => entry.value);
 		}
-		const value = translations[translationView];
+		const value = translationView === 'idiomatic' ? currentIdiomatic : translations[translationView];
 		const label = TRANSLATION_OPTIONS.find((option) => option.id === translationView)?.label ?? '';
 		return value
 			? [{ kind: translationView, label, value, italic: translationView === 'wordForWord' }]
@@ -346,7 +370,7 @@
 	}
 
 	async function regenerateTranslations(): Promise<void> {
-		showIdiomaticVariants = false;
+		idiomaticPageIndex = 0;
 		showWordBreakdown = false;
 		await requestTranslations(true);
 	}
@@ -412,6 +436,44 @@
 
 {#snippet optionCheck({ item }: { item: { value: unknown } })}
 	<Check size={15} class="menu-check {isChecked(item.value) ? '' : 'invisible'}" aria-hidden="true" />
+{/snippet}
+
+<!-- The variant's label-maker tag, wherever its row is headed (note header or its own row). -->
+{#snippet translationTag(label: string)}
+	<span class="translation-label">{label}</span>
+{/snippet}
+
+<!-- The note's right-hand control: variant pager, or the word breakdown's disclosure. -->
+{#snippet translationToggle(translation: { kind: string })}
+	{#if translation.kind === 'idiomatic' && idiomaticPages.length > 1}
+		<div class="variant-controls" role="group" aria-label="Translation variants">
+			<NeoButton
+				text
+				rounded
+				class="variant-step"
+				aria-label="Previous translation variant"
+				title="Previous translation variant"
+				onclick={() => stepIdiomaticPage(-1)}
+			>
+				{#snippet icon()}<ChevronLeft size={14} />{/snippet}
+			</NeoButton>
+			<span class="variant-count">{idiomaticPageIndex + 1} / {idiomaticPages.length}</span>
+			<NeoButton
+				text
+				rounded
+				class="variant-step"
+				aria-label="Next translation variant"
+				title="Next translation variant"
+				onclick={() => stepIdiomaticPage(1)}
+			>
+				{#snippet icon()}<ChevronRight size={14} />{/snippet}
+			</NeoButton>
+		</div>
+	{:else if translation.kind === 'wordForWord'}
+		<button type="button" class="pencil-link" aria-expanded={showWordBreakdown} onclick={() => void toggleWordBreakdown(!showWordBreakdown)}>
+			{showWordBreakdown ? 'Hide each word' : 'Each word'}
+		</button>
+	{/if}
 {/snippet}
 
 <!-- An index card: its paper, rules and edges are styled below; the pile adds tape and shadow. -->
@@ -589,13 +651,20 @@
 		{#if translationView !== 'off'}
 			<!-- A sticky note stuck on the card: clearly not the take's own text. -->
 			<section class="card-translation mt-4 min-w-0" aria-label="Translation" aria-live="polite" in:slide={{ duration: 170 }} out:fade={{ duration: 140 }}>
-				<div class="flex min-h-7 items-center gap-1.5">
-					<span class="translation-mark grid size-7 shrink-0 place-items-center" aria-hidden="true"><Languages size={14} /></span>
-					<p class="eyebrow">Translation</p>
-					<!-- Takes the note off again; the style menu above still brings it back. -->
+				<div class="translation-heading">
+					<!-- Takes the note off again; the style menu above still brings it back. It leads the
+					     header so the variant's own control can sit at the card's far right. -->
 					<NeoButton text rounded class="card-icon-button note-close" aria-label="Hide translation" title="Hide translation" onclick={() => void chooseTranslation('off')}>
 						{#snippet icon()}<X size={15} />{/snippet}
 					</NeoButton>
+					<span class="translation-mark grid size-7 shrink-0 place-items-center" aria-hidden="true"><Languages size={14} /></span>
+					<p class="eyebrow">Translation</p>
+					<!-- One variant: its tag and disclosure share this line, above the text. -->
+					{#if visibleTranslations.length === 1}
+						{@const only = visibleTranslations[0]}
+						{@render translationTag(only.label)}
+						<div class="translation-toggle">{@render translationToggle(only)}</div>
+					{/if}
 				</div>
 
 				{#if generatingTranslations}
@@ -606,43 +675,29 @@
 						<button type="button" class="pencil-link" onclick={() => void requestTranslations(false)}>Translate into {instructionName}</button>
 					</p>
 				{:else}
-					<!-- One ruled row per translation: tag, text, and that row's own toggle on its first line. -->
+					<!-- One block per variant; with several, each gets its own tag line above its text. -->
 					<ul class="translation-rows" data-text-section="translation">
 						{#each visibleTranslations as translation (translation.kind)}
 							<li class="translation-row">
-								<span class="translation-label">{translation.label}</span>
+								{#if visibleTranslations.length > 1}
+									<div class="translation-row-head">
+										{@render translationTag(translation.label)}
+										<div class="translation-toggle">{@render translationToggle(translation)}</div>
+									</div>
+								{/if}
 								<div class="translation-body min-w-0">
-									<p class="translation-text" class:word-for-word={translation.italic} dir="auto">{translation.value}</p>
-									{#if translation.kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
-										<NeoCollapse transition={quickCollapse} bind:open={showIdiomaticVariants}>
-											{#each translations.idiomaticVariants as variant (variant)}
-												<p class="translation-text translation-alternative" dir="auto"><span class="or-mark">or</span> {variant}</p>
-											{/each}
-										</NeoCollapse>
-									{/if}
-								</div>
-								<div class="translation-toggle">
-									{#if translation.kind === 'idiomatic' && translations.idiomaticVariants.length > 0}
-										<button type="button" class="pencil-link" aria-expanded={showIdiomaticVariants} onclick={() => (showIdiomaticVariants = !showIdiomaticVariants)}>
-											{showIdiomaticVariants ? 'Hide' : `+${translations.idiomaticVariants.length}`} alternative{translations.idiomaticVariants.length === 1 ? '' : 's'}
-										</button>
-									{:else if translation.kind === 'wordForWord'}
-										<button type="button" class="pencil-link" aria-expanded={showWordBreakdown} onclick={() => void toggleWordBreakdown(!showWordBreakdown)}>
-											{showWordBreakdown ? 'Hide each word' : 'Each word'}
-										</button>
-									{/if}
+									<p class="translation-text" class:word-for-word={translation.italic} dir="auto" aria-live="polite">{#if translation.kind === 'idiomatic' && idiomaticPageIndex > 0}<span class="or-mark">or</span>{/if}{translation.value}</p>
 								</div>
 								{#if translation.kind === 'wordForWord'}
-									<!-- The word list takes the note's full width, so more columns fit. -->
 									<div class="vocab-span">
 										<NeoCollapse transition={quickCollapse} open={showWordBreakdown}>
 											{#if vocabulary.length > 0}
-												<!-- A vocabulary list from a notebook: the word, a dotted leader, its meaning. -->
+												<!-- Each pair is a column: the source word above, its meaning below, joined by a rule. -->
 												<ol class="vocab-list" data-text-section="words">
 													{#each vocabulary as item, position (`${item.source}-${position}`)}
 														<li class="vocab-entry">
 															<span class="vocab-source">{item.source}</span>
-															<span class="vocab-leader" aria-hidden="true"></span>
+															<span class="vocab-rule" aria-hidden="true"></span>
 															<span class="vocab-target" dir="auto">{item.target}</span>
 														</li>
 													{/each}
@@ -694,16 +749,19 @@
 		--index-edge: rgb(139 100 50 / 0.07);
 		--index-rule: rgb(110 140 185 / 0.17);
 		--index-red-rule: rgb(214 88 80 / 0.5);
+		--index-highlight: transparent;
 		--neo-card-border-radius: var(--attempt-radius, 6px);
 		border-radius: var(--attempt-radius, 6px);
 		overflow: visible;
 	}
 	:global([data-theme='dark'] .neo-card.attempt-card) {
-		--index-card: #24211c;
-		--index-hairline: rgb(255 240 215 / 0.07);
-		--index-edge: rgb(0 0 0 / 0.32);
-		--index-rule: rgb(170 190 225 / 0.08);
-		--index-red-rule: rgb(224 103 90 / 0.42);
+		/* Clearly above the dark paper, with a lit top edge where a shadow cannot show. */
+		--index-card: #2b2721;
+		--index-hairline: rgb(255 240 215 / 0.13);
+		--index-edge: rgb(0 0 0 / 0.45);
+		--index-rule: rgb(170 190 225 / 0.11);
+		--index-red-rule: rgb(232 120 108 / 0.55);
+		--index-highlight: rgb(255 245 225 / 0.1);
 	}
 	/* Out-ranks neo's own card surface and shadow rules. */
 	:global(html[neo-theme-root] .neo-card.neo-card.attempt-card) {
@@ -712,6 +770,7 @@
 		background-size: cover;
 		background-blend-mode: var(--key-blend);
 		box-shadow:
+			inset 0 1px 0 var(--index-highlight),
 			inset 0 0 0 1px var(--index-hairline),
 			inset 0 0 36px var(--index-edge);
 	}
@@ -772,10 +831,10 @@
 	}
 	:global(.menu-check) { color: var(--primary); flex-shrink: 0; }
 	/*
-	 * The translation is a yellow sticky note stuck on the card, so it reads at
-	 * once as something added to the take, not part of it: its own paper over
-	 * the ruled lines, a soft lift at the bottom, a folded corner. Each
-	 * variant's label sits in the note's margin (above the text on phones).
+	 * The translation is a sticky note stuck on the card: pastel paper, a strip
+	 * of washi tape, a folded corner and a slight tilt. Its header is a tool
+	 * bar, the variant's name is the active ink tab, the translation is
+	 * typewriter text, and each word pair is joined by red stitched thread.
 	 */
 	/* The explanation and its follow-up question: 15px (EXPLANATION_FONT_PX); ExplanationText scales each by the learner's size for it. */
 	.explanation-size {
@@ -783,29 +842,58 @@
 	}
 
 	.card-translation {
-		--note-paper: #fff6bf;
-		--note-paper-shade: #f8e9a0;
+		--note-paper: #fef3c7;
+		--note-paper-shade: #f7e7ad;
+		--note-ink: #1c1917;
+		--note-muted: #6b6459;
 		--note-label: #8a6a1f;
-		--note-tag: #a8791c;
-		--note-tag-ink: #fffaf0;
-		--note-rule: rgb(138 106 31 / 0.28);
-		--note-shadow: rgb(110 85 20 / 0.28);
+		--note-tag: #1c1917;
+		--note-tag-ink: #fef3c7;
+		--note-rule: rgb(80 65 35 / 0.22);
+		--note-stitch: #b91c1c;
+		--note-link: #1d4ed8;
+		--note-tape: rgb(255 252 240 / 0.58);
+		--note-tape-line: rgb(80 60 30 / 0.14);
+		--note-shadow: rgb(110 85 20 / 0.3);
 		position: relative;
-		padding: 0.5rem 0.875rem 0.875rem 0.625rem;
-		border-radius: 2px 2px 3px 3px;
-		background: linear-gradient(175deg, var(--note-paper) 55%, var(--note-paper-shade));
+		padding: 0.6rem 1rem 1rem 0.75rem;
+		border-radius: 2px;
+		background: linear-gradient(175deg, var(--note-paper) 58%, var(--note-paper-shade));
 		box-shadow:
-			0 1px 1px rgb(0 0 0 / 0.05),
-			0 8px 14px -8px var(--note-shadow);
+			0 1px 2px rgb(0 0 0 / 0.08),
+			0 12px 24px -10px var(--note-shadow),
+			inset -4px -4px 12px rgb(0 0 0 / 0.03);
+		transform: rotate(-0.4deg);
 	}
 	:global([data-theme='dark']) .card-translation {
 		--note-paper: #3a3322;
 		--note-paper-shade: #312b1c;
+		--note-ink: #f4ead2;
+		--note-muted: #cbbd9c;
 		--note-label: #d9b865;
-		--note-tag: #d9b865;
+		--note-tag: #e8dfc6;
 		--note-tag-ink: #2a2414;
 		--note-rule: rgb(217 184 101 / 0.22);
+		--note-stitch: #e08a7a;
+		--note-link: #9bc2ff;
+		--note-tape: rgb(220 205 175 / 0.18);
+		--note-tape-line: rgb(255 245 225 / 0.12);
 		--note-shadow: rgb(0 0 0 / 0.55);
+	}
+	/* A strip of washi tape holding the note to the take. */
+	.card-translation::before {
+		content: '';
+		position: absolute;
+		top: -9px;
+		left: 18px;
+		z-index: 2;
+		width: 64px;
+		height: 18px;
+		border: 1px dashed var(--note-tape-line);
+		background-color: var(--note-tape);
+		box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+		transform: rotate(-2deg);
+		pointer-events: none;
 	}
 	/* The folded bottom-right corner. */
 	.card-translation::after {
@@ -813,18 +901,18 @@
 		position: absolute;
 		right: 0;
 		bottom: 0;
-		width: 18px;
-		height: 18px;
+		width: 22px;
+		height: 22px;
 		background: linear-gradient(135deg, var(--note-paper-shade) 50%, color-mix(in srgb, var(--note-shadow) 60%, transparent) 50%, transparent 72%);
 		border-top-left-radius: 3px;
+		box-shadow: -2px -2px 4px rgb(0 0 0 / 0.05);
 		pointer-events: none;
 	}
 	.translation-mark {
 		color: var(--note-label);
 	}
-	/* At the note's right edge (the button's own styles reset margin utilities). */
+	/* Leads the note's toolbar, clear of the variant control at the far right. */
 	:global(.neo-card.attempt-card .neo-button.card-icon-button.note-close) {
-		margin-inline-start: auto;
 		color: var(--note-label);
 	}
 	@media (pointer: coarse) {
@@ -834,123 +922,213 @@
 		}
 	}
 	.card-translation :global(.eyebrow) {
-		color: var(--note-label);
+		color: var(--note-muted);
+	}
+	/* The note's first line: the translation label, the variant's tag and its toggle, then close. */
+	.translation-heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.375rem;
+		min-height: 1.75rem;
+		padding-bottom: 0.4rem;
+		border-bottom: 2px dashed color-mix(in srgb, var(--note-rule) 90%, transparent);
+	}
+	.translation-heading .translation-toggle {
+		display: flex;
+		align-items: center;
+		/* The variant's control sits at the card's right edge, with the close beside it. */
+		margin-inline-start: auto;
 	}
 	.translation-rows {
-		display: grid;
-		grid-template-columns: max-content minmax(0, 1fr) max-content;
-		column-gap: 0.875rem;
-		margin: 0.125rem 0 0 0.5rem;
+		margin: 0.25rem 0 0 0.5rem;
 		padding: 0;
 		list-style: none;
 	}
-	/* Each row underlined across the note, so a toggle at its end reads as that row's. */
+	/* Each variant underlined across the note; the text runs the note's full width below its tag line. */
 	.translation-row {
-		display: grid;
-		grid-column: 1 / -1;
-		grid-template-columns: subgrid;
-		align-items: start;
-		padding: 0.4rem 0;
+		padding: 0.45rem 0;
 		border-bottom: 1px solid var(--note-rule);
 	}
 	.translation-row:last-child {
 		border-bottom: 0;
 	}
-	/* A solid tag, like a label-maker strip, so each variant's name stands out. */
+	.translation-row-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.translation-row-head .translation-toggle {
+		margin-inline-start: auto;
+	}
+	/* The active variant, like the dark tab in the sticky-note mockup. */
 	.translation-label {
-		justify-self: start;
-		margin-top: 0.2rem;
-		padding: 0.125rem 0.4rem;
+		padding: 0.125rem 0.45rem;
 		border-radius: 3px;
 		background: var(--note-tag);
 		color: var(--note-tag-ink);
+		box-shadow: 1px 1px 0 rgb(0 0 0 / 0.2);
 		font-size: 0.625rem;
 		font-weight: 700;
 		letter-spacing: 0.1em;
 		line-height: 1.4;
 		text-transform: uppercase;
 		white-space: nowrap;
+		transform: rotate(-1deg);
 	}
 	.translation-toggle {
-		justify-self: end;
-		padding-top: 0.1rem;
+		display: flex;
+		align-items: center;
+		white-space: nowrap;
+	}
+	/* The variant's disclosure, handwritten on the note in wavy blue ink. */
+	.card-translation .pencil-link {
+		font-family: 'Caveat', cursive;
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: var(--note-link);
+		text-decoration: underline wavy var(--note-link);
+		text-decoration-thickness: 1px;
+		text-underline-offset: 2px;
 	}
 	.vocab-span {
-		grid-column: 1 / -1;
+		min-width: 0;
+	}
+	.translation-body {
+		margin-top: 0.3rem;
 	}
 	.translation-text {
-		font-size: calc(0.9375rem * var(--text-scale-translation, 1));
-		line-height: 1.6;
+		color: var(--note-ink);
+		font-family: 'Courier Prime', var(--font-mono), monospace;
+		font-size: calc(1.05rem * var(--text-scale-translation, 1));
+		font-weight: 400;
+		line-height: 1.35;
 		overflow-wrap: anywhere;
 	}
 	.translation-text.word-for-word {
-		color: var(--muted-foreground);
-		font-style: italic;
+		color: var(--note-ink);
+		font-style: normal;
 	}
-	.translation-alternative {
-		color: var(--muted-foreground);
+	/* Translation variants page one at a time; the pager lives in the note header. */
+	.variant-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.15rem;
+	}
+	.variant-count {
+		color: var(--note-muted);
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		font-variant-numeric: tabular-nums;
+	}
+	:global(.neo-card.attempt-card .neo-button.variant-step) {
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		justify-content: center;
+		color: var(--note-link);
+	}
+	@media (pointer: coarse) {
+		:global(.neo-card.attempt-card .neo-button.variant-step) {
+			width: var(--touch-target);
+			height: var(--touch-target);
+		}
 	}
 	.or-mark {
 		margin-right: 0.25rem;
-		color: var(--faint);
+		color: var(--note-muted);
 		font-style: italic;
 	}
 	.pencil-note {
-		color: var(--muted-foreground);
+		color: var(--note-muted);
 		font-size: 0.8125rem;
 	}
-	/* Phones: the tag and its toggle share the first line; the text goes below them. */
+	/* Phones: tighten the header so the label, tag, toggle and close share one line. */
 	@media (max-width: 640px) {
+		.card-translation {
+			transform: none;
+		}
 		.translation-rows {
-			grid-template-columns: minmax(0, 1fr) max-content;
 			margin-left: 0;
 		}
-		.translation-label {
-			grid-column: 1;
-			grid-row: 1;
-			margin-top: 0;
+		.translation-heading {
+			gap: 0.2rem;
 		}
-		.translation-toggle {
-			grid-column: 2;
-			grid-row: 1;
+		/* The label still names the note; dropping the decorative mark leaves room for "Hide each word". */
+		.translation-heading .translation-mark {
+			display: none;
 		}
-		.translation-body {
-			grid-column: 1 / -1;
-			grid-row: 2;
-			margin-top: 0.25rem;
+		.translation-heading .eyebrow {
+			letter-spacing: 0.1em;
 		}
-		.vocab-span {
-			grid-row: 3;
+		.translation-heading .translation-label {
+			padding-inline: 0.25rem;
+			letter-spacing: 0.08em;
+		}
+		.translation-heading .pencil-link {
+			font-size: 0.8rem;
 		}
 	}
 
-	/* "Each word": a vocabulary list from a notebook, in up to four columns. */
+	/*
+	 * "Each word": each pair is its own column, the source word above its
+	 * translation and a short rule between them. The pairs read left to right
+	 * like the sentence they came from, which a vertical list could not show.
+	 */
 	.vocab-list {
-		columns: 4 8rem;
-		column-gap: 1.75rem;
-		margin: 0.375rem 0 0;
-		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: center;
+		gap: 0.75rem 1.25rem;
+		margin: 0.5rem 0 0;
+		padding: 0.25rem 0.25rem 0;
 		list-style: none;
-		font-size: calc(0.8125rem * var(--text-scale-words, 1));
+		font-size: calc(0.875rem * var(--text-scale-words, 1));
 	}
 	.vocab-entry {
 		display: flex;
-		align-items: baseline;
-		gap: 0.3rem;
-		line-height: 1.75;
-		break-inside: avoid;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.2rem;
+		min-width: 0;
 	}
 	.vocab-source {
-		font-family: var(--font-serif);
-		font-weight: 600;
+		color: var(--note-ink);
+		font-family: 'Courier Prime', var(--font-mono), monospace;
+		font-size: 1.08em;
+		font-weight: 700;
+		line-height: 1.35;
+		text-align: center;
+		overflow-wrap: anywhere;
 	}
-	.vocab-leader {
-		flex: 1;
-		min-width: 0.75rem;
-		border-bottom: 1px dotted color-mix(in srgb, var(--faint) 70%, transparent);
+	/* A clean connector joining the source word to its meaning: one thin line, fading at both ends. */
+	.vocab-rule {
+		flex: 0 0 auto;
+		width: 1.5px;
+		height: 1.15rem;
+		background: linear-gradient(
+			to bottom,
+			transparent,
+			color-mix(in srgb, var(--note-stitch) 78%, transparent) 18%,
+			color-mix(in srgb, var(--note-stitch) 78%, transparent) 82%,
+			transparent
+		);
 	}
 	.vocab-target {
-		color: var(--muted-foreground);
-		text-align: right;
+		color: var(--note-muted);
+		font-size: 0.9em;
+		font-style: italic;
+		font-weight: 700;
+		line-height: 1.35;
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+	@media (max-width: 640px) {
+		.vocab-list {
+			gap: 0.6rem 1rem;
+			padding-inline: 0;
+		}
 	}
 </style>

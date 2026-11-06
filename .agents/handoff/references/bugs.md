@@ -4,6 +4,21 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### Dark mode read as one fogged surface with no depth (2026-11-06)
+- **Symptom**: light mode had clear cards, controls and panels; dark mode made every component look
+  like the same dark material with a global filter over it, hard to separate from the page.
+- **Cause**: the dark paper texture's shadow colour `#3d3830` lifted the rendered page to about
+  `#2c2823` (not the `#151412` token), while the attempt card was `#24211c` and sheets `#1e1c19`.
+  Black layered shadows are invisible on dark, the 72%-opaque frosted sheet let the blurred page
+  flatten it, and the Feedback notebook used the raw page colour, reading as a hole.
+- **Fix**: a real surface ladder (page `#12110f`, card `#24211d`, inset `#1a1815`, key `#332e27`,
+  well `#0d0c0b`), darker paper params, 90% sheet frost, brighter text/borders, and subtle white
+  catchlights (`--shade-light` 0.20, lit card/panel top edges, header seams). Files: `app.css`,
+  `routes/+layout.svelte`, `AttemptCard.svelte`, `FeedbackPanel.svelte`, `AppHeader.svelte`.
+- **Proof**: seeded light/dark screenshots of Practice, History, Insights, Settings; key dark
+  contrast pairs 13.6:1 / 7.2:1 / 5.8:1 (foreground / muted / faint on card). `bun run check` 0/0,
+  build and SPDX pass; Playwright feature 18/18 plus the phone layout checks.
+
 
 
 

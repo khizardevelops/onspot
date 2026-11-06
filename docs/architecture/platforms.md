@@ -10,7 +10,7 @@ desktop first, then the web SPA, then mobile.
 | Linux desktop | **Built and verified** (x64); ARM64 `.deb`/`.rpm`/`.AppImage`/`.flatpak` build in CI on ARM runners, not run here | native whisper.cpp | native SQLite | Google Drive + WebDAV |
 | Web SPA | **Verified** (Chromium; Firefox for storage/restore paths) | Transformers.js Whisper in a worker | sqlite-wasm on OPFS in a worker | Google Drive (GIS) + WebDAV (needs CORS) |
 | Android | **Verified** (debug app on a phone; release APK built) | native whisper.cpp | native SQLite | WebDAV (Google Drive deferred) |
-| iOS | **Not started** | — | — | — |
+| iOS / iPadOS | **PWA live** at `onspot.khizardevelops.workers.dev`; not device-verified | cloud Groq or on-device Whisper/Piper (offered; cloud recommended on iPhone) | sqlite-wasm on OPFS | Google Drive popup + WebDAV (both unverified on iOS) |
 
 ## Desktop
 
@@ -42,6 +42,19 @@ desktop first, then the web SPA, then mobile.
 - Only one tab can hold the OPFS database at a time. A second tab gets a clear message after a
   short retry.
 - Google Drive uses Google Identity Services (popup); WebDAV depends on the server's CORS policy.
+- The live web origin is **Cloudflare Workers static assets** at
+  `https://onspot.khizardevelops.workers.dev`, deployed with `cf deploy --prebuilt`
+  (`scripts/cf-deploy.sh`; `cf deploy` cannot build SvelteKit yet). The Worker serves the SPA at
+  the root with `notFoundHandling: single-page-application`; `static/_headers` supplies
+  `same-origin-allow-popups`/`credentialless`, `nosniff`, the referrer policy and no-cache for the
+  service worker. The legacy Pages `_redirects` form is rejected by Workers assets as an infinite
+  loop and is not used.
+- `src/service-worker/index.ts` precaches the app shell and serves offline navigations in
+  production web builds only. It never runs in dev or the Tauri apps, and it excludes optional
+  models, launch images and sample audio. New versions wait for the learner's **Reload**. The
+  Worker bundle omits the 26.5 MiB WebGPU-only ORT binary (Workers' 25 MiB per-asset limit); the
+  default WASM ORT runtime is included. GitHub Pages remains the old origin while learners export
+  and move.
 
 ## Android
 
@@ -53,20 +66,46 @@ desktop first, then the web SPA, then mobile.
   APK on every push to `main` (`.github/workflows/android.yml`).
 - Google Drive sync is not wired up yet; WebDAV uses the native HTTP path and works without CORS.
 
-## iOS (deferred)
+## iOS and iPadOS (PWA)
 
-There is no iOS project, no build and no claim that it works. It needs work that this Linux
-machine cannot do:
+There is no App Store build and no Tauri iOS project. iPhone and iPad install the same static web
+build from Safari with **Share → Add to Home Screen**; no paid Apple account is involved. The PWA
+is live at **https://onspot.khizardevelops.workers.dev**, deployed with `cf` to Workers static
+assets; it has not been run on an Apple device yet, so treat the device behaviour below as
+unverified.
 
-1. A macOS host with Xcode and an Apple developer identity.
-2. `bunx tauri ios init` and the generated Xcode project, plus signing/provisioning.
-3. `NSMicrophoneUsageDescription` in `Info.plist` and the runtime microphone permission flow.
-4. The `speech` plugin's whisper.cpp CMake build for iOS targets, including the C/C++ toolchain
-   settings and any SIMD flags.
-5. A device/TestFlight run for speech, storage and sync, plus App Store privacy declarations.
-
-The shared code is already portable: `currentRuntime()` reports `ios`, and Google Drive sync is
-hidden there while WebDAV remains available.
+- **Host and origin.** Cloudflare Workers static assets serve the SPA at the root. `static/_headers`
+  sends `Cross-Origin-Opener-Policy: same-origin-allow-popups` and
+  `Cross-Origin-Embedder-Policy: credentialless` (verified live); the Worker's
+  `notFoundHandling: single-page-application` answers deep links. `same-origin-allow-popups`
+  deliberately keeps the Google Identity Services popup working, so the production page is
+  **not** cross-origin isolated and local WASM stays single-threaded. Moving to `same-origin`
+  needs a live Drive test first.
+- **Build/deploy.** `scripts/cf-deploy.sh` builds the SPA, assembles a Build Output Specification,
+  drops the Pages-only `_redirects` and the 26.5 MiB WebGPU ORT binary, and runs
+  `cf deploy --prebuilt`. `cf` cannot build SvelteKit directly yet. The build is a Worker, not the
+  empty legacy Pages project `onspot-4k1.pages.dev` that `cf pages create` made first.
+- **Installable app.** `static/manifest.webmanifest` supplies the name, scope, colours and
+  192/512/maskable icons. `src/app.html` adds the 180 px Apple touch icon, iOS meta tags and one
+  launch image per current iPhone/iPad size and orientation. `scripts/pwa-assets.sh` regenerates
+  all of them from `src-tauri/icons/ios/AppIcon-512@2x.png`.
+- **Offline.** `src/service-worker/index.ts` uses SvelteKit 3's `$app/service-worker`,
+  `$app/manifest` and `$app/env`. It registers only in production web builds, precaches the small
+  app shell, excludes `piper-wasm`, launch images, sample audio and the ORT runtimes, and caches
+  each WASM runtime on first use. Deep-link navigations fall back to the cached shell with a
+  pinned `<base>`; updates stay waiting until the learner presses **Reload**.
+- **Install guide.** `PwaInstallPrompt` appears on an iPhone/iPad browser tab (not on the welcome
+  page or Settings) and can be dismissed. Settings → Learning → **iPhone and iPad** keeps the full
+  steps permanently. Local speech-to-text and voice downloads stay available; the copy recommends
+  cloud speech as the lighter option on iPhone rather than forcing it.
+- **Limits.** A home-screen app has no browser Back button; iOS suspends it when it leaves the
+  screen; there is no Web Push or system reminder for a closed app; downloads only run while the
+  app is visible; and local Whisper's ~2 GB footprint is likely to be killed. See
+  `references/known-issues.md` for the verify-on-device list.
+- **Verification.** Chromium with iPhone SE/iPhone 14/iPad Pro emulation only: install card,
+  dismissal, Settings section, installed state, dark/light status bar, no horizontal overflow.
+  Real Safari, WebKitGTK, Cloudflare headers, Google Drive and local model runs are still open.
+  The implementing brief is `docs/prompts/ios-focused-pwa.md`.
 
 ## Shared behaviour
 
@@ -82,7 +121,10 @@ bun run build                 # static web build
 bun run tauri build           # native bundle for the current host
 bun run android:build         # signed arm64 APK
 bun run android:emulator-apk  # debug x86_64 APK
+scripts/pwa-assets.sh         # PWA icons and iOS launch images from the app icon
+scripts/cf-deploy.sh          # build and deploy the PWA with cf (CF_DRY_RUN=1 to check)
 ```
 
-CI: `.github/workflows/android.yml` (APK) and `.github/workflows/release.yml` (Windows, macOS and
-Linux desktop bundles).
+CI: `.github/workflows/android.yml` (APK), `.github/workflows/release.yml` (Windows, macOS and
+Linux desktop bundles), `.github/workflows/pages.yml` (legacy GitHub Pages origin) and
+`.github/workflows/cloudflare.yml` (Workers static assets via `cf`).

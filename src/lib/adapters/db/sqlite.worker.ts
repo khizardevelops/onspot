@@ -54,10 +54,39 @@ interface SqliteHandle {
 
 let handlePromise: Promise<SqliteHandle> | null = null;
 
+/**
+ * The SQLite WASM the service worker cached on a previous online visit.
+ *
+ * A dedicated worker's XHR is not reliably handed to the service worker, so
+ * offline it cannot rely on `caches.match` at request time. Passing the bytes
+ * straight to sqlite-wasm avoids the network fetch and keeps the database
+ * opening offline.
+ */
+async function cachedSqliteWasm(): Promise<ArrayBuffer | null> {
+	try {
+		for (const name of await caches.keys()) {
+			const cache = await caches.open(name);
+			for (const request of await cache.keys()) {
+				const path = new URL(request.url).pathname;
+				if (!/\/sqlite3-[^/]+\.wasm$/.test(path)) continue;
+
+				const response = await cache.match(request);
+				if (response) return await response.arrayBuffer();
+			}
+		}
+	} catch {
+		// No Cache Storage (or it is blocked): fall back to the normal fetch.
+	}
+	return null;
+}
+
 async function getHandle(): Promise<SqliteHandle> {
 	if (!handlePromise) {
 		handlePromise = (async () => {
-			const sqlite3: any = await initSqlite();
+			const wasmBinary = await cachedSqliteWasm();
+			// The published type omits Emscripten's module config, but the default
+			// export forwards it (including `wasmBinary`).
+			const sqlite3: any = await (initSqlite as any)(wasmBinary ? { wasmBinary } : undefined);
 			await removeLeakedSyncChecks();
 			const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'onspot-pool' });
 			// The filename is virtual within the SAH pool's OPFS directory.

@@ -10,12 +10,12 @@ one-for-one. Active docs are not logs. See the archive README for when and how t
 
 | folder | what goes in it |
 |---|---|
-| [`planning/`](./planning/) | Your working lists: [`ideas.md`](./planning/ideas.md) (ideas, planned work, done) and [`bugs.md`](./planning/bugs.md) (bugs to fix). |
+| [`planning/`](./planning/) | Your working backlog. [`README.md`](./planning/README.md) explains the workflow; [`ideas.md`](./planning/ideas.md) holds current ideas and planned work; [`bugs.md`](./planning/bugs.md) holds current unpatched bugs. Finished entries move to [`planning/archive/`](./planning/archive/). |
 | [`architecture/`](./architecture/) | How the product is built: [`languages.md`](./architecture/languages.md) (how a language is tracked and approved), [`supported-languages.md`](./architecture/supported-languages.md) (which speech tech each language uses), [`processing.md`](./architecture/processing.md) (per-capability device/cloud choices, presets and local servers), [`sync.md`](./architecture/sync.md) (cloud sync, conflicts and credentials), [`usage.md`](./architecture/usage.md) (the usage monitor: provider limits, sources and estimates) and [`platforms.md`](./architecture/platforms.md) (target status and iOS blockers). |
 | [`benchmarks/`](./benchmarks/README.md) | Every measured number: STT, TTS, runtime/memory, LLM providers. The one place to update a figure. |
 | [`research/`](./research/) | Open problems and how to evaluate fixes: [`model_problem.md`](./research/model_problem.md) (STT RAM usage, all models in use) and [`model-vetting.md`](./research/model-vetting.md) (checks before adopting a model). |
 | [`reference/`](./reference/) | Raw external data, e.g. [`groq_free/`](./reference/groq_free/) (Groq free-tier rate-limit CSVs). |
 | [`screenshots/`](./screenshots/) | App screenshots shown in the root README, each in a `-dark` and a `-light` version. Replace a screen by keeping the file name. |
-| [`prompts/`](./prompts/) | Prompts given to AI tools: the product inception brief and the UI-capture request. |
+| [`prompts/`](./prompts/) | Prompts given to AI tools: the product inception brief, the UI-capture request and the iOS PWA brief ([`ios-focused-pwa.md`](./prompts/ios-focused-pwa.md)). |
 | [`scratch/`](./scratch/) | Throwaway text, e.g. sample French dialogue. Nothing here is authoritative. |
 | [`archive/`](./archive/README.md) | **Archived** content from any folder above, at its mirrored path (`docs/X/Y.md` → `docs/archive/X/Y.md`). Frozen; read only for history. |

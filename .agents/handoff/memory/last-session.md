@@ -1,18 +1,391 @@
 # Last Session
 
+## 2026-11-06: iOS PWA foundation (installable web app)
+
+- **Asked:** start `docs/prompts/ios-focused-pwa.md`, then deploy with the `cf` CLI. Answers: no
+  iPhone/iPad yet, only a macOS VM on an external drive; Cloudflare; keep the option to download
+  local STT/voice while nudging cloud on iPhone; yes to iOS launch images.
+- **Built:** `static/manifest.webmanifest`; `scripts/pwa-assets.sh` + `static/pwa/` (192/512/
+  maskable/apple-touch icons and 28 portrait/landscape launch images for 14 current devices);
+  `src/app.html` iOS meta, theme colours and pre-paint theme/status-bar script; `static/_headers`;
+  `scripts/cf-deploy.sh` + `.github/workflows/cloudflare.yml`; `src/service-worker/index.ts`,
+  `src/lib/platform/pwa.ts`, `PwaUpdate.svelte`, `PwaInstallPrompt.svelte`,
+  `settings/IosInstallSection.svelte`; layout registration/mount and Settings placement.
+- **Deployed:** **https://onspot.khizardevelops.workers.dev** on Cloudflare Workers static assets.
+  `cf pages deploy` is disabled and `cf deploy` refuses SvelteKit; `--prebuilt` with a hand-built
+  Build Output Specification works. The empty legacy Pages project `onspot-4k1.pages.dev` was
+  created while probing and is unused.
+- **Behaviour:** service worker registers only in production web builds (`resolve('/')`, scope
+  root) and not in dev/Tauri. Shell precache excludes piper-wasm, splash images, MP3s and ORT;
+  WASM runtime files cache on first use; cross-origin API/model traffic is never intercepted;
+  deep-link shell gets an absolute app-root `<base>`. A waiting worker shows Later/Reload; nothing takes over
+  mid-take. The iOS install card is hidden on welcome and Settings (Settings has the permanent
+  copy), and local model downloads are not disabled. `notificationsSupported()` is false on Apple
+  touch devices, so Reminder Settings stays in-app and does not request system permission.
+- **Gotchas found:**
+  - `cf pages deploy` answers "Legacy Pages is not supported"; `cf deploy` detects SvelteKit and
+    refuses. Use `cf deploy --prebuilt` with `.cloudflare/output/v0/config.json` and
+    `workers/default/worker.config.json`, copy `build` into `workers/default/assets`, and set
+    `assets.notFoundHandling: "single-page-application"`.
+  - Workers static assets cap each file at 25 MiB. The WebGPU-only
+    `ort-wasm-simd-threaded.jsep-*.wasm` is 26.5 MiB, so `scripts/cf-deploy.sh` drops it; the
+    default WASM ORT runtime (23.5 MiB) stays. Local WebGPU is unavailable on this deployment.
+  - Workers assets reject the Pages `/* /index.html 200` rule as an infinite loop. The SPA
+    fallback is the Worker asset setting; `static/_redirects` was removed and `wrangler.toml` is
+    obsolete. `_headers` **is** applied (COOP/COEP/nosniff/referrer and service-worker no-cache).
+  - SvelteKit 3 removed `$service-worker`; use `$app/service-worker` (`self`), `$app/manifest`
+    (`immutable`, `assets`, `prerendered`) and `$app/env` (`version`). Type-check the worker with
+    `bunx tsc -p src/service-worker --noEmit`; root tsconfig excludes `src/service-worker`.
+  - `import.meta.env.BASE_URL` is `./` in the SPA, so registering `./service-worker.js` worked at
+    `/` but 404'd on `/history/`. Use `resolve('/')`.
+  - Vite preview exits when `bun run build` replaces `.svelte-kit/output`; the update test used a
+    small static server over `build/` instead. This is a test-tool limit, not a product bug.
+  - Vite preview rewrites deep-link fallback HTML to relative asset URLs and rewrites the base to
+    `./`/`../`. The worker **replaces** any existing base with the absolute app root (do not skip
+    when a base exists), otherwise the root shell cached at `/` fails when served at `/history/`.
+  - A dedicated worker's XHR is not reliably intercepted by the service worker offline. The SQLite
+    worker now finds the cached `sqlite3-*.wasm` and passes it to sqlite-wasm as `wasmBinary`; the
+    database opens offline. The earlier failure looked like a missing cache but the cache was fine.
+  - Two open pages hold the OPFS SAH pool; the offline DB test must close the online page first or
+    it reports `NoModificationAllowedError` (the existing one-tab limitation).
+  - The update banner sits below neo dialogs; the first test clicked through the permissions
+    modal and timed out. Test the banner on `/history/` (no prompt).
+  - `same-origin-allow-popups` keeps the GIS popup but means production is not cross-origin
+    isolated; do not claim multi-threaded local WASM on Cloudflare.
+- **Verified:** check 0/0, build, worker tsc, SPDX 230, `scripts/cf-deploy.sh` dry-run; live
+  root/`/history/` 200, manifest, service worker 200 with no-cache, live `_headers`, 133 shell
+  entries, SQLite WASM cached, offline `History · onspot` with no wasm/SQLite errors, iPhone 14
+  card/status bar. Update banner + Reload, dark/iPhone SE/iPad settings earlier.
+- **Not verified:** real Apple device/Safari, Google Drive in the installed app (no web client id
+  in this build), local models/audio on iOS, launch images/status bar on device, WebGPU local
+  inference (omitted binary).
+- **Next:** add the Worker origin to the Google OAuth client and set
+  `VITE_GOOGLE_CLIENT_ID_WEB`; real-device pass; migration notice/period for GitHub Pages;
+  Drive/WebDAV; local speech limits; CI secrets. The live URL is in README and platforms.md.
+
+## 2026-11-06: brand v2 (tile-less icon, squircle and circle outlines)
+
+- **Asked:** the logo looks too small in docks: drop the black background, make the symbol bigger,
+  widen the spotlight so the wave sits higher and the whole mark can grow; two versions (squircle
+  outline, circle outline); move every current brand asset (VectorCraft file included) into
+  `brand-assets/v1/` and make the v2 assets in `brand-assets/v2/`.
+- **Moved:** `git mv` of everything into `brand-assets/v1/`; references repointed (root README,
+  Flatpak manifest `../../brand-assets/v1/app-icon.svg`, metainfo comment, `scripts/brand-assets.sh`
+  `BRAND=…/v1`, AppHeader comment, `.gitignore`). The app still uses v1.
+- **v2:** see `brand-assets/v2/README.md`. Material 192 grid; circle keyline 176, squircle 160 (equal
+  area, v1's continuous corner scaled); outline 0.75 m Amber; 1 m clearance; centre of area on the
+  canvas centre; one shared m = 39.076 px (tighter of the two fits). Mark: lamp 9 x 1.5 m, pool
+  18 x 3 m, throw 12 m, wave axis 8 m (tallest bar on the pool's centre line). Logos: icon + v1
+  wordmark, s = m, x-height 5 m centred on the wave axis, gap 2.5 m. Construction sheet 4200 x 1024.
+  First made in amber (outline Amber, beam 75/32/8 %), then amended to monochrome (below).
+- **How:** geometry solved in Python (`brand-assets/v2/source/geometry.py` + `construction.py`,
+  reproduce the pasted SVGs byte for byte), pasted into VectorCraft (v1 document saved as
+  `v2/onspot-brand.vectorcraft`, art cleared, 8 artboards, a layer each, `clipboard.importSvg` +
+  `edit.pasteInPlace`; `data-name`s become object names), solid fills/strokes linked to the global
+  swatches, exported per artboard. VectorCraft's SVGs render pixel-identical to the script's.
+  MCP client: stdio JSON-RPC to `vectorcraft-cli mcp --connect 127.0.0.1:7979`, tool `run_command`.
+- **Rejected on the way:** maximal fit (pushed the mark to the top, empty band below); bbox
+  centring (pool looked low); 1 m outline (too heavy) and 0.5 m (vanishes at 32 px); wordmark
+  x-height 8 m (letters outweighed the icon).
+- **Amended (user: "i dont want colour … one for darkmode and the other for light mode"):** v2 is
+  now monochrome. One ink per version, white `-dark` / black `-light`; beam and pool are that ink by
+  opacity (dark 60/24/6, pool 45/10; light 45/18/4, pool 35/8: black reads stronger, and 75/32/8
+  merged the lamp into the beam). Wordmark all ink. Both outlines kept in both modes (12 icon/mark
+  /logo files + crops); construction sheet black on white with grey guides. VectorCraft document
+  rebuilt (11 artboards with mode backgrounds; swatches `Dark mode ink` / `Light mode ink` in group
+  `onspot v2`; v1's colour group deleted). Every SVG uses only #000/#fff; PNGs have 0 saturation.
+- **Glyph (user: "a version that is just made up of shapes and no colours … any context"):** one
+  compound path per file, `fill="currentColor"`: `glyph-mark`, `glyph-{squircle,circle}` (+ 1024 PNG,
+  `-tile` crop). Design: solid lamp, beam = the silhouette's own 0.75 m edge (inset + minusFront in
+  VectorCraft), solid pool, solid bars, outline stroke outlined, all united. Rejected: a solid cone
+  with knocked-out bars (read as a lampshade/bucket); pool or hull as lines (read as a drum).
+  Checked against an exact clip-path rendering from `geometry.py` (0 px differ at 50 % fuzz) and
+  recoloured via `color` (black/white/grey). Gotcha: a regex `<path [^>]*?d="` matches the `id="`
+  attribute; use `\sd="`. Construction sheet's VERSIONS row now shows the glyph too.
+- **Glyph ground dip (user: the black ground and the black wave merge; "the black should be dipped
+  down so that the wave poking in can fit. dont change the colour of the wave peak"; "the gap
+  should be minimal"):** the pool now dips around bar 3 (the only bar inside it) with a 0.25 m gap
+  (`GLYPH_DIP` in `geometry.py`; part "Dip (bar 3 + 0.25 m)", minusFront from the pool in
+  VectorCraft). Rejected: XOR of bars and pool (user: don't change the bar's colour); 0.75 m gap
+  (too wide); gaps around every bar (slivers between bars 2-4, read as drips).
+- **Any colour (user: "why isnt there an svg version which can be programmed to be any colour or
+  transparent?"):** every v2 SVG is now `currentColor`. Dark/light files keep their ink as the
+  svg's `color` attribute (render unchanged: 0 px differ in resvg and librsvg); inline, CSS `color`
+  recolours everything incl. the fades; `opacity` for translucency. New `source/finish_svgs.py`
+  (run after every VectorCraft export, idempotent): currentColor, ids prefixed `onspot-<file>-`
+  (VectorCraft names every gradient `linear-gradient-1`), empty artboard groups dropped, glyph
+  reduced to one path, tiles written. Checked in headless Chrome. Gotcha: the same file inlined
+  twice in two colours shares gradient ids, so the second copy's beam takes the first's colour.
+- **In-app logo swapped to v2 (user: "use the app-icon-squircle-dark/light-tile.svg as logo inside
+  the app. just do a quick swap"):** `static/app-icon-squircle-{light,dark}-tile.svg` (copies of the
+  v2 tiles); `AppHeader.svelte` and `routes/welcome/+page.svelte` each have two `<img>`s,
+  `dark:hidden` / `hidden dark:block`. Only those lines touched (another agent works in the tree).
+  Then (user: paper background like the buttons; "use the circle version"; glare or shadow; the
+  divider like the one before the session line): now `static/app-icon-circle-{light,dark}-tile.svg`
+  (squircle copies removed) on `.logo-tile` in `app.css` (next to `.paper-grain`): the keys' card
+  stock (`--key` + `--paper-key` grain + `--key-blend`), round, `--neo-box-shadow-raised-2` and a
+  top-left radial glare (`--logo-glare`, warmer and fainter in dark). Header: a `.nav-divider mx-2`
+  after the logo (8 px + the nav's 6 px gap = the row's 14 px around the existing divider). Not
+  `.paper-key`: `+layout.svelte` already uses that class globally for the hidden texture source.
+  Then (user: the symbol colour "not in line with the colour scheme of the ui"): the two static
+  copies' `color` attribute is the app's `--brand` teal (`#0f766e` / `#2db3a3`), chosen over the
+  text ink and the muted icon ink after comparing all three in the header. Gotcha: never write
+  `--` (e.g. `--brand`) inside an SVG's XML comment; the file stops parsing and the img breaks.
+- **Mode is the app's accent (user: Start speaking and the empty timeline's mic red in Exam, blue
+  in Casual; then "the app's whole accent colour should be changed by this button"):**
+  `practice.ts` mirrors `store.mode` into `<html data-mode>` (a store subscription, guarded for no
+  `document`); `app.css` (after the dark theme block) has `:root[data-mode='exam']` and
+  `:root[data-theme='dark'][data-mode='exam']` overriding `--primary`, `--primary-foreground`, `--ring`,
+  `--accent(-foreground)`, `--brand`, `--brand-2/3`, `--brand-soft`, `--brand-hover` with the
+  `--error` red (#c2412d / #ee7f6b) → rose. Casual has no block: it is the app's own aqua tokens
+  (teal → cyan; user: "the blue accent should've been the aqua blueish colour", after a sky-blue
+  Casual set was tried and removed). Start
+  speaking and the empty mic already paint with `--brand`, so PracticeScreen is unchanged (an
+  interim `--mode-from/to` edit there was reverted). The logo is now `<span class="logo-tile">` with
+  two `.logo-ink` spans: the circle tile as `mask-image` over `--brand`, so it follows the accent;
+  static copies are exact v2 copies again. Welcome page's `.setup-brand img` rule now targets
+  `.logo-tile`. Checked via a CDP script (bun, headless Chrome; marks onboarding skipped, clicks
+  the real Exam/Casual switch): `data-mode`, logo, nav ring, record button, empty mic, dialog
+  accents all switch, both themes. svelte-check 0/0. Known: `app.html` ships `data-mode="exam"`, so
+  a Casual user sees red until the store loads settings (the other agent is editing `app.html`).
+- **Platforms (user: "make sure the webapp and the favicon and the icon for all the platforms are
+  correct now"):** one platform icon = the in-app logo in light mode: circle icon in teal #0f766e on
+  a #faf6ef card-stock disc with the keys' glare, transparent canvas. New
+  `brand-assets/v2/source/platform_art.py` (not `platform.py`: that shadows Python's `platform`,
+  which numpy imports) builds `brand-assets/v2/platform/` from the finished exports: `app-icon.svg`
+  (+ `-1024.png`), `app-icon-tile.svg`, `android/` (foreground = mark alone at m = 3 dp, monochrome =
+  glyph; no ring, the launcher draws the shape), `installer/` (sidebar/dialog/header/banner redrawn;
+  DMG = v1 layout recoloured). `scripts/brand-assets.sh` now renders from v2 (tauri icon with
+  `--ios-color #faf6ef`, Android background colour #faf6ef written to values/, installers, favicon
+  `static/app-icon.svg`, the in-app tiles, then `scripts/pwa-assets.sh`). Edited the other agent's
+  `scripts/pwa-assets.sh`: source = v2 master, opaque fills #faf6ef instead of Ink, "any" icons keep
+  transparency, maskable = the Android foreground rendered at 614 px cropped to 512. Flatpak icon
+  path + metainfo branding (#c9ddd5 / #1e4a43), README header. Checked every output (icns has all 12
+  entries to 1024; ico 6 sizes; BMP3 installers; Android legacy/round/adaptive/themed; PWA; splash).
+  Then (user: "the localhost version uses the old icon"): the server sent the new file; the user's
+  browser is Zen (Firefox), which keeps favicons by URL past reloads. Versioned the URLs: `?v=2` on
+  the favicon and apple-touch-icon in `src/app.html` (with a comment) and on the three manifest
+  icons. Bump it whenever the icon changes (noted in the v2 README and brand-assets.sh's output).
+  Favicon (`static/app-icon.svg`), desktop/Android/PWA icons, installers stay v1. Checked on the
+  :5173 dev server in both themes (wide header, welcome page; phones show no header logo).
+- **Not done:** the user has not picked an outline; nothing applied to the app, installers or
+  Android. Not committed (the working tree also holds other sessions' uncommitted work).
+
+## 2026-11-06: first-run onboarding + mode-coloured glare
+
+- **Asked:** implement the two active ideas left in `docs/planning/ideas.md`: a first-run key
+  onboarding flow and mode-coloured background glare.
+- **Onboarding:** new `/welcome/` route (`routes/welcome/+page.svelte`) with three steps.
+  - Coach: Groq (free, recommended), DeepSeek, ChatGPT/OpenAI, or a Claude/OpenAI-compatible
+    gateway; key links, endpoint/model fields for the compatible options, optional Groq STT.
+  - Key testing: `Test key` builds an endpoint and calls `testConnection` *before* writing anything;
+    a failed key is never saved. `Skip the check` applies without testing.
+  - Voice: on-device Piper vs ElevenLabs; the ElevenLabs key appears only for cloud, with the honest
+    note that cloud TTS sounds better. The summary shows the final setup and links to the one-time
+    local-data download.
+  - State: `src/lib/onboarding.ts` stores `onspot.onboarding.v1` = `done`/`skipped`. The layout
+    redirects first-run (after settings and Practice, when `llmConfigured` is false and the flag is
+    null). Settings → Learning → **Setup guide** reopens it; Practice's LLM gate now goes there.
+  - The guide uses paper/card styling, has no nav bar, works light/dark and at 390 px.
+- **Glare:** `PracticeScreen` gets `data-glare` from the live mode: casual uses brand/brand-2/
+  brand-3 (blue-green), exam uses error/destructive (red). The mode can only be switched in a
+  draft, so the glare changes with that switch immediately; a started session locks it. Three large
+  soft blobs sit low in the visible page and drift on 38s/46s/52s transform-only animations (stopped
+  by reduced motion). Exam uses stronger colour (22/18/16%) than casual (14/12/10%) because red
+  reads dimmer at the same alpha. The early "accent outside a session" state was superseded after
+  the user asked for the switch to change the glare.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (224). Playwright
+  onboarding suite 29/29: first-run redirect, provider cards, key field, conditional ElevenLabs key,
+  summary, completion flag, Practice install gate, draft exam→casual→exam glare switch, boosted
+  exam strength, drift animation and reduced-motion stop, seeded casual/exam sessions, Settings
+  reopen, no repeat redirect. Light/dark/phone screenshots. Seed key configured so the existing
+  feature/dark suites still bypass the guide.
+- **Test gotcha:** the guide auto-redirects a fresh profile with no key; existing test profiles set a
+  Groq key in an init script and therefore stay on Practice.
+- **Not verified:** a live key test against each provider, a real ElevenLabs key, and the guide on a
+  physical phone/desktop WebKit. Uncommitted on `fix/dark-mode-visual-depth`.
+
+## 2026-11-06: iOS path decided (PWA); implementation brief written
+
+- **Asked:** whether Rust would have suited onspot better than TypeScript (answered in chat, no
+  changes), then how to support iOS without a paid Apple account, then a detailed agent prompt
+  for it plus a reminder in the ideas list.
+- **Wrote:** `docs/prompts/ios-focused-pwa.md` (the decision and why, the repo facts iOS touches,
+  iOS claims to verify on a device, Phases 0–12, out of scope, verification, definition of done,
+  questions for the user); an idea entry under Product in `docs/planning/ideas.md`; the
+  `docs/README.md` prompts row; a decision in `decisions.md`; the roadmap's iOS line.
+- **Not done:** no code, no testing on iOS. The user has not yet said whether they have an iPhone
+  or Mac to test with; the brief asks first.
+
+## 2026-11-06: dark-mode depth + translation note header
+
+- **Asked:** create a branch and fix dark mode's low visual depth; light mode is the reference and
+  has depth, dark mode reads like a global filter with weak separation. Then: in the translation
+  note, put the variant tag and its toggle on the same line as the `Translation` header, text below.
+- **Branch:** `fix/dark-mode-visual-depth` (carried the uncommitted feature work from `main`).
+- **Diagnosis:** the dark paper texture rendered around `#2c2823`, not the token `#151412`, because
+  its `colorShadow` was `#3d3830`; the attempt card was `#24211c` and the sheet `#1e1c19`, all within
+  a couple of lightness steps. Black shadows were invisible, and a 72%-opaque frosted sheet let the
+  blurred page flatten it further. The Feedback notebook was the raw page colour, reading as a hole.
+- **Fix:** a real dark surface ladder (page `#12110f`, card `#24211d`, inset `#1a1815`, key
+  `#332e27`, well `#0d0c0b`, border `#3d372f`); `--sheet-frost` 90%; darker page/key paper params;
+  attempt card `#2b2721`; notebook `#24211d`; and subtle white catchlights (`--shade-light` 0.20,
+  `--glass-shade-light` 0.18, lit top borders/highlights on cards and panels, header seams).
+- **Translation note:** restyled from the user's sticky-note mockup (pastel paper, washi tape,
+  folded corner, tilt, dashed header, dark ink tab, regular Courier Prime, handwritten wavy
+  controls). The close X leads the header, so "Each word" is the rightmost control for a
+  Word-for-word note; on phones the decorative mark is hidden so the longer label still fits. The
+  dashed/dotted connector was replaced with one clean 1.5px line fading at both ends. Translation
+  variants are pages: page 1 is the primary idiomatic translation, pages 2+ are the alternatives,
+  shown one at a time with `‹ 1 / 4 ›` controls in the note header (reset on view change/regeneration,
+  wrap, constant note height, no pager for a single rendering); the translation text is regular
+  weight, the word pairs stay bold.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (221); feature suite 18/18;
+  phone word-list suite; translation-header phone check (closed and open, same line, text below, no
+  overflow); variant-pages suite 10/10 (pager in the header, default page 1/4 = primary, next 2/4
+  and 3/4, previous returns, no height change, phone fits). Seeded light/dark screenshots of Practice, History,
+  Insights, Settings, the note and pager. Dark contrast: foreground/card 13.6:1, muted 7.2:1,
+  faint 5.8:1, brand 6.2:1, error 6.0:1, warn 8.3:1, good 7.4:1.
+- **Test gotcha:** the scratch profile can reset between separate browser runs (OPFS lock/teardown),
+  so seed and capture screenshots in one context; wait for the take's Translate button before
+  screenshotting Practice, as DB hydration can take longer than 1.5 s.
+- **Not verified:** real phone/desktop WebKit, full-page contrast scan. Uncommitted, per usual.
+
+## 2026-11-06: five planning ideas implemented
+
+- **Asked:** "understand the current state of the app" and implement the active ideas in
+  `docs/planning/ideas.md`: the capability explainer, session transcript export, download
+  notifications, practice reminders, and a vertical word-for-word mapping.
+- **Built:**
+  - `settings/WhatOnspotDoes.svelte` (Learning tab) — scope in two columns, plus an honest note on
+    why accent/pronunciation are out.
+  - `utils/sessionTranscript.ts` — `buildSessionMarkdown` + `exportSessionTranscript`; History row
+    download action and Practice session-menu "Export transcript".
+  - `platform/notifications.ts` — permission-aware, best-effort system notifications; used by
+    `stores/languageData.ts` (completion/failure, 6 s toast + notification when hidden) and
+    `stores/reminders.ts`.
+  - `stores/reminders.ts` — off-by-default cadence (1 or 3 days), practice/activity clock in
+    localStorage plus the newest saved session, snooze, interval/visibility checks, one system
+    notification per due period; `settings/ReminderSettings.svelte`; banner in Practice's notice
+    strip with Start speaking / Not now.
+  - `AttemptCard.svelte` — vocabulary pairs as horizontal columns: source above a short rule,
+    translation below, centred and reading left to right; wraps when needed.
+  - Settings fields `practiceReminders` / `reminderFrequency`; `#reminders` and
+    `#what-onspot-does` hashes; `initReminders()` after settings load.
+- **Verified:** `bun run check` 0/0, `bun run build`, `bun run spdx:check` (221). Playwright 18/18
+  against the user's :5173 with a fresh profile: guide/reminder settings, a seeded 3-day gap makes
+  the reminder due, the banner appears and can be put off, word columns read left to right with
+  each pair stacked source/rule/translation, and a real export downloaded
+  `onspot-reminder-test-2026-11-03.md` with both texts, corrections, translations and stripped
+  explanation tags. Phone check at 390 px: all five pairs fit in one row, centres line up, no
+  horizontal overflow. The user asked to see this on the phone and may revert phones to the
+  earlier vertical list later.
+- **Not verified:** a real model download's completion notification, a device system notification,
+  and the Tauri save-dialog path.
+- **Docs:** shipped ideas moved to `docs/planning/archive/ideas.md` under 2026-11-06; the active
+  idea file then held the streak, onboarding, model-performance and mode-glare items (onboarding and
+  mode glare shipped later in this same session).
+- **State:** uncommitted, per the user's review-first preference.
+
+## 2026-11-03 (README): API-key onboarding banner
+- **Added a GitHub `> [!IMPORTANT]` banner** directly under the hero: onspot needs an API key before
+  feedback works; the easiest path is a free Groq key, and ElevenLabs is optional and only for
+  cloud text-to-speech. The banner links to a new **Get your keys (two minutes)** walkthrough and
+  says the app shows **Set up LLM** / **Install data** instead of **Start speaking** until setup is
+  complete.
+- **New walkthrough:** exact Groq steps (`console.groq.com/keys` → create key → Settings → LLM →
+  Test connection) and optional ElevenLabs steps (Settings → Text-to-speech → Cloud → ElevenLabs,
+  premade voices on free plans). Both key-page URLs returned 200 when checked.
+- **Reinforced elsewhere:** “Before you start” now names the free Groq key and optional ElevenLabs
+  key; “First run” is five steps starting with the key; the developer requirements and run steps
+  link to the same walkthrough. The “No account” badge is now “No onspot account” and a
+  “Setup: free API key” badge was added.
+- **British English** preserved. No code changed; uncommitted.
+
+## 2026-11-03 (docs): planning split into active + archive
+- **Audited `docs/planning` against the code and handoff.** Archived fixed bugs: the LLM gate before
+  recording (2026-10-03) and wrong-language takes reading as clean (2026-10-03). Archived
+  completed/rejected ideas: automatic model choice (2026-11-01), paper texture, Opus audio
+  compression (2026-10-31), and the wllama/GGUF switch (rejected 2026-09-30).
+- **New structure:** `docs/planning/ideas.md` and `bugs.md` are active-only, formatted with
+  checkboxes and links; history lives next to them at `docs/planning/archive/ideas.md` and
+  `bugs.md` under `## Archived 2026-11-03`, so all planning data stays under `docs/planning/`.
+  This is the one exception to the global mirror rule, documented in `docs/archive/README.md`.
+- **Active bugs left:** attempt-card spacing (current 28 px desktop gutter, 24–44 px card gap,
+  12 px phone gutter) and session-language locking (`openSession()` restores mode/prompt but uses
+  the global `targetLanguage` in `sessionPrompt`; no session language is stored).
+- **Active ideas left:** capability explainer, transcript export, lighter STT, small multilingual
+  local LLM, TTS credits, mode-coloured glare, vertical word-for-word mapping.
+- **Updated:** `docs/README.md` planning row. Added `docs/planning/README.md` with the agent
+  workflow: what belongs in each file, how to add an idea or bug, how to archive a finished item,
+  formatting rules, and what not to put here. No code changed; uncommitted.
+
+## 2026-11-03 (later still): contributor scaffolding, README preview, British English
+- **Added (uncommitted):** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1),
+  `SECURITY.md`, `.github/ISSUE_TEMPLATE/{bug_report,feature_request,language_request}.yml`,
+  `.github/ISSUE_TEMPLATE/config.yml`, `.github/pull_request_template.md`, and a ready-to-paste
+  `docs/releases/v0.2.3.md`.
+- **README preview fix:** the icon was raw HTML inside the `#` heading, which some previews show
+  literally, and the hero screenshot was a relative HTML `<img>` that the author's preview did
+  not resolve. All README images are now Markdown images with absolute
+  `raw.githubusercontent.com/khizardevelops/onspot/main/...` URLs; the title icon uses the 64 px
+  PNG (`src-tauri/icons/64x64.png`). The original tagline ("The language learning app that makes
+  you *speak*, then coaches you like a teacher.") was restored so the author's wording is
+  preserved. The contributor docs are linked from the Contributing section; "run's artifacts"
+  became "run's uploaded files".
+- **British English:** all new docs use British spellings. The only remaining "License" strings
+  are the official GNU licence name and the adjective "licensed"; pre-existing workflow filenames
+  such as `upload-artifact` are untouched.
+- **Not done (needs GitHub settings, not files):** repo description edit, enabling Discussions,
+  creating labels, publishing the release notes. The earlier `gh` call was denied. The repo
+  description still has the author's "inturn", intentionally preserved; only "langugae" should be
+  fixed if the description is edited.
+- **Not committed/pushed:** GitHub will not show the new templates or resolve the README links
+  until these files are committed and pushed.
+
+## 2026-11-03 (later): launch prep, README rewritten around the hook
+- **Asked:** a public-showcase package: README hook for non-technical learners, posts for
+  r/LanguageLearning, r/French, r/selfhosted, r/PrivacyGuides, Show HN and r/opensource, a
+  pre/post-launch checklist, and a brutal launch-readiness verdict. No new languages, no code.
+- **README rewritten (uncommitted):** hero now leads with "Stop tapping flashcards. Open your
+  mouth.", a Download CTA to the latest release, user-facing badges, an early-release honesty
+  note and "How a session works" moved above Screenshots. "Getting started" became "Get onspot"
+  with **Option 1 — Download the ready-to-use app** (platform table, what you need, first-run
+  steps, unsigned-build note) and **Option 2 — Build from source** (all previous dev details
+  unchanged). Tech badges moved out of the hero; "Under the hood" stays after the dev section.
+  Added "tutor costs money / classroom costs courage" to Why, French-first honesty to Languages,
+  longer takes to Roadmap, and non-code contributions to Contributing. No existing detail was
+  deleted; diff is +102/−39.
+- **Corrected a false claim:** the README promised "up to five minutes"; `MAX_RECORDING_SEC` is
+  still 60. The feature line now says 30–60 seconds and the roadmap lists longer takes.
+- **Verified platform minimums:** `tauri.conf.json` macOS 10.15, Android minSdk 24 (Android 7).
+- **Public repo findings (web_fetch):** repo description has typos ("langugae", "inturn"); 0 stars,
+  0 forks, 0 watchers; Discussions returns 404 (not enabled); v0.2.3 release page has all assets
+  but **empty release notes** (only "Full Changelog" repeated). No CODE_OF_CONDUCT, SECURITY,
+  CONTRIBUTING, issue/PR templates, or `good first issue` labels exist yet.
+- **Verdict given:** soft launch to French/privacy niches first, not a massive showcase. Main
+  blockers: French-only, API-key onboarding, unsigned builds, no contributor scaffolding, no demo
+  video, Windows/macOS installers not hands-on verified, empty release notes, 60 s cap.
+- **No code changed.** The only file edited outside the handoff is `README.md`.
+
 ## 2026-11-03: v0.2.3 tagged, branches, README light first
 - **Release:** test runs on main passed, so `Release 0.2.3` (29fe647) was committed on `main` and
-  tagged `v0.2.3`; the tag's Desktop release and Android runs were started (check the release
-  page has 15 files).
+  tagged `v0.2.3`. Tag runs passed (Desktop release 41545044315, Android APK 41545044160); the
+  release is Latest with all 15 files, APK `onspot-0.2.3-29fe647-arm64.apk`.
 - **"merge all branches":** nothing to merge. Every branch had 0 commits outside `main`;
-  `feature/language-delivery-mode` was moved to `main` (identical). Work is on `main` now. Offered
-  to delete the five old branches; no answer yet.
+  then "the github page should only have one main branch": `feature/language-delivery-mode`
+  deleted locally and on GitHub. Work is on `main` now; four old local-only branches remain.
 - **"why is an ios build not possible?":** answered (decisions.md "iOS is deferred": needs a Mac,
   `tauri ios init`, Apple signing via the $99 developer account for TestFlight; the web app in
   Safari works today).
 - **README:** light mode first (hero and Screenshots, light open by default). The metainfo listing
   pointed at deleted `fr-light.png` / `jap-dark.png`; now practice/phone/history light. Takes effect
   in the Flatpak from the next release.
+- **Console paste:** extension noise (MetaMask-style `contentscript.js` ObjectMultiplex, Grammarly
+  injected twice) and neo-svelte 1.2.0's unconditional `console.info` on toast setup (latest
+  version; not patched, offered). onspot's own line: SvelteKit 3 `goto_replace_state_deprecated`;
+  `{ replaceState: true }` → `{ replace: true }` in `navigation/back.svelte.ts` and
+  `textSize/TextSizeEditor.svelte`; check 0 errors, Back/Done 6/6 on :5173. Not committed yet.
 
 ## 2026-11-02: v0.2.2 released, then the user's phone list
 - **Asked:** "go ahead with the procedure" (test build, bump, tag 0.2.2): done, see state.md
