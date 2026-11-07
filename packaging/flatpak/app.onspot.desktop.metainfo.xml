@@ -82,6 +82,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.2.4" date="2026-11-07">
+      <description>
+        <p>A setup page, practice reminders, transcript export and a bigger icon.</p>
+        <ul>
+          <li>A first-run setup page connects your coach and chooses how corrections sound; reopen it from Settings.</li>
+          <li>Optional practice reminders, notices when language data finishes downloading, and Markdown export of a session.</li>
+          <li>Dark mode gets depth from lighter surfaces, and the background glare follows casual or exam mode.</li>
+          <li>A bigger app icon without the black tile.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.3" date="2026-11-03">
       <description>
         <p>Smoother on phones, text sizes you set on a live preview, and fixes.</p>

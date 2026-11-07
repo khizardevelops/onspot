@@ -1,5 +1,14 @@
 # Last Session
 
+## 2026-11-07: Release 0.2.4 (all installers on Releases)
+
+- **Asked:** "just make all the github action artifacts appear in the release section … I want all
+  the installers there". Installers only reach Releases from a `v*` tag; pushes to `main` only
+  build the Android APK as an Actions artifact. Nothing had been tagged since v0.2.3.
+- **Done:** `Release 0.2.4` on `main` (package.json, tauri.conf.json, Cargo.toml/lock, AppStream
+  entry, `docs/releases/v0.2.4.md`), tagged `v0.2.4` and pushed over SSH. First run of the new
+  `notes` job.
+
 ## 2026-11-06: one branch on GitHub; release notes fixed
 
 - **Asked:** "why tf are everything on the release page" and "merge all the branches so that the
