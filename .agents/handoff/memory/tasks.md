@@ -180,7 +180,7 @@
 - [x] Insights rows overflowing on phones (grid-cols-1).
 - [ ] Measure the desktop engines (WebView2, WebKitGTK, WKWebView) at their refresh rates.
 - [x] Release 0.2.3 (tag `v0.2.3`, 2026-11-03): Latest, 15 files.
-- [ ] Release 0.2.4 (tag `v0.2.4`, 2026-11-07): confirm Latest with 15 files and the notes.
+- [x] Release 0.2.4 (tag `v0.2.4`, 2026-11-07): Latest, 15 files, notes published once.
 - [ ] Commit and push the `goto` `replace` fix (back.svelte.ts, TextSizeEditor.svelte) when asked.
 - [x] GitHub has only `main` (feature branch deleted 2026-11-03).
 - [ ] Delete the four old local branches (all contained in main)? Not asked yet.

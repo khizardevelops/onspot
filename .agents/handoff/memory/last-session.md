@@ -8,6 +8,10 @@
 - **Done:** `Release 0.2.4` on `main` (package.json, tauri.conf.json, Cargo.toml/lock, AppStream
   entry, `docs/releases/v0.2.4.md`), tagged `v0.2.4` and pushed over SSH. First run of the new
   `notes` job.
+- **Result:** Desktop release 42324195490 and Android APK 42324195509 green; the `notes` job worked
+  (one description, no "Full Changelog" copies). Release is Latest with all 15 files. The Intel Mac
+  job first failed in `bundle_dmg.sh` with `hdiutil: couldn't eject "disk2" - Resource busy` (a
+  runner flake; compile was fine) and passed on `gh run rerun <id> --failed`.
 
 ## 2026-11-06: one branch on GitHub; release notes fixed
 
