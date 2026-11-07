@@ -1,7 +1,7 @@
 <div align="center">
 
 <div style="display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;">
-  <img src="brand-assets/v2/platform/app-icon-tile.svg" width="52" height="52" alt="onspot app icon: a spotlight shining on a sound wave">
+  <img src="brand-assets/v2/app-icon-squircle-dark-tile.svg" width="52" height="52" alt="onspot app icon: a spotlight shining on a sound wave">
   <h1 style="margin: 0; font-size: 2rem; line-height: 1; display: flex; align-items: center;">onspot</h1>
 </div>
 
