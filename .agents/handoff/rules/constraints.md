@@ -56,6 +56,13 @@ Numbers and the exact error strings live in `docs/benchmarks/runtime.md`; the st
   onnxruntime-web and Transformers copies.
 - UI components come from `@dvcol/neo-svelte` (pinned to the npm 1.2.0 line). It needs
   `sass-embedded`; its `.scss` build prints Sass `if()` deprecation warnings — harmless.
+- **Supertonic voices run on the official prebuilt sherpa-onnx WASM runtime, v2.0.1, unmodified.**
+  `scripts/sherpa-tts-assets.sh` fetches it from the GitHub release tarball into the gitignored
+  `static/sherpa-onnx/` and checks the tarball and each file against pinned SHA-256s (the four CI
+  workflows run it). Never build sherpa-onnx from source or patch its glue; npm `sherpa-onnx` is
+  Node-only. Upgrading = new version + every hash together, then the voice check at
+  `/model-lab/voices/`. The Supertonic model is pinned to one revision of its Hugging Face mirror
+  in `src/lib/languages/voices.ts`.
 - Japanese TTS depends on `piper-plus` **0.7.0 exactly**: the vendored glue in
-  `src/lib/speech/tts/piper/vendor/piper-plus-wasm/` and the pinned SHA-256 in `speech/tts/piper/assets.ts`
+  `src/lib/speech/tts/piper/vendor/piper-plus-wasm/` and the pinned SHA-256 in `speech/tts/local/assets.ts`
   must match the same release. Upgrading means re-vendoring the glue and updating the hash.

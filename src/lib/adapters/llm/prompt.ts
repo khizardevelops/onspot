@@ -28,7 +28,7 @@ function schemaFor(language: string, translationTarget: string): string {
     "mistakes": [ { "said": string, "say": string, "line": string } ]
   },
   "followUp": {                   // the question that keeps them talking (see Explanation rules)
-    "question": string,           // in ${language}
+    "question": string,           // in ${language}, never in ${translationTarget}
     "translation": string         // the same question in ${translationTarget}
   },
   "corrections": [
@@ -71,7 +71,7 @@ function explanationRulesFor(language: string, translationTarget: string): strin
 - A phrase that is grammatical but whose meaning is unclear, or that looks like a speech-recognition slip, is NOT a mistake and NOT a correction: never invent what they might have meant. If it matters, say in "note" which words you didn't catch, and let "followUp" ask what they meant.
 - "note": an optional short opening the teacher says first, at most ${EXPLANATION_MAX_NOTE_WORDS} words: a quick genuine reaction to what they said or specific praise, or which words were unclear. Never preview or repeat a mistake the lines cover. With no mistakes, it is the whole reply: say it was correct and name one specific thing they did well.
 - Wrap every other ${language} word you mention in <key>…</key> (a verb, an auxiliary, a grammar term). No other tags, no markdown, no lists.
-- "followUp": always one short question in ${language} that continues their topic, at their level, so they keep speaking in their next take; "translation" is that question in natural ${translationTarget}. Plain text, no tags.
+- "followUp": always one short question in ${language} that continues their topic, at their level, so they keep speaking in their next take; "translation" is that question in natural ${translationTarget}. Plain text, no tags. The question is read aloud by a ${language} voice: write it in ${language}, never in ${translationTarget}, even where the two languages share a script or words.
 - Examples (for a French learner; write your own words, react to what this student actually said${translationTarget === 'English' ? '' : `; they are in English only to show the form, so write yours in ${translationTarget}`}):
   "explanation": { "note": "You described that trip really vividly.", "mistakes": [
     { "said": "dans Paris", "say": "à Paris", "line": "You said <wrong>dans Paris</wrong>, but with a city we say <right>à Paris</right>." },

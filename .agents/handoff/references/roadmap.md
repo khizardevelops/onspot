@@ -6,8 +6,10 @@
   the install, offline launch, update prompt, Google Drive and local speech on a real iPhone/iPad
   (or the macOS VM for Safari checks).
 - Complete one real local Whisper + configured LLM practice run after the full model download.
-- Confirm the Piper Tom EQ/loudness processing profile by ear, then approve the next language
-  (STT + voice) with a human quality pass and add it to the language registry.
+- Run one real Persian take with live keys, then look for local Persian STT/TTS models that pass
+  the gates so the cloud-only flags can come off (Persian ships cloud-only since 2026-11-07).
+- Confirm the Piper Tom EQ/loudness processing profile by ear, then approve the next on-device
+  language (STT + voice) with a human quality pass and add it to the language registry.
 - Verify Google Drive with a live account and client ids (desktop loopback and web popup); the
   code is complete, but no real account was available for the 2026-10-25 pass.
 - Run a live ElevenLabs key and a real LM Studio/llama.cpp/Ollama server end to end (preview,

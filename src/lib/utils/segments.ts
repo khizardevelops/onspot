@@ -1,25 +1,58 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
- * Sentence and clause boundaries in a take's text.
+ * Sentence and clause boundaries in a take's text, and the punctuation that
+ * makes them, shared by everything that needs to know where a sentence ends
+ * (explanations, corrected passages, the pauses between spoken pieces).
  *
  * Rules are intentionally simple and language-agnostic: a sentence ends after
- * `.!?…` or their full-width Japanese forms `。！？` (and repetitions, e.g.
- * `!?`), keeping the punctuation; a clause ends after a comma, semicolon,
- * colon or dash inside a sentence. Good enough to replay one sentence of a
- * longer answer, or to show a correction in its sentence.
+ * one of `SENTENCE_END_MARKS` (and repetitions, e.g. `!?`), keeping the
+ * punctuation; a clause ends after one of `CLAUSE_END_MARKS` inside a
+ * sentence. Good enough to replay one sentence of a longer answer, or to show
+ * a correction in its sentence.
  */
+
+/**
+ * Punctuation that ends a sentence, in every script onspot shows: `.!?…`, the
+ * full-width Japanese and Chinese `。！？`, the Arabic-script question mark `؟`,
+ * the Urdu full stop `۔`, the Devanagari danda `।` and double danda `॥`
+ * (Hindi, Bengali) and the Greek question mark U+037E (which looks like a
+ * semicolon; text normalised to NFC carries a plain `;` instead, which is not
+ * treated as an end). Written to go inside a regex character class.
+ */
+export const SENTENCE_END_MARKS = '.!?…。！？؟۔।॥\u037e';
+
+/**
+ * Punctuation that ends a clause: commas, semicolons, colons and dashes, with
+ * the Japanese `、` and the Arabic-script comma `،` and semicolon `؛`. Written
+ * to go inside a regex character class.
+ */
+export const CLAUSE_END_MARKS = ',;:—–、،؛';
+
+/** Quotes and brackets that may follow a sentence's last mark ("…fin." » or 」). */
+const CLOSING_MARKS = '"»”\'」』)';
+
+const SENTENCE = new RegExp(`[^${SENTENCE_END_MARKS}]+[${SENTENCE_END_MARKS}]+|[^${SENTENCE_END_MARKS}]+$`, 'g');
+
+const CLAUSE_END = new RegExp(`[${CLAUSE_END_MARKS}]+`, 'g');
+
+const ENDS_SENTENCE = new RegExp(`[${SENTENCE_END_MARKS}][${CLOSING_MARKS}]?$`);
+
+/**
+ * Whether a text ends with a sentence's last mark (a closing quote after it
+ * is allowed), in any script: `بتایا۔` and `你好。` end sentences as `Done.` does.
+ *
+ * @param text Any text; trailing spaces are ignored.
+ */
+export function endsSentence(text: string): boolean {
+	return ENDS_SENTENCE.test(text.trimEnd());
+}
 
 /** A part of a text by character offsets, `end` exclusive. */
 export interface TextSpan {
 	start: number;
 	end: number;
 }
-
-const SENTENCE = /[^.!?…。！？]+[.!?…。！？]+|[^.!?…。！？]+$/g;
-
-/** Commas, semicolons, colons and dashes (and the Japanese comma) end a clause. */
-const CLAUSE_END = /[,;:—–、]+/g;
 
 /**
  * Where each sentence of a text starts and ends, without the spaces around it.

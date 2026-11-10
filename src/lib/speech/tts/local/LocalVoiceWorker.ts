@@ -19,7 +19,7 @@ interface SpeechPayload {
  */
 export type SpeechPriority = 'foreground' | 'background';
 
-type WorkerRequest = { type: 'synthesize'; voice: string; text: string } | { type: 'load'; voice: string };
+type WorkerRequest = { type: 'synthesize'; voice: string; text: string; pace: number } | { type: 'load'; voice: string };
 
 interface Pending {
 	request: WorkerRequest;
@@ -54,11 +54,12 @@ const IDLE_SHUTDOWN_MS = 90_000;
 const NO_SPEECH: SpeechPayload = { audio: new Float32Array(), samplingRate: 0, modelName: '', durationSec: 0, peak: 0 };
 
 /**
- * Main-thread proxy for local Piper. The worker is created on first use and
- * ended when idle. Requests go to it one at a time, listened ones first, so
- * a clip the learner is listening to never waits behind clips being prepared.
+ * Main-thread proxy for the on-device voice worker (`./tts.worker.ts`), which
+ * speaks every engine's voices. The worker is created on first use and ended
+ * when idle. Requests go to it one at a time, listened ones first, so a clip
+ * the learner is listening to never waits behind clips being prepared.
  */
-export class WorkerPiperAdapter {
+export class LocalVoiceWorker {
 	private worker: Worker | null = null;
 	private nextId = 1;
 	/** Every request not yet answered, in the order it was made; the one in flight included. */
@@ -167,14 +168,16 @@ export class WorkerPiperAdapter {
 	 * @param text What to say (one piece; see `textPieces.ts`).
 	 * @param onProgress Reports a voice that has to be loaded first.
 	 * @param priority Who is waiting for it; a listener by default.
+	 * @param pace A share of the voice's natural speaking rate (1 = natural; below 1 is slower).
 	 */
 	public synthesize(
 		voice: string,
 		text: string,
 		onProgress?: (progress: ModelProgress) => void,
-		priority: () => SpeechPriority = () => 'foreground'
+		priority: () => SpeechPriority = () => 'foreground',
+		pace = 1
 	): Promise<SpeechPayload> {
-		return this.enqueue({ type: 'synthesize', voice, text }, priority, onProgress);
+		return this.enqueue({ type: 'synthesize', voice, text, pace }, priority, onProgress);
 	}
 
 	/**

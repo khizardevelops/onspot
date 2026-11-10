@@ -11,15 +11,7 @@
  * press the button it began on.
  */
 import { FlingVelocity, TOUCH_SCREEN_QUERY, TOUCH_SLOP_PX, keepsItsOwnDrag } from './touch';
-import {
-	ARRIVING,
-	FLING_PX_PER_MS,
-	LEAVING,
-	MIN_FLING_PX,
-	SETTLE_FRACTION,
-	SheetMover,
-	applyStylesNow
-} from './sheetMotion';
+import { FLING_PX_PER_MS, MIN_FLING_PX, SETTLE_FRACTION, SheetMover, applyStylesNow, settleMotion } from './sheetMotion';
 
 export interface SwipeToOpenOptions {
 	/** The sheet that comes up. */
@@ -123,14 +115,14 @@ export class SwipeToOpen {
 		const velocity = this.#velocity.current();
 		const pulledFar = this.#pulled >= this.#travel * SETTLE_FRACTION;
 		const flicked = velocity >= FLING_PX_PER_MS && this.#pulled >= MIN_FLING_PX;
-		if (pulledFar || flicked) this.#arrive();
-		else this.#dropBack();
+		if (pulledFar || flicked) this.#arrive(velocity);
+		else this.#dropBack(-velocity);
 	};
 
 	#abandon = (): void => {
 		const wasPulling = this.#phase === 'pulling';
 		this.#phase = 'idle';
-		if (wasPulling) this.#dropBack();
+		if (wasPulling) this.#dropBack(0);
 	};
 
 	/**
@@ -163,19 +155,25 @@ export class SwipeToOpen {
 		this.#options.onProgress?.(pulled / this.#travel);
 	}
 
-	/** Rises the rest of the way, then hands the sheet back to its own (open) styles. */
-	#arrive(): void {
+	/**
+	 * Rises the rest of the way, then hands the sheet back to its own (open) styles.
+	 *
+	 * @param speed How fast the finger was going up as it lifted, px/ms.
+	 */
+	#arrive(speed: number): void {
 		this.#options.onProgress?.(1);
-		this.#mover.settle(0, ARRIVING, () => this.#mover.release());
+		this.#mover.settle(0, settleMotion(this.#travel - this.#pulled, speed), () => this.#mover.release());
 	}
 
 	/**
 	 * Drops back out of sight, then closes it and hands it back to its own
 	 * styles, which by then are the closed ones (see `SwipeToDismiss`).
+	 *
+	 * @param speed How fast the finger was going down as it lifted, px/ms.
 	 */
-	#dropBack(): void {
+	#dropBack(speed: number): void {
 		this.#options.onProgress?.(0);
-		this.#mover.settle(this.#travel, LEAVING, () => {
+		this.#mover.settle(this.#travel, settleMotion(this.#pulled, speed), () => {
 			const surface = this.#options.surface();
 			if (surface) surface.style.transition = 'none';
 			this.#options.onPullCancel();

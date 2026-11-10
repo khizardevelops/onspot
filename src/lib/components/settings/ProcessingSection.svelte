@@ -43,9 +43,9 @@
 	const ready = $derived(missing.length === 0 && !checking);
 	const downloadBytes = $derived($languageData.pending?.storage ?? 0);
 	const localMissing = $derived(
-		($appSettings.sttMode === 'local' && !$languageData.installed.stt) ||
-			($appSettings.ttsMode === 'local' && !$languageData.installed.voice) ||
-			($appSettings.ttsMode === 'local' && !$languageData.installed.explanationVoice)
+		($appSettings.sttMode === 'local' && language?.local.stt !== false && !$languageData.installed.stt) ||
+			($appSettings.ttsMode === 'local' && language?.local.tts !== false && !$languageData.installed.voice) ||
+			($appSettings.ttsMode === 'local' && language?.local.tts !== false && !$languageData.installed.explanationVoice)
 	);
 	const firstSetup = $derived(
 		missing.find((requirement) => !requirement.id.endsWith('-download')) ?? null
@@ -95,6 +95,12 @@
 	}
 
 	function changeMode(target: ProcessingTarget, value: string): void {
+		if (value === 'local') {
+			if (target === 'speech-to-text' && language?.local.stt === false) return;
+			if (target === 'llm' && language?.local.correction === false) return;
+			if (target === 'text-to-speech' && language?.local.tts === false) return;
+		}
+
 		if (target === 'speech-to-text') setSetting('sttMode', value as 'local' | 'cloud');
 		else if (target === 'llm') setSetting('correctionMode', value as 'cloud' | 'local');
 		else setSetting('ttsMode', value as 'local' | 'cloud');
@@ -115,6 +121,9 @@
 
 	function hintFor(target: ProcessingTarget): string {
 		if (target === 'speech-to-text') {
+			if (language?.local.stt === false) {
+				return 'Cloud only for this language: Groq Whisper, no download.';
+			}
 			return `Turn your recording into text. ${
 				$appSettings.sttMode === 'local'
 					? 'Whisper small on this device.'
@@ -123,6 +132,9 @@
 		}
 
 		if (target === 'llm') {
+			if (language?.local.correction === false) {
+				return 'Cloud only for this language: use a configured cloud provider.';
+			}
 			return `Correct and explain what you said. ${
 				$appSettings.correctionMode === 'local'
 					? 'Your own OpenAI-compatible server.'
@@ -130,6 +142,9 @@
 			}`;
 		}
 
+		if (language?.local.tts === false) {
+			return 'Cloud only for this language: use a cloud voice for read-back.';
+		}
 		return `Speak the corrected sentence back to you. ${
 			$appSettings.ttsMode === 'local'
 				? `${voice?.name ?? 'Piper'} on this device.`
@@ -168,6 +183,7 @@
 			status={statusFor('speech-to-text')}
 			ready={Boolean(requirementFor('speech-to-text')?.met)}
 			open={open === 'speech-to-text'}
+			localAllowed={language?.local.stt !== false}
 			onToggle={() => toggle('speech-to-text')}
 			onModeChange={(value) => changeMode('speech-to-text', value)}
 		>
@@ -182,6 +198,7 @@
 			status={statusFor('llm')}
 			ready={Boolean(requirementFor('llm')?.met)}
 			open={open === 'llm'}
+			localAllowed={language?.local.correction !== false}
 			onToggle={() => toggle('llm')}
 			onModeChange={(value) => changeMode('llm', value)}
 		>
@@ -196,6 +213,7 @@
 			status={statusFor('text-to-speech')}
 			ready={Boolean(requirementFor('text-to-speech')?.met)}
 			open={open === 'text-to-speech'}
+			localAllowed={language?.local.tts !== false}
 			onToggle={() => toggle('text-to-speech')}
 			onModeChange={(value) => changeMode('text-to-speech', value)}
 		>

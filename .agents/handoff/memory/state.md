@@ -2,6 +2,179 @@
 
 ## Current State
 
+**Native Supertonic is measured and planned, not built (2026-11-10):** on identical sentences at
+8 steps, native sherpa-onnx at 2 threads needs 0.33 s of computing per second of speech on the laptop
+(WASM 1.68) and 0.51 s on the S24 FE (WASM 1.87). The Tauri apps still run Supertonic as WASM. The
+plan, results and traps are in `docs/prompts/native-supertonic-voices.md`; no app code changed.
+
+**Floating surfaces and sheet motion fixed (2026-11-08, uncommitted):** neo's menus, select lists and
+tooltips open in place at every interface scale (`utils/floatingZoom.ts`, `.neo-tooltip` in
+`app.css`); the Feedback sheet rises in 420 ms and settles from the finger's speed; the Practice
+page no longer freezes at fractional widths. Details in `decisions.md`.
+
+**Voice loudness is leveled (2026-11-08, uncommitted):** every on-device clip (read-backs, long
+texts and explanations piece by piece, voice samples, the Settings preview) is brought to −20 LUFS
+(BS.1770) and peak-limited at −1 dBFS when it is made, in `processPcm`. Cloud clips are not.
+Details in `decisions.md`; numbers in `docs/benchmarks/tts.md#loudness`.
+
+**Every on-device-voice language offered (2026-11-08, uncommitted):** 35 study languages and 35
+languages of instruction (every code in `VOICES_BY_LANGUAGE`; Urdu and Bengali got Piper voices:
+Fasih, Aegis, Google — voice check 3/3), built
+from one table, `LANGUAGE_FACTS` in `languages/index.ts` (names, CC-MAIN-2026-43 web share,
+Whisper name, writing, direction). French, Japanese and Persian keep hand-written definitions;
+the rest come from `requestedLanguage()` (Whisper small, general prompts, sample sentence as
+preview, Supertonic F1 or the first voice as default). Japanese is now offered; Persian read-back
+can run on the device (Piper Amir default). `defaultInstructionLanguageFor` (English, or Russian for
+learners of English) is used on load and on language change. `languages/support.ts` +
+`LanguageSupportNotice.svelte` warn in Settings (Language, and Text-to-speech) when the configured
+engines cannot handle a selected language. `segments.ts` ends sentences at `।`/`॥`, Urdu `۔` and the Greek
+question mark (U+037E); `words.ts` splits Chinese with a `zh` segmenter. The first-run picker
+got search and scrolling (but it never opens: settings always load a language). Verified in
+Chromium on the dev server (lists, notices for four configurations, the phone select, Korean and
+English switches); check 0/0; SPDX.
+
+**Sessions keep their setup; voices remembered per language; popup under zoom (2026-11-08, uncommitted):**
+- `Session.setup` (schema migration 10, `sessions.setup` JSON): studied + instruction language,
+  `ttsMode`, read-back and explanation voice, pace. `practice/sessionSetup.ts`
+  (`setupFromSettings`, `parseSessionSetup`, `usableSetup`, `inferSessionSetup` for sessions from
+  before: take voice → language, transcript letters, translations/gloss keys → instruction).
+  `practice.ts`: new sessions record it; `openSession` puts it back into Settings (toast when the
+  languages change) and stores an inferred one; `keepOpenSessionSetupCurrent` saves later changes
+  (800 ms debounce); `hydrateLatestSession` reopens the newest session only when its languages
+  equal Settings' (startup never changes languages). Backups carry it (`export.ts`).
+- `settings.ts` `targetVoiceByLanguage` / `explanationVoiceByLanguage`, kept by `setSetting`
+  (`withRememberedVoices`): a language change brings back that language's last voice; read-back
+  falls back to the language's default, an explanation voice stays empty for a by-ear choice.
+- `WordGloss.svelte`: floating-ui under CSS `zoom` (`zoomedPlatform`): label size in zoomed px,
+  gap/padding × zoom, result ÷ zoom. Was up to 63 px off at 125 %.
+- Verified in Chromium (`tools/session-setup-check.mjs`, `tools/hover-check.mjs` at 80/100/125/150 %,
+  390 and 1280 px); check 0/0.
+
+**Arabic-script text and the follow-up's language (2026-11-08, uncommitted):** Noto Naskh Arabic is
+bundled (`@fontsource/noto-naskh-arabic`, 400/700, Arabic subset) and backs `--font-sans`,
+`--font-serif`, `--font-mono` and `--neo-font-family`; `--font-persian` became
+`--font-arabic-script` (the same face, no Vazirmatn). `segments.ts` exports `SENTENCE_END_MARKS`,
+`CLAUSE_END_MARKS` and `endsSentence`, used by `explanation.ts` (`asSentence`),
+`correctedPassages.ts` and `speechPieces.ts`. `languages/textLanguage.ts` `couldBeWrittenIn`
+(scripts per language in `LANGUAGE_FACTS.scripts`); `evaluate.ts` drops a follow-up whose question
+is not in the studied language; the prompt says "never in <instruction language>". Verified in
+Chromium: a seeded card (Persian studied, Urdu instruction) renders every Urdu word joined; logic
+13/13; check 0/0.
+
+**Take card voice menu (2026-11-08, uncommitted):** the card's actions menu lists the voices
+inline under "Voice · <model>" headings (no hover submenu, which opened at the far edge). Menus are
+capped to the window: `onScreen` (`neo.ts`) now also caps the menu list, because neo rewrites the
+floating element's style attribute and dropped the cap (the list ran 90 px past the window).
+Verified at 1280×800 (scrolls inside, last voice reachable with the wheel) and 390×844.
+
+**Speaking pace (2026-11-08, uncommitted):** `targetSpeechPace` (default 0.9) slows the target-language
+voice at generation for both engines; one `pace` travels service → `LocalVoiceWorker` → worker →
+adapter. Prepared words now come right after the explanation in the background queue.
+
+**Word taps prepared ahead (2026-11-08, uncommitted):** the take being read gets each distinct
+word of its correct version and follow-up question made in the background, with the options a tap
+uses (`wordSpeechOptions`), so a tap plays from storage in ~3 ms instead of 3–5 s.
+
+**Voice library in Settings (2026-11-08, uncommitted):** the on-device voice rows open a library
+(`components/settings/VoiceLibraryPanel.svelte`, `stores/voiceLibrary.ts`) beside the settings on
+wide pages and as a sheet on narrow ones; voices grouped by model with download (shared for
+Supertonic), Try/Sample, approval and install tags. `VoiceTrigger.svelte` is the shared trigger
+(also used by the cloud `VoicePicker`). Service gained `synthesizeVoiceSample` and a shared
+`speakOnDevice`. French Piper voices gained hosted samples. Supertonic files are checksum-verified;
+runtime C++ exceptions are made readable. Verified in Chromium at 1440/900/390 px (download, try,
+sample, choose, Escape focus return, explanation role, no overflow, 36 px buttons), check, build.
+
+**On-device voices for any language: Supertonic 3 + Piper (2026-11-08, uncommitted on `main`,
+alongside the 2026-11-07 work):** any instruction language and any target language can now have
+an on-device voice. Decision and evidence: `decisions.md` (2026-11-08), `docs/benchmarks/tts.md`.
+- **Voice table:** `src/lib/languages/voices.ts` lists every voice by ISO 639-1 code
+  (`VOICES_BY_LANGUAGE`, `ALL_VOICES`); one voice serves both roles. Supertonic voices for 31 codes
+  (10 styles each, `supertonic-<code>-<f1…m5>`), the existing Piper fr/en voices, Piper Persian ×5
+  and Chinese Huayan, piper-plus Japanese ×3. `LanguageVoice` is a union by `engine`
+  (`piper` | `piper-plus` | `supertonic`); `LanguageDefinition.voices` and `EXPLANATION_VOICES`
+  are gone. `voicesFor` (target; empty unless `local.tts`) and `explanationVoicesFor` read the table.
+- **Engine:** `speech/tts/supertonic/` runs Supertonic 3 int8 on the official prebuilt sherpa-onnx
+  v2.0.1 WASM (unmodified, from `static/sherpa-onnx/`, filled by `scripts/sherpa-tts-assets.sh`;
+  four CI workflows run it). The glue is evaluated with `globalThis.eval` inside the existing
+  module worker; one shared model (`supertonicModel.ts`, held/released by voices, `free()` on the
+  last); Supertone's reference 8 steps / speed 1.05 (3 sounded watery; cache keys include both); piece trimming relative (−40 dB); peaks above 0.95 scaled down. Model files: Hugging Face mirror pinned
+  to a revision, cached in `onspot-tts-cache`.
+- **Layout:** the shared worker pieces moved from `tts/piper/` to `tts/local/` (`tts.worker.ts`,
+  `LocalVoiceWorker.ts` — renamed from `WorkerPiperAdapter` —, `registry.ts`, `cachedFetch.ts`,
+  `assets.ts`). `tts/voices.ts` was folded into `service.listLocalVoices`. Dead registry methods
+  removed. Piper/piper-plus behaviour unchanged.
+- **Downloads:** `languageData.ts` counts a download shared by the target and explanation voices
+  once (Supertonic model). Settings labels are engine-neutral; the explanation "Play sample" button
+  shows only for voices with a hosted sample.
+- **Dev tool:** `/model-lab/voices/` checks every voice loads and speaks (pass/fail, load, rtf, clip).
+- **Verified:** check 0/0, SPDX, build; 48/48 voices pass on the dev server; production build
+  re-checked (es Supertonic, zh Piper); product read-back + SQLite replay + Supertonic pair
+  explanation; Settings 1280/390 px. **Not verified:** phones, Safari, Tauri webviews, a live take.
+- **Open:** user to confirm 3 vs 5 steps by ear; Persian `local.tts` stays off until a voice is
+  approved by listening; Supertonic has no hosted samples to audition before download.
+
+**Persian, cloud-only, and right-to-left text (2026-11-07, branch `fix/dark-mode-visual-depth`,
+uncommitted):** Persian (`fa`) is offered everywhere from Settings → Language and the first-run
+picker, but needs no download: Groq Whisper (`language=fa`) for STT, any configured cloud LLM, and
+ElevenLabs/OpenAI-compatible read-back.
+- **Registry:** `LanguageDefinition` gained `direction` and `local: { stt, tts, correction }`.
+  Persian sets `direction: 'rtl'`, `voices: []`, `defaultVoice: ''` and all three `local` flags
+  `false`; `isCloudOnly()` lives beside `LANGUAGES`. French and Japanese are `ltr` with all three
+  local engines on, so their behaviour is unchanged.
+- **Cloud-only enforcement:** the first-run language picker and `setTargetLanguage` switch Local →
+  Cloud and disable the Local options with a hint; `initSettings` repairs stale/restored settings;
+  `processing.ts`, `languageData.ts` and the three Settings sub-panels
+  (`Transcription`/`Correction`/`Readback`) treat `local.* === false` as Cloud; `CapabilityRow`
+  takes `localAllowed` and locks its segmented control.
+- **RTL:** `directionForText()` (Arabic/Hebrew script → `rtl`, else `auto`) drives `dir` on
+  `Transcript` (new `direction`/`locale` props), follow-up questions, inline `<mark>` highlights in
+  explanations, correction original/replacement/alternatives, word-pair source/target, the Practice
+  prompt and History snippets. Arabic-script text uses a new `--font-persian` stack; **inline
+  highlights and word-pair source words must use it too**, or the UI serif/sans fallback shapes
+  Persian badly (joined forms and detached dots). The Feedback correction line is `dir=rtl` for
+  Persian text and its arrow rotates, so it reads said → fix right-to-left. `؟`, `،`, `؛` are
+  sentence/clause boundaries; word tokens keep U+200C. Persian LLM rules are in
+  `languageGuidance.ts`.
+- **Text size sample:** `sampleSession(instructionLanguage, targetLanguageId)` has a Persian
+  sample; the preview now waits for `settingsReady`, so it reflects the studied language.
+- **Onboarding:** `/welcome/` disables the on-device voice card for cloud-only languages and forces
+  `sttMode: 'cloud'` when applying the coach choice.
+- **Docs:** `docs/architecture/languages.md`, `supported-languages.md` (new Persian section and RTL
+  notes), README language table, a decisions entry. `docs/planning/ideas.md` moved the PWA and
+  Persian to `archive/ideas.md` under 2026-11-07; the local-model follow-up stays active.
+- **Verified:** `bun run check` 0/0, production build; Playwright: Persian persists across reload,
+  all three Processing rows show "Cloud only for this language…" with Cloud active and Local
+  disabled, Practice has no install gate and names Persian, the Text size sample renders `dir=rtl`
+  with the Persian font for transcript/question/vocab/inline marks, the Feedback correction line is
+  RTL with a flipped arrow, no horizontal overflow at 390 px, no page errors.
+- **Not verified:** a live Groq/LLM/ElevenLabs run in Persian, a real iPhone/Safari, model quality
+  for Persian, and Persian fonts on a device without Noto Naskh (the stack falls back to Tahoma).
+
+**Global interface scale (2026-11-07, branch `fix/dark-mode-visual-depth`, uncommitted):** Settings
+→ Learning → **Interface scale** resizes the whole app from 80% to 150% in 5% steps, separate from
+the existing per-part Text size settings. It is not deployed yet; the live Worker still has the
+previous build.
+- **Store:** `src/lib/stores/zoom.svelte.ts` (`onspot.ui-zoom.v1`, device-local, snapped 80–150 by
+  5%, applied at module load; 100% removes the key). `app.html` also applies the remembered value
+  before first paint, so there is no flash.
+- **Mechanism:** `zoom` on `:root` plus `--ui-vw: calc(100vw / var(--ui-zoom))` and
+  `--ui-vh: calc(100dvh / var(--ui-zoom))`. `html`/`main` use `--ui-vh`; `main.under-window-bar`
+  subtracts the window bar after the division so the zoomed Tauri frame still fits. The page and
+  key paper sizes use the divided viewport helpers.
+- **Fixed overlays:** replaced `100vw`/`100dvh` with `--ui-vw`/`--ui-vh` in `PwaUpdate`,
+  `WordGloss`, `VoicePreview`, `VoicePicker`, `LanguagePicker`, `PermissionsPrompt`,
+  `SyncConflictDialog`, `RestoreDatabaseButton` and `TextSizeEditor`. The install card is capped at
+  `--ui-vh - 84px` with a scrolling body so 150% on a phone cannot push it off the top.
+- **Control:** `ZoomSettings.svelte` uses NeoRange (5% steps), zoom-out/zoom-in keys, a live
+  percentage and Reset; on phones the track takes its own row. Slider handle is exposed as a named
+  slider for assistive technology. Settings hash `#interface-scale`/`#zoom` opens the Learning tab.
+- **Verified:** `bun run check` 0/0, build, SPDX; Playwright desktop 80/100/125/150 (main and
+  document exactly the viewport, no horizontal scroll), iPhone 100/125/150 (main/header fit,
+  install card capped, Settings slider full width), dark 125; plus/minus, arrow key and reset update
+  the root and localStorage; text-size editor and practice screen fit at 150. No page errors.
+- **Not verified:** real iOS Safari/WebKit, Firefox, Android WebView, the Tauri window bar at
+  150%, slider dragging while the layout resizes, every dialog at 150%, and a deployed live build.
+
 **iOS PWA live (2026-11-06, branch `fix/dark-mode-visual-depth`, uncommitted):** the installable
 web app is deployed at **https://onspot.khizardevelops.workers.dev** and has not been run on an
 Apple device. The user has no iPhone/iPad; a macOS virtual machine on an external drive is the

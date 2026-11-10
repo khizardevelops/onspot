@@ -17,10 +17,23 @@ export interface TextToken {
 	end: number;
 }
 
-const SPACED_TOKEN = /([\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*)|(\s+)|([^\s])/gu;
+const SPACED_TOKEN = /([\p{L}\p{N}]+(?:['’\-\u200c][\p{L}\p{N}]+)*)|(\s+)|([^\s])/gu;
 const JAPANESE_SCRIPT = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+/** Kana appears only in Japanese: Han characters without it are read as Chinese. */
+const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const RTL_SCRIPT = /[\p{Script=Arabic}\p{Script=Hebrew}]/u;
 
-/** True when the text is written in Japanese script (kana or kanji). */
+/**
+ * The direction a text should be laid out in: right-to-left when it contains
+ * Arabic-script (Persian, Arabic, Urdu) or Hebrew text, otherwise `auto` so the
+ * browser uses the first strong character. Latin sample text therefore stays
+ * LTR even when the studied language is Persian.
+ */
+export function directionForText(text: string): 'rtl' | 'auto' {
+	return RTL_SCRIPT.test(text) ? 'rtl' : 'auto';
+}
+
+/** True when the text is written without spaces between words: Japanese (kana, kanji) or Chinese (Han). */
 export function isJapaneseText(text: string): boolean {
 	return JAPANESE_SCRIPT.test(text);
 }
@@ -40,17 +53,21 @@ function attachesToPrevious(piece: string): boolean {
 	return /^[\p{Script=Hiragana}ー]+$/u.test(piece) && !PARTICLES.has(piece);
 }
 
-let segmenter: Intl.Segmenter | null | undefined;
-function japaneseSegmenter(): Intl.Segmenter | null {
-	if (segmenter === undefined) {
-		segmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
+const segmenters = new Map<'ja' | 'zh', Intl.Segmenter | null>();
+
+/** A word segmenter for unspaced text: Japanese when it has kana, Chinese otherwise. */
+function unspacedSegmenter(text: string): Intl.Segmenter | null {
+	const locale = KANA.test(text) ? 'ja' : 'zh';
+	if (!segmenters.has(locale)) {
+		const available = typeof Intl !== 'undefined' && 'Segmenter' in Intl;
+		segmenters.set(locale, available ? new Intl.Segmenter(locale, { granularity: 'word' }) : null);
 	}
-	return segmenter;
+	return segmenters.get(locale) ?? null;
 }
 
 export function tokenizeWords(text: string): TextToken[] {
 	const tokens: TextToken[] = [];
-	const japanese = isJapaneseText(text) ? japaneseSegmenter() : null;
+	const japanese = isJapaneseText(text) ? unspacedSegmenter(text) : null;
 	if (japanese) {
 		for (const part of japanese.segment(text)) {
 			const token = {

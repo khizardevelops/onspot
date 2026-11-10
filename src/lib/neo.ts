@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { flip, offset, shift, size, type UseFloatingOptions } from '@skeletonlabs/floating-ui-svelte';
-import { cubicIn, quartOut } from 'svelte/easing';
-import { fade, scale } from 'svelte/transition';
+import { flip, offset, shift, size } from '@floating-ui/dom';
+import type { UseFloatingOptions } from '@skeletonlabs/floating-ui-svelte';
+import { cubicIn, quartOut, sineOut } from 'svelte/easing';
+import { fade, scale, type TransitionConfig } from 'svelte/transition';
+import { noteTooltipClosed, tooltipJustClosed } from '#lib/stores/tooltipWarmth.svelte.js';
+import { placedUnderZoom } from '#lib/utils/floatingZoom.js';
 
 /*
  * Shared timing presets for neo-svelte's floating, collapsing and dialog
@@ -20,10 +23,16 @@ import { fade, scale } from 'svelte/transition';
 
 /** How long each kind of surface moves, in ms. */
 const MOTION_MS = {
-	/** A menu, tooltip or select list coming in. */
-	popEnter: 90,
+	/** A menu or select list coming in. */
+	popEnter: 110,
 	/** …and going: faster than it came. */
-	popExit: 50,
+	popExit: 80,
+	/** A tooltip coming in: about nine frames, so it is seen to fade in rather than flash. */
+	tooltipEnter: 150,
+	/** A tooltip taking over from its neighbour's, which is still fading. */
+	tooltipHop: 90,
+	/** A tooltip going. */
+	tooltipExit: 110,
 	/** A dialog coming in (it carries more weight than a menu). */
 	dialogEnter: 160,
 	/** …and going. */
@@ -32,8 +41,7 @@ const MOTION_MS = {
 	collapse: 120
 } as const;
 
-/** Where a popping surface starts, as a fraction of its size: close enough to read as the same thing settling. */
-const POP_START_SCALE = 0.97;
+/** Where a dialog starts, as a fraction of its size: close enough to read as the same thing settling. */
 const DIALOG_START_SCALE = 0.96;
 
 /** Read once: neither changes while onspot is open in practice, and the presets are plain objects. */
@@ -46,17 +54,87 @@ function motionMs(ms: number): number {
 	return prefersReducedMotion ? 0 : ms;
 }
 
-/** Overlay enter/exit: a near-instant pop, no lingering fade-out. */
+/**
+ * A menu or select list coming and going: a short fade, and nothing else.
+ * They used to grow from 97 % as well, but scaling small text moves each letter
+ * by fractions of a pixel, differently for every width: letters reversed
+ * direction by up to 0.7 px on some labels and not at all on others (measured
+ * 2026-11-08), which reads as jitter on some surfaces only.
+ */
 export const quickPop = {
-	in: { use: scale, props: { duration: motionMs(MOTION_MS.popEnter), start: POP_START_SCALE, opacity: 0, easing: quartOut } },
-	out: { use: fade, props: { duration: motionMs(MOTION_MS.popExit), easing: cubicIn } }
+	in: { use: fade, props: { duration: motionMs(MOTION_MS.popEnter), easing: sineOut } },
+	out: { use: fade, props: { duration: motionMs(MOTION_MS.popExit), easing: sineOut } }
 };
 
 /**
- * Tooltips: open almost immediately on hover, never on focus alone, and not
- * at all on touch screens, where a tap would leave its label stuck on screen.
+ * A floating surface closes when what is under it scrolls, as a native
+ * dropdown does. It lives on top of the whole page, so it would otherwise stay
+ * where it opened while its trigger slid away (a select's list, 600 px from
+ * its field).
  */
-export const quickTooltip = { hoverDelay: 60, openDelay: 0, openOnFocus: false, openOnHover: canHover, ...quickPop } as const;
+const closesOnPageScroll = { ancestorScroll: true } as const;
+
+/** Space kept between a floating menu, list or label and the viewport edge. */
+const VIEWPORT_MARGIN = 12;
+
+/** How far a tooltip or a select's list sits from its trigger (neo's own default). */
+const NEAR_TRIGGER_GAP = 6;
+
+/**
+ * A small floating surface next to its trigger (a tooltip, a select's list):
+ * on the side asked for, the other side when there is no room, and slid back
+ * inside the window. Placed right under the interface scale (`floatingZoom.ts`),
+ * which neo's own positioning is not.
+ */
+const nearTrigger: UseFloatingOptions = {
+	middleware: placedUnderZoom((zoom) => [
+		offset(NEAR_TRIGGER_GAP * zoom),
+		flip({ padding: VIEWPORT_MARGIN * zoom }),
+		shift({ padding: VIEWPORT_MARGIN * zoom })
+	])
+};
+
+/**
+ * How long the pointer rests on a key before its tooltip opens. Long enough
+ * that a pointer on its way somewhere else sets nothing off (at 60 ms labels
+ * popped up all along its path), short of the 600 ms neo waits by default.
+ */
+const TOOLTIP_REST_MS = 250;
+
+/**
+ * A tooltip coming in: a fade on a sine curve, so it is seen to arrive (a quart
+ * curve over 90 ms reached 55 % opacity in one frame, a flash). Nothing scales,
+ * for the reason given at `quickPop`. One that takes over from a neighbour's,
+ * still fading out, comes in faster.
+ */
+function tooltipIn(node: Element): TransitionConfig {
+	const duration = tooltipJustClosed() ? MOTION_MS.tooltipHop : MOTION_MS.tooltipEnter;
+	return fade(node, { duration: motionMs(duration), easing: sineOut });
+}
+
+/**
+ * Tooltips: open when the pointer settles on a key, at once when moving along
+ * a row of them, never on focus alone, and not at all on touch screens, where
+ * a tap would leave its label stuck on screen. They live on top of the whole
+ * page (a portal), like menus and select lists: inside a take card they were
+ * clamped to the card's edges, and under the interface scale floating-ui took
+ * the zoom for a scale on the card, which put a tooltip 100 px from its button
+ * at 125 %.
+ */
+export const quickTooltip = {
+	get hoverDelay() {
+		return tooltipJustClosed() ? 0 : TOOLTIP_REST_MS;
+	},
+	openDelay: 0,
+	openOnFocus: false,
+	openOnHover: canHover,
+	portal: true,
+	options: nearTrigger,
+	dismissOptions: closesOnPageScroll,
+	onClose: noteTooltipClosed,
+	in: { use: tooltipIn },
+	out: { use: fade, props: { duration: motionMs(MOTION_MS.tooltipExit), easing: sineOut } }
+} as const;
 
 /**
  * Dialogs: neo scales them in from 105% over 300ms and out the same way.
@@ -67,32 +145,46 @@ export const quickDialog = {
 	out: { use: fade, props: { duration: motionMs(MOTION_MS.dialogExit), easing: cubicIn } }
 };
 
-/** Space kept between a floating menu and the viewport edge. */
-const VIEWPORT_MARGIN = 12;
+/** The smallest a menu is squeezed to, in px, even when there is less room; it scrolls inside. */
+const MENU_MIN_SIZE = 160;
+
+/** How far a menu sits from its trigger. */
+const MENU_GAP = 8;
 
 /**
  * Floating-ui positioning that keeps a menu fully on screen. neo's own
  * middleware only flips, so on a phone a menu wider than the room beside its
  * trigger ran off the edge (the navigation menu was cut in half). `shift`
  * slides it back inside, `size` caps it to the space available, and the menu
- * scrolls if it is still taller.
+ * scrolls if it is still taller. Placed right under the interface scale
+ * (`floatingZoom.ts`): the room it measures is in zoomed pixels, the cap in
+ * the menu's own.
+ *
+ * The cap also goes on the menu list inside the floating element: neo
+ * rewrites the floating element's style attribute whenever it moves, which
+ * drops a cap set only there (a take card's voice list ran 90px past the
+ * bottom of the window, its last voices out of reach).
  */
 export const onScreen: UseFloatingOptions = {
-	middleware: [
-		offset(8),
-		flip({ padding: VIEWPORT_MARGIN }),
-		shift({ padding: VIEWPORT_MARGIN }),
+	middleware: placedUnderZoom((zoom) => [
+		offset(MENU_GAP * zoom),
+		flip({ padding: VIEWPORT_MARGIN * zoom }),
+		shift({ padding: VIEWPORT_MARGIN * zoom }),
 		size({
-			padding: VIEWPORT_MARGIN,
+			padding: VIEWPORT_MARGIN * zoom,
 			apply({ availableWidth, availableHeight, elements }) {
-				Object.assign(elements.floating.style, {
-					maxWidth: `${Math.max(160, availableWidth)}px`,
-					maxHeight: `${Math.max(160, availableHeight)}px`,
+				const cap = {
+					maxWidth: `${Math.max(MENU_MIN_SIZE, availableWidth / zoom)}px`,
+					maxHeight: `${Math.max(MENU_MIN_SIZE, availableHeight / zoom)}px`,
 					overflowY: 'auto'
-				});
+				};
+				const menuList = elements.floating.firstElementChild;
+				for (const element of [elements.floating, menuList]) {
+					if (element instanceof HTMLElement) Object.assign(element.style, cap);
+				}
 			}
 		})
-	]
+	])
 };
 
 /**
@@ -107,6 +199,7 @@ export const quickMenu = {
 	openOnFocus: false,
 	openOnClick: true,
 	unmountOnClose: true,
+	dismissOptions: closesOnPageScroll,
 	...quickPop
 } as const;
 
@@ -125,7 +218,8 @@ export const quickSubmenu = {
 	openOnClick: true,
 	hoverDelay: 0,
 	openDelay: 0,
-	options: onScreen
+	options: onScreen,
+	dismissOptions: closesOnPageScroll
 };
 
 /**
@@ -148,7 +242,9 @@ export const quickSelect = {
 	listProps: {
 		...quickPop,
 		height: { max: SELECT_LIST_MAX_HEIGHT },
-		tooltipProps: { portal: true }
+		// neo reverses a list that opens upwards (Z to A from the top); a list keeps its order, as a native picker does.
+		flip: false,
+		tooltipProps: { portal: true, options: nearTrigger, dismissOptions: closesOnPageScroll }
 	}
 };
 

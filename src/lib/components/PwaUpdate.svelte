@@ -34,7 +34,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		width: min(34rem, calc(100vw - 24px));
+		width: min(34rem, calc(var(--ui-vw) - 24px));
 		padding: 10px 12px;
 		border: 1px solid var(--sheet-line);
 		border-radius: 14px;

@@ -24,6 +24,7 @@
 
 import type { FollowUp } from '../db/types';
 import { overlappingWords, sameWords } from '#lib/utils/words.js';
+import { endsSentence } from '#lib/utils/segments.js';
 
 export const EXPLANATION_HIGHLIGHTS = ['wrong', 'right', 'key', 'ask'] as const;
 
@@ -187,8 +188,6 @@ export interface ExplanationMistake {
 	line: string;
 }
 
-const SENTENCE_END = /[.!?…]$/;
-
 function asText(value: unknown): string {
 	return typeof value === 'string' ? value : '';
 }
@@ -206,8 +205,9 @@ function textWithKeywords(value: unknown): string {
 	return formatExplanation(parts).trim();
 }
 
+/** The text with a full stop when it has no sentence end yet, in any script (`۔`, `؟` and `。` count). */
 function asSentence(text: string): string {
-	return SENTENCE_END.test(text) ? text : `${text}.`;
+	return endsSentence(text) ? text : `${text}.`;
 }
 
 function wordCount(text: string): number {

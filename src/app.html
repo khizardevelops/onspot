@@ -31,6 +31,12 @@
 					document
 						.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
 						?.setAttribute('content', dark ? 'black-translucent' : 'default');
+
+					// Apply the remembered interface scale before the first paint.
+					const scale = Number(localStorage.getItem('onspot.ui-zoom.v1'));
+					if (Number.isFinite(scale) && scale >= 0.8 && scale <= 1.5) {
+						document.documentElement.style.setProperty('--ui-zoom', String(scale));
+					}
 				} catch {
 					// Storage can be disabled; the default light theme still works.
 				}

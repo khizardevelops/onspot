@@ -255,7 +255,7 @@
 		align-items: center;
 		gap: 0.375rem;
 		width: max-content;
-		max-width: calc(100vw - 1rem);
+		max-width: calc(var(--ui-vw) - 1rem);
 		padding: 0.375rem;
 		border: 1px solid var(--sheet-line, var(--border));
 		border-radius: 999px;

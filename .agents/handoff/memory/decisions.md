@@ -1,5 +1,266 @@
 # Decisions
 
+### Tooltips wait for the pointer to settle, and hand over between neighbours (2026-11-08)
+The user, after their position was fixed: "the tooltips animation is still fucked". Frames: 60 ms rest
+(a passing pointer set them off), opacity 0 → 0.55 in one frame (90 ms, quart), a cut on the way out
+(50 ms), a ~70 ms gap of nothing between neighbouring keys.
+- **250 ms rest, not 60 and not neo's 600** (the user called neo's delays "such a huge delay" on
+  2026-09-24). Within 300 ms of another tooltip closing it opens at once (`tooltipWarmth.svelte.ts`).
+- **Fade only, 150 ms in on a sine curve, 110 ms out; a neighbour's takes over with a 90 ms fade,
+  crossfading.** The user then: "hit or miss, jittery on some, and on other not". Stepping a 0.96
+  scale frame by frame showed letters reversing direction by up to 0.7 px, 4 times on one label and
+  never on another (it depends on the width), so **nothing floating scales now**: `quickPop` (menus,
+  selects) is a 110/80 ms fade too. Dialogs still scale (not reported).
+- **Floating surfaces close when what is under them scrolls** (`ancestorScroll`, all neo presets): the
+  user saw an open dropdown stay put while the page moved. One whose trigger did not move stays open.
+- **The Practice glare holds still while a floating surface is up, or the phone sheet is open**
+  (`PracticeScreen.svelte`, `:has`). The drift is the user's idea (2026-11-06), so it stays; running, it
+  costs 23 ms frames against 16.7 paused (software compositor) and stuttered everything on that page.
+- **No `backdrop-filter` on `.neo-tooltip`**: the background is opaque, so the blur was invisible work.
+- `quickTooltip.hoverDelay` is a getter reading a rune: neo reads it inside a `$derived`, so spread the
+  preset directly (`{...quickTooltip}`), never copy it into another object.
+
+### Floating surfaces are placed at once, and sheets move on a curve chosen by frame steps (2026-11-08)
+The user: "serious ui issues with drop down menus", tooltips "come out of nowhere", and the feedback
+sheet's swipe-up "so fast it looks buggy". Recorded frame by frame in Chromium.
+- **`.neo-tooltip` has no `translate` transition** (`app.css`). neo positions floating surfaces with
+  `translate`, and the global "compositor properties only" rule animated it: every menu, list and
+  tooltip slid in from (0, 0) and again on each re-placement. Their scale/fade pop is unaffected.
+- **All neo floating surfaces go through `placedUnderZoom` and are portaled** (`neo.ts`).
+- **Select lists keep their order when they open upwards (`flip: false`) and open at the current
+  choice** (`SettingSelect`), as native pickers do.
+- **Feedback sheet (phones, tablets): 420 ms up, 260 ms down, `cubic-bezier(0.35, 0.1, 0.3, 1)`.**
+  Picked by the steps it takes per frame on a 700 px rise: the old 180 ms curve moved 263 px in its
+  first frame, vaul's (0.32, 0.72, 0, 1) still peaks at 111 px; this one starts 11, 17, 25, 34 and
+  peaks at 61. Desktop's sidebar stays at 180 ms (a short sideways slide, not reported).
+- **After a swipe (`settleMotion`):** duration from the distance left (0.6 ms/px, 200–420 ms), and
+  the curve's start slope from the finger's speed, so the sheet neither lurches nor stalls on release.
+
+### Every on-device clip is leveled to −20 LUFS when it is made (2026-11-08)
+The user: "some voices are too loud and some are too quiet … not just pure dB normalisation since
+a single spike can prevent proper normalisation … without noticeable latency", then "implement it".
+- **Per clip, offline, in `processPcm`**, not a live filter on the output: every clip exists whole
+  before it plays, so it is measured exactly and costs no playback delay (~5 ms per second of
+  speech, once, before storage). A live compressor/AGC cannot know a clip's loudness ahead, so it
+  pumps or needs look-ahead delay, and cannot lift quiet voices without lifting their noise.
+- **Order:** tone (approved EQ + compressor, learner's EQ) → one gain to −20 LUFS (BS.1770
+  integrated, `utils/loudness.ts`) → learner's volume → look-ahead limiter at 0.89
+  (`utils/peakLimiter.ts`) → one top-up pass for what the limiter took (spread 1.05 → 0.39 dB).
+  Measuring after the tone stage means the learner's EQ changes tone, not level; the volume fader
+  stays the level control.
+- **−20, not −18 or −23:** at −20 the limiter touches 26/51 voices (median 2.3 dB, worst 4.6) and
+  Supertonic stays near where it was; −18 touches 36 (worst 6.6). See `docs/benchmarks/tts.md#loudness`.
+- **Removed:** `AudioProcessingProfile.targetPeak` and `makeupGainDb` (leveling cancels both), the
+  explanation voice's borrowed `loudnessOnly` chain (it now gets its own approved profile; both
+  voices meet at −20 per piece), the chain's dry path for unprofiled voices (they are leveled too).
+- **Pieces are trimmed before they are processed**, so a one-word piece is leveled as speech, not
+  as speech plus the voice's padding.
+- **Cache keys** of every processed on-device clip carry `lufs-20` (`LEVELING_TAG`); older clips are
+  made again on their next play. Raw (preview) clips keep their key.
+- **Not leveled:** cloud clips (a streamed clip plays before it can be measured).
+
+### A session keeps the setup it was practised with; voices are remembered per language (2026-11-08)
+The user: going back to a session done in another target language and language of instruction
+should use the TTS and config it was started with (hover meanings came in the new instruction
+language); and switching languages should bring back the voices chosen for each language.
+- **The open session's setup is Settings.** Opening a session puts its setup into Settings (with a
+  toast) instead of keeping a second, per-view language context: every path that reads Settings
+  (recording, evaluation, voices, glosses, translations, the data gate) is then right without
+  being rewritten, and a take recorded into a reopened session uses its languages.
+- **Startup never changes languages:** the newest session is reopened only when its languages
+  equal Settings'; otherwise the app starts fresh and the session waits in History.
+- **While open, the session follows Settings** (a voice or pace chosen then becomes its setup); a
+  new studied language starts a new session, as before.
+- **Older sessions** get a setup inferred once from their takes and stored.
+- **Voices per language and role** live in Settings, so they also work with no session open. A
+  language never chosen before: read-back gets its default voice; the explanation voice stays
+  empty (picked by ear, as decided for explanations), so its notice still appears once.
+
+### The word popup accounts for CSS zoom (2026-11-08)
+Reported as "the popup appears elsewhere for Persian": at an interface scale other than 100 % the
+popup drifted in proportion to the word's distance from the left edge (right-aligned Persian
+lines most). floating-ui 1.8 measures the reference and window in zoomed px but the floating
+element's size in CSS px, and its `left`/`top` are scaled again by the zoom. `WordGloss` passes a
+platform whose `getDimensions` is × zoom and divides the result by the zoom.
+
+### One bundled Naskh face for all Arabic-script text; wrong-language follow-ups are dropped (2026-11-08)
+The user: Urdu text rendered broken (and suspected encoding or zero-width characters), and a
+Persian learner taught in Urdu got the follow-up question in Urdu, read by the Persian voice.
+- **Rendering:** the code points were right (the same Urdu rendered correctly in the follow-up,
+  which used the Persian stack); nothing inserts zero-width characters. Instruction-language text
+  used the Latin UI faces, and the system fallback lacked ہ and ے, so those letters came from a
+  second font and did not join. Fix: bundle Noto Naskh Arabic (Arabic subset, 53 KB per weight,
+  no Latin glyphs) in every stack. Naskh rather than Nastaliq for Urdu: it needs no `lang`
+  plumbing and keeps the ruled card lines; Nastaliq stays an option.
+- **`..`:** `asSentence` added `.` after `۔` (it knew only `.!?…`). One shared list of sentence and
+  clause marks in `segments.ts` now serves explanations, corrected passages and speech pauses.
+- **Follow-up language:** the prompt now says "never in <instruction language>", and the result is
+  checked: `couldBeWrittenIn` judges from the letters only (script share ≥ 50 %, letters only
+  another language uses). A failing question is dropped, not swapped: a swap could put the other
+  language back in the voice when the translation has no telling letters.
+
+### Urdu and Bengali speak on the device with Piper (2026-11-08)
+The user: "there is a good urdu model in piper". rhasspy/piper-voices lists `ur_PK-fasih-medium`
+(M, MIT, v2 October 2026), `ur_PK-aegis_female-medium` (F, MIT) and `bn_BD-google-medium`
+(16 speakers; OpenSLR 37 CC BY-SA 4.0 + CMU Indic). All use eSpeak (`ur`, `bn`), whose
+dictionaries the vendored piper-wasm data already holds, so nothing new is vendored. Added as
+candidates; the voice check passes 3/3. Fasih is Urdu's default only because it is the newer
+training; the user picks by ear. The earlier "cloud for Urdu/Bengali" call came from not checking
+Piper's full voice list (it was checked for Persian and Chinese only).
+
+### Every language an on-device voice speaks is offered, unreviewed, at the user's request (2026-11-08)
+The user: "add all the languages that the offline tts supports in the target language and the
+language of instruction section", and tell the learner when their cloud API or offline model does
+not support a selected language.
+- **Lists:** one fact table (`LANGUAGE_FACTS`) feeds both lists, so a language is added once.
+  Study languages are the codes in `VOICES_BY_LANGUAGE` (33); instruction languages add Urdu and
+  Bengali (35). The 21 earlier instruction languages kept their names and web shares.
+- **Honest approval:** the new languages are `approved` so production offers them, with a by-line
+  saying they were offered at the user's request and are not reviewed (`REQUESTED_LANGUAGE_APPROVAL`);
+  their Whisper approval stays `candidate` (`WHISPER_NOT_REVIEWED`). Same exception as Persian.
+- **Japanese** joins them (its pending gate was the same unreviewed state). **Persian** read-back
+  on the device: its five Piper voices passed the browser voice check, which was the plan's gate.
+- **Support notices** come from a pure function over the settings (`languages/support.ts`): no
+  on-device voice for the target or instruction language; ElevenLabs model language lists
+  (Multilingual v2 29; Flash/Turbo v2.5 adds hu, no, vi; from ElevenLabs' help page); OpenAI's own
+  speech API list; nothing claimed for a custom endpoint. Each message names the engine, the
+  language, and what to choose instead.
+- **Instruction fallback:** an English learner cannot be taught in English, so the default becomes
+  the language with the most web text after English (Russian), by rule rather than a hard-coded pick.
+
+### Menus cap their list, not only the floating wrapper (2026-11-08)
+The card's voice menu ran past the window: neo's `NeoTooltip` rewrites its style attribute (style
+directives for size) whenever it moves, which dropped the `max-height` that `onScreen`'s size
+middleware had set. The cap now also goes on the floating element's first child (the menu list,
+which scrolls). neo's own `height: 'available'` was not usable, since `onScreen` replaces neo's
+middleware and with it the measurement that strategy reads.
+
+### The target language has a learner speaking pace, default 90% (2026-11-08)
+The user: the target language is spoken too fast (Supertonic was at Supertone's reference speed
+1.05). Settings → Text-to-speech → **Speaking pace** (`targetSpeechPace`, `SPEECH_PACES` 80/90/100/110 %,
+default 90 %). The voices slow down when they make the audio (Supertonic `speed = 1.05 × pace`,
+Piper and piper-plus `length_scale / pace`), not at playback. It applies to everything the target
+voice says (read-back, corrections, tapped and prepared words, target words of explanations, the
+preview and the library's Try); the explanation voice keeps its natural pace. Cache keys carry the
+pace (`paceTag`). Verified: one sentence 4.20 → 4.66 → 5.25 s (Supertonic) and 3.58 → 3.94 → 4.45 s
+(Piper Tom) at 100/90/80 %. Also: word preparation now runs right after the explanation, before the
+sentence clips, since a tap is the wait a learner feels.
+
+### Tapped words are prepared ahead, not made on tap (2026-11-08)
+The user: tapping a word took too long. Measured (Supertonic, model loaded): one word costs 2.3 s at
+3 steps, 3.3 s at 5, 5.2 s at 8 (about 1.4 s is fixed: the model pads every clip with ~1 s of
+silence); a cold worker adds a 2.6 s model reload, and a tap waits for the clip being prepared.
+No step count makes a first tap instant, so the take being read now gets its words prepared in the
+background queue (`practice.ts` `takesWithWords`, after its sentence clips): every distinct word of
+the correct version and the follow-up question, spoken with `wordSpeechOptions`
+(`stores/pronunciation.ts`), the same options a tap uses, so a tap finds the stored clip (measured
+2–3 ms). Only that take, not the whole session, to bound background work. A tap on a word not yet
+prepared still jumps the queue.
+
+### The on-device voice choice is a library beside the settings, grouped by model (2026-11-08)
+The user asked for the voice selector to open as a window to the side of Settings (the settings
+moving left) instead of a modal, with more detail, voices grouped by model, and a download and a
+way to try each from there.
+- **Placement:** `VoiceLibraryPanel` is hosted by the Settings page. From 1100 px of page width
+  (`bind:clientWidth`, so the interface scale counts) it is a column beside the settings; below,
+  a sheet over them (`role=dialog`, the page `inert`, full width on phones). Escape, Back, Done and
+  the scrim close it; focus returns to the trigger. It closes on leaving the Learning tab or when
+  text-to-speech goes to Cloud. Cloud voice pickers (ElevenLabs/OpenAI) stay `VoicePicker` modals.
+- **Grouping:** `groupVoicesByModel` (stores/voiceLibrary.ts) by `engine`, described by
+  `VOICE_MODELS` in languages/voices.ts. A group whose voices share every file (Supertonic) gets
+  one Download for the group; otherwise each voice has its own (Piper, piper-plus).
+- **Download / try:** downloads go through `preloadLocalVoice` (one at a time, Cancel ends the voice
+  worker like Language data's Cancel) and refresh the language-data state. **Try** speaks
+  `VOICE_SAMPLE_SENTENCES[code]` on the device (`synthesizeVoiceSample`, cached and processed like
+  a read-back); before a download, Piper voices play their rhasspy hosted **Sample**. Playback uses
+  Web Audio resumed in the click (Safari autoplay).
+- **Supertonic failure the user hit ("19949696"):** an escaped C++ exception arrives as a bare
+  pointer. A truncated model file reproduces it (`N3Ort9ExceptionE`). Every Supertonic file is now
+  SHA-256-checked after fetch (a bad cached copy is dropped and downloaded again), and escaped
+  exceptions become readable errors with the C++ type in the console. Root cause on the user's
+  machine not yet confirmed.
+
+### On-device voices for any language: Supertonic 3 first, Piper for the gaps (2026-11-08)
+The user wants any instruction language with any target language, under 300 MB RAM and 500 MB
+storage, quick, high quality, web and Tauri. They listened to spike clips and chose Supertonic 3
+("sounds really good"). Evidence and every number: `docs/benchmarks/tts.md` (Supertonic section).
+- **Order per language:** Supertonic 3 (one ~145 MB int8 model, 31 languages, 10 styles) → Piper
+  (existing fr/en voices; Persian `fa_IR` ×5 and Chinese Huayan, which Supertonic lacks) → cloud
+  (ur, bn, …). Voices are data in `src/lib/languages/voices.ts`, keyed by language code, and serve
+  both roles (target read-back and explanation voice). `LanguageDefinition.voices` and
+  `EXPLANATION_VOICES` are gone; `voicesFor` (target, gated by `local.tts`) and
+  `explanationVoicesFor` read the table.
+- **Runtime:** the official prebuilt sherpa-onnx v2.0.1 WASM, unmodified, run inside the existing
+  module worker (indirect `eval` of its classic glue; an empty `getPreloadedPackage` buffer skips
+  its baked demo model). No custom build, no second worker, no new scheduler: `SupertonicAdapter`
+  is one more adapter in `speech/tts/local/registry.ts`. Two Supertonic voices share one model
+  (language and style are per call); the last one disposed calls `free()`.
+- **Steps/speed:** Supertone's reference, 8 steps and speed 1.05 (`SUPERTONIC_STEPS`/`_SPEED` in
+  languages/voices.ts). 3 steps sounded watery (8–17 % energy above 5 kHz); 5 is only sherpa's API
+  default, not the model's. Cache keys carry both (`voiceRendition`). Cost: rtf ~1.6 per sentence and
+  slow many-piece explanations; the user decides 5 vs 8 by ear (seeded A/B clips).
+- **Piece trimming is relative (−40 dB, 30 ms margin)** in `speechPieces.ts`: the fixed 0.01 level cut
+  up to 180 ms of the first/last word of each explanation piece. Raw peaks above 0.95 are scaled down.
+- **Memory promise:** ~262 MB when both voices are Supertonic. A pair with a Piper voice is
+  300–490 MB; documented, freed by the 90 s idle shutdown.
+- **Piper stays on onnxruntime-web + piper-wasm.** Moving Piper to sherpa measured no faster, ~165 MB
+  heavier, and needs re-exported voice files (sherpa exits on rhasspy's), so every learner would
+  re-download. Japanese/piper-plus untouched (separate ticket).
+- **Rejected:** a custom sherpa-onnx build (user: no overkill), Kokoro-82M as the top tier
+  (8–9 languages, weak French, same speed problem), MMS-TTS and Phonon multilingual (CC-BY-NC), a
+  language detector/router (the app knows each segment's language), eSpeak formant voices as a
+  fallback tier (not high quality), WebGPU fp32 Supertonic (reasoned: its 400 MB model goes through
+  ORT-web's WASM heap; not measured).
+- **Production trap:** the classic glue must run via `globalThis.eval(...)`. The bundler inlined
+  `const evaluate = eval; evaluate(src)` into a direct `eval` (strict, function-scoped), so the
+  glue would never see the `Module` hooks; caught in `bun run build` output, fixed, and the built
+  app re-verified.
+- **Verified:** `bun run check` 0/0, SPDX, production build; voice check 48/48 voices pass on the dev
+  server, 2/2 on the served production build; product read-back, clip-cache replay and a
+  Supertonic+Supertonic explanation; Settings at 1280 px and 390 px (no overflow, picker lists
+  Supertonic). Not verified: real phones/Safari/Tauri webviews, a live LLM take, listening per
+  language beyond fr/en/ko/ja.
+
+### Persian ships cloud-only, and RTL is decided by the script (2026-11-07)
+User asked to add Persian, using cloud APIs only for STT, TTS and the LLM, and to handle
+right-to-left properly before looking for local models.
+- **Cloud-only is registry data, not UI state:** `LanguageDefinition.local = { stt, tts, correction }`
+  marks which engines may run on the device. Persian sets all three `false`. Choosing the language
+  switches Local → Cloud (first-run picker and `setTargetLanguage`), `initSettings` repairs stale
+  or restored settings, Settings → Processing locks its switches to Cloud with a hint, and
+  `processing.ts`/`languageData.ts` never request local data. No download is offered.
+- **Approval:** Persian's `approval.status` is `approved` (so production offers it) with an honest
+  `by` line saying this is cloud-only support at the user's request, not a model-quality approval.
+- **RTL is content-driven:** `directionForText()` (Arabic/Hebrew script → `rtl`, else `auto`) drives
+  `dir` on transcripts, follow-up questions, corrections and word pairs, so an old Persian take
+  stays RTL after switching language and Latin sample text stays LTR. `LanguageDefinition.direction`
+  records the language's own direction. Arabic-script text gets `--font-persian`.
+- **Typography/tokenisation:** Persian sentence and clause splitting accept `؟`, `،`, `؛`; word
+  tokens keep U+200C inside a word; Persian rules (script/ZWNJ, formal vs colloquial Tehrani,
+  را/ezafe, contrastive example) live in `adapters/llm/languageGuidance.ts`.
+- **Verified:** `bun run check` 0/0 and a production build; Playwright: Persian persists across
+  reload, all three Settings rows lock to Cloud with cloud-only hints, no "Install data" gate on
+  Practice, Text size preview renders the Persian sample RTL with the Persian font. No live Groq/
+  LLM/ElevenLabs call was made.
+
+### Global interface scale uses root `zoom` with viewport-aware compensation (2026-11-07)
+The user asked for a global fractional-scaling adjustor alongside the existing per-part Text size.
+Use CSS `zoom` on the root, 80–150% in 5% steps, remembered per device (`onspot.ui-zoom.v1`) and
+applied before first paint. It scales text, cards, spacing and px-sized controls together, unlike
+root font-size (which leaves px controls behind) or `transform` (which does not reflow).
+- The root exposes `--ui-vw: calc(100vw / var(--ui-zoom))` and
+  `--ui-vh: calc(100dvh / var(--ui-zoom))`; `html` and `main` use `--ui-vh`,
+  `main.under-window-bar` subtracts the window bar after the division, and fixed overlays that used
+  `100vw`/`100dvh` use the divided helpers. Without this, `zoom` makes the page taller than the
+  window and pushes fixed cards off-screen.
+- The Settings control uses NeoRange with 5% steps, zoom-out/in keys and Reset; on phones the
+  track takes its own row because NeoRange's default 20rem floor squeezed it. The install card is
+  capped at `--ui-vh - 84px` with a scrolling body at 150%.
+- Text size stays a separate per-part multiplier; interface scale is device display, not synced
+  settings.
+- Not verified on real Safari/WebKit, Firefox, Android WebView or the Tauri window bar at 150%;
+  deploy with `scripts/cf-deploy.sh` when the user asks.
+
 ### iOS ships as a PWA, not through the App Store (2026-11-06)
 User: onspot is completely free and is on every platform except iOS, "because it requires a paid
 apple dev account which i dont want to do". Decided: iPhone and iPad get the existing static web

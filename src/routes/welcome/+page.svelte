@@ -208,9 +208,10 @@
 			setSetting('customBaseUrl', customUrl.trim());
 			setSetting('customModel', customModel.trim());
 		}
-		// Only Groq offers cloud speech-to-text here. Other providers keep the
-		// learner's existing speech choice.
-		if (provider === 'groq') setSetting('sttMode', useGroqForStt ? 'cloud' : 'local');
+		// Cloud-only languages have no local speech engine. Otherwise only Groq
+		// offers cloud speech-to-text here; other providers keep the existing choice.
+		if (targetLanguage?.local.stt === false) setSetting('sttMode', 'cloud');
+		else if (provider === 'groq') setSetting('sttMode', useGroqForStt ? 'cloud' : 'local');
 		else setSetting('sttMode', 'local');
 	}
 
@@ -295,9 +296,13 @@
 	);
 	/** The first local step Settings should open for its one-time download. */
 	const dataHash = $derived($appSettings.sttMode === 'local' ? '#speech-to-text' : '#text-to-speech');
-	const studiedLanguage = $derived(
-		getLanguage($appSettings.targetLanguage)?.name ?? $appSettings.targetLanguage
-	);
+	const targetLanguage = $derived(getLanguage($appSettings.targetLanguage));
+	const studiedLanguage = $derived(targetLanguage?.name ?? $appSettings.targetLanguage);
+
+	$effect(() => {
+		// A cloud-only language has no on-device voice to choose.
+		if (targetLanguage?.local.tts === false && voice === 'local') voice = 'cloud';
+	});
 </script>
 
 <svelte:head><title>Set up onspot</title></svelte:head>
@@ -480,6 +485,7 @@
 							class="voice-card"
 							class:selected={voice === 'local'}
 							aria-pressed={voice === 'local'}
+							disabled={targetLanguage?.local.tts === false}
 							onclick={() => (voice = 'local')}
 						>
 							<span class="voice-icon"><Laptop size={20} /></span>
@@ -509,8 +515,13 @@
 
 					<p class="setup-honest">
 						<Sparkles size={15} />
-						Honest answer: cloud text-to-speech sounds better. The on-device voice is
-						private, free and offline, but flatter.
+						{#if targetLanguage?.local.tts === false}
+							{targetLanguage.name} has no approved on-device voice yet, so read-back uses
+							ElevenLabs for now. The cloud voice also sounds more natural.
+						{:else}
+							Honest answer: cloud text-to-speech sounds better. The on-device voice is
+							private, free and offline, but flatter.
+						{/if}
 					</p>
 
 					{#if voice === 'cloud'}
@@ -892,6 +903,13 @@
 	}
 	.voice-card:hover {
 		background: var(--key);
+	}
+	.voice-card:disabled {
+		cursor: not-allowed;
+		opacity: 0.55;
+	}
+	.voice-card:disabled:hover {
+		background: var(--surface-2);
 	}
 	.voice-card.selected {
 		border-color: var(--primary);

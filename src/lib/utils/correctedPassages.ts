@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { diffArrays } from 'diff';
-import { clauseSpans, sentenceSpans, type TextSpan } from './segments';
+import { SENTENCE_END_MARKS, clauseSpans, sentenceSpans, type TextSpan } from './segments';
 import { comparableWord, tokenizeWords, type TextToken } from './words';
 
 /**
@@ -113,8 +113,8 @@ function wordTokens(text: string): TextToken[] {
 	return tokenizeWords(text).filter((token) => token.word);
 }
 
-/** Ends a sentence (see `segments.ts`). */
-const SENTENCE_END = /[.!?…。！？]/;
+/** Contains a sentence's last mark, in any script (see `segments.ts`). */
+const SENTENCE_END = new RegExp(`[${SENTENCE_END_MARKS}]`);
 
 /**
  * Aligns what was said with the correct version, word by word.

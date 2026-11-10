@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { LEVELS, appSettings, setSetting } from '#lib/stores/settings.js';
 	import { setTargetLanguage } from '#lib/stores/practice.js';
 	import { OFFERED_LANGUAGES, instructionLanguagesFor, isCandidate, requireLanguage } from '#lib/languages/index.js';
@@ -11,11 +11,15 @@
 	import ProcessingSection from '#lib/components/settings/ProcessingSection.svelte';
 	import SetupSection from '#lib/components/settings/SetupSection.svelte';
 	import IosInstallSection from '#lib/components/settings/IosInstallSection.svelte';
+	import ZoomSettings from '#lib/components/settings/ZoomSettings.svelte';
 	import TextSizeSettings from '#lib/components/settings/TextSizeSettings.svelte';
 	import ReminderSettings from '#lib/components/settings/ReminderSettings.svelte';
 	import WhatOnspotDoes from '#lib/components/settings/WhatOnspotDoes.svelte';
 	import DataSettings from '#lib/components/settings/DataSettings.svelte';
 	import UsageMonitor from '#lib/components/settings/UsageMonitor.svelte';
+	import VoiceLibraryPanel from '#lib/components/settings/VoiceLibraryPanel.svelte';
+	import LanguageSupportNotice from '#lib/components/settings/LanguageSupportNotice.svelte';
+	import { closeVoiceLibrary, voiceLibrary, type VoiceRole } from '#lib/stores/voiceLibrary.js';
 	import { NeoTab, NeoTabs } from '@dvcol/neo-svelte/nav';
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import { SwipeBetweenTabs, type TabStep } from '#lib/gestures/swipeBetweenTabs.js';
@@ -34,6 +38,8 @@
 		'#ai-provider': 'learning',
 		'#transcription': 'learning',
 		'#voice': 'learning',
+		'#interface-scale': 'learning',
+		'#zoom': 'learning',
 		'#text-size': 'learning',
 		'#setup': 'learning',
 		'#reminders': 'learning',
@@ -102,6 +108,35 @@
 		return tabSwipe.listen(scroller);
 	});
 
+	/*
+	 * The on-device voice library opens beside the settings when the page has
+	 * room for both, and the settings column moves left; otherwise it opens
+	 * over them as a sheet. The width is the page's own (after the interface
+	 * scale), so a zoomed-in window gets the sheet sooner.
+	 */
+	const LIBRARY_BESIDE_MIN_PAGE_WIDTH = 1100;
+
+	/** The trigger that opens each role's library, to give focus back when it closes. */
+	const LIBRARY_TRIGGER_IDS: Record<VoiceRole, string> = { target: 'ttsVoice', explanation: 'explanationVoice' };
+
+	let pageWidth = $state(0);
+	const libraryRole = $derived($voiceLibrary.open);
+	const libraryBeside = $derived(libraryRole !== null && pageWidth >= LIBRARY_BESIDE_MIN_PAGE_WIDTH);
+	const libraryOver = $derived(libraryRole !== null && !libraryBeside);
+
+	// The library belongs to the on-device voices on the Learning tab.
+	$effect(() => {
+		if (tab !== 'learning' || $appSettings.ttsMode !== 'local') closeVoiceLibrary();
+	});
+
+	onDestroy(closeVoiceLibrary);
+
+	function closeLibrary(): void {
+		const role = libraryRole;
+		closeVoiceLibrary();
+		if (role) void tick().then(() => document.getElementById(LIBRARY_TRIGGER_IDS[role])?.focus({ preventScroll: true }));
+	}
+
 	function stepTab(step: TabStep): void {
 		const next = TAB_IDS[TAB_IDS.indexOf(tab) + step];
 		if (!next) return;
@@ -114,107 +149,131 @@
 
 <svelte:head><title>Settings · onspot</title></svelte:head>
 
-<div class="flex h-full flex-col">
+<div class="flex h-full flex-col" bind:clientWidth={pageWidth} inert={libraryOver}>
 	<AppHeader title="Settings" />
-	<div class="min-h-0 flex-1 overflow-y-auto" bind:this={scroller}>
-		<div class="mx-auto max-w-[760px] px-4 pt-6 pb-16 sm:px-8 sm:pt-8">
-			<p class="mb-8 max-w-xl text-sm leading-relaxed text-muted-foreground">
-				Choose Local or Cloud for speech-to-text, the LLM and text-to-speech. Keys stay in this
-				browser and are never written to the synced database.
-			</p>
+	<div class="settings-body min-h-0 flex-1" class:library-beside={libraryBeside}>
+		<div class="h-full min-h-0 overflow-y-auto" bind:this={scroller}>
+			<div class="mx-auto max-w-[760px] px-4 pt-6 pb-16 sm:px-8 sm:pt-8">
+				<p class="mb-8 max-w-xl text-sm leading-relaxed text-muted-foreground">
+					Choose Local or Cloud for speech-to-text, the LLM and text-to-speech. Keys stay in this
+					browser and are never written to the synced database.
+				</p>
 
-			<div class="settings-tabs mb-8" bind:this={tabsRow}>
-				<NeoTabs
-					active={tab}
-					onchange={(next) => selectTab(next === undefined ? undefined : String(next))}
-					rounded
-					slide
-					aria-label="Settings sections"
-				>
-					<NeoTab tabId="learning" value="learning">Learning</NeoTab>
-					<NeoTab tabId="usage" value="usage">Usage</NeoTab>
-					<NeoTab tabId="data" value="data">Data</NeoTab>
-				</NeoTabs>
-			</div>
-
-			<div class:hidden={tab !== 'learning'}>
-				<SetupSection />
-
-				<IosInstallSection />
-
-				<SettingsSection id="language" title="Language">
-					<SettingRow label="I am studying" for="targetLanguage">
-						<SettingSelect
-							id="targetLanguage"
-							label="Language you are studying"
-							options={OFFERED_LANGUAGES.map((entry) => ({
-								value: entry.id,
-								label: `${entry.name} (${entry.nativeName})${isCandidate(entry) ? ' · candidate, not yet approved' : ''}`
-							}))}
-							value={$appSettings.targetLanguage}
-							onchange={(value) => void setTargetLanguage(value)}
-						/>
-					</SettingRow>
-					<SettingRow
-						label="Language of instruction"
-						for="instructionLanguage"
-						hint="Explanations, translations and word meanings are in this language."
+				<div class="settings-tabs mb-8" bind:this={tabsRow}>
+					<NeoTabs
+						active={tab}
+						onchange={(next) => selectTab(next === undefined ? undefined : String(next))}
+						rounded
+						slide
+						aria-label="Settings sections"
 					>
-						<SettingSelect
-							id="instructionLanguage"
+						<NeoTab tabId="learning" value="learning">Learning</NeoTab>
+						<NeoTab tabId="usage" value="usage">Usage</NeoTab>
+						<NeoTab tabId="data" value="data">Data</NeoTab>
+					</NeoTabs>
+				</div>
+
+				<div class:hidden={tab !== 'learning'}>
+					<SetupSection />
+
+					<IosInstallSection />
+
+					<SettingsSection id="language" title="Language">
+						<SettingRow label="I am studying" for="targetLanguage">
+							<SettingSelect
+								id="targetLanguage"
+								label="Language you are studying"
+								options={OFFERED_LANGUAGES.map((entry) => ({
+									value: entry.id,
+									label: `${entry.name} (${entry.nativeName})${isCandidate(entry) ? ' · candidate, not yet approved' : ''}`
+								}))}
+								value={$appSettings.targetLanguage}
+								onchange={(value) => void setTargetLanguage(value)}
+							/>
+						</SettingRow>
+						<SettingRow
 							label="Language of instruction"
-							options={instructionLanguagesFor(requireLanguage($appSettings.targetLanguage)).map((entry) => ({
-								value: entry.id,
-								label: entry.nativeName === entry.name ? entry.name : `${entry.name} (${entry.nativeName})`
-							}))}
-							value={$appSettings.instructionLanguage}
-							onchange={(value) => setSetting('instructionLanguage', value)}
-						/>
-					</SettingRow>
-					<SettingRow label="Your level" for="level">
-						<SettingSelect
-							id="level"
-							label="Your level"
-							options={LEVELS.map((level) => ({ value: level, label: level }))}
-							value={$appSettings.level}
-							onchange={(value) => setSetting('level', value)}
-						/>
-					</SettingRow>
-					<SettingRow label="Default mode" for="defaultMode">
-						<SettingSelect
-							id="defaultMode"
-							label="Default mode"
-							options={[
-								{ value: 'exam', label: 'Exam' },
-								{ value: 'casual', label: 'Casual' }
-							]}
-							value={$appSettings.mode}
-							onchange={(value) => setSetting('mode', value as 'exam' | 'casual')}
-						/>
-					</SettingRow>
-				</SettingsSection>
+							for="instructionLanguage"
+							hint="Explanations, translations and word meanings are in this language."
+						>
+							<SettingSelect
+								id="instructionLanguage"
+								label="Language of instruction"
+								options={instructionLanguagesFor(requireLanguage($appSettings.targetLanguage)).map((entry) => ({
+									value: entry.id,
+									label: entry.nativeName === entry.name ? entry.name : `${entry.name} (${entry.nativeName})`
+								}))}
+								value={$appSettings.instructionLanguage}
+								onchange={(value) => setSetting('instructionLanguage', value)}
+							/>
+						</SettingRow>
+						<LanguageSupportNotice />
+						<SettingRow label="Your level" for="level">
+							<SettingSelect
+								id="level"
+								label="Your level"
+								options={LEVELS.map((level) => ({ value: level, label: level }))}
+								value={$appSettings.level}
+								onchange={(value) => setSetting('level', value)}
+							/>
+						</SettingRow>
+						<SettingRow label="Default mode" for="defaultMode">
+							<SettingSelect
+								id="defaultMode"
+								label="Default mode"
+								options={[
+									{ value: 'exam', label: 'Exam' },
+									{ value: 'casual', label: 'Casual' }
+								]}
+								value={$appSettings.mode}
+								onchange={(value) => setSetting('mode', value as 'exam' | 'casual')}
+							/>
+						</SettingRow>
+					</SettingsSection>
 
-				<ProcessingSection focus={focusTarget} {focusNonce} />
+					<ProcessingSection focus={focusTarget} {focusNonce} />
 
-				<TextSizeSettings />
+					<ZoomSettings />
 
-				<ReminderSettings />
+					<TextSizeSettings />
 
-				<WhatOnspotDoes />
-			</div>
+					<ReminderSettings />
 
-			<div class:hidden={tab !== 'usage'}>
-				<UsageMonitor visible={tab === 'usage'} />
-			</div>
+					<WhatOnspotDoes />
+				</div>
 
-			<div class:hidden={tab !== 'data'}>
-				<DataSettings />
+				<div class:hidden={tab !== 'usage'}>
+					<UsageMonitor visible={tab === 'usage'} />
+				</div>
+
+				<div class:hidden={tab !== 'data'}>
+					<DataSettings />
+				</div>
 			</div>
 		</div>
+		{#if libraryBeside && libraryRole}
+			<div class="library-column">
+				<VoiceLibraryPanel role={libraryRole} layout="beside" onclose={closeLibrary} />
+			</div>
+		{/if}
 	</div>
 </div>
 
+{#if libraryOver && libraryRole}
+	<VoiceLibraryPanel role={libraryRole} layout="over" onclose={closeLibrary} />
+{/if}
+
 <style>
+	/* With the voice library open beside them, the settings take the space left of it. */
+	.settings-body.library-beside {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) clamp(24rem, 36%, 30rem);
+	}
+	.library-column {
+		min-height: 0;
+		padding: 1.25rem 1.25rem 1.25rem 0;
+	}
+
 	/* Two sections: neo tabs spanning the column, one sliding selection. */
 	.settings-tabs :global(.neo-tabs),
 	.settings-tabs :global(.neo-tabs .neo-tabs-group) {

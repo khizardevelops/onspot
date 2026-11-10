@@ -69,6 +69,7 @@
 		align-items: flex-start;
 		gap: 10px;
 		max-width: 34rem;
+		max-height: calc(var(--ui-vh) - 84px);
 		margin-inline: auto;
 		padding: 12px 10px 12px 12px;
 		border: 1px solid var(--sheet-line);
@@ -89,7 +90,9 @@
 	.install-body {
 		display: grid;
 		min-width: 0;
+		min-height: 0;
 		gap: 4px;
+		overflow-y: auto;
 	}
 	.install-title {
 		font-size: 0.875rem;

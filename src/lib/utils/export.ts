@@ -14,6 +14,7 @@ import { toast } from '#lib/stores/toast.js';
 import { DatabaseImportError } from '#lib/adapters/db/types.js';
 import { StorageFullError, requestPersistentStorage, storageRoom } from './storage';
 import { hydrateLatestSession } from '#lib/stores/practice.js';
+import { parseSessionSetup } from '#lib/practice/sessionSetup.js';
 
 const SQLITE_MIME = 'application/vnd.sqlite3';
 const SQLITE_MAGIC = 'SQLite format 3\u0000';
@@ -309,7 +310,9 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 			startedAt: string(row.startedAt, now()),
 			endedAt: nullableString(row.endedAt),
 			createdAt: string(row.createdAt, now()),
-			updatedAt: string(row.updatedAt, now())
+			updatedAt: string(row.updatedAt, now()),
+			// Backups from before migration 10 have none: it is worked out when the session is opened.
+			setup: parseSessionSetup(row.setup)
 		};
 		await db.putSession(session);
 		knownSessionIds.add(id);

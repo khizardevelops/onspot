@@ -79,7 +79,7 @@
 	backdrop
 	rounded
 	elevation={3}
-	width={{ max: 'min(30rem, calc(100vw - 2rem))' }}
+	width={{ max: 'min(30rem, calc(var(--ui-vw) - 2rem))' }}
 	aria-labelledby="restore-db-title"
 	aria-describedby="restore-db-description"
 >

@@ -3,13 +3,15 @@
 <script lang="ts">
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoDialog } from '@dvcol/neo-svelte/floating/dialog';
+	import { NeoInput } from '@dvcol/neo-svelte/inputs';
 	import { quickDialog } from '#lib/neo.js';
 	import {
 		OFFERED_LANGUAGES,
 		DEFAULT_LANGUAGE_ID,
 		defaultVoiceOf,
 		getLanguage,
-		isCandidate
+		isCandidate,
+		isCloudOnly
 	} from '#lib/languages/index.js';
 	import { setSetting } from '#lib/stores/settings.js';
 	import { setTargetLanguage } from '#lib/stores/practice.js';
@@ -26,22 +28,43 @@
 	// A required first-run choice: the dialog cannot be dismissed, only answered.
 	let open = $state(true);
 
+	/** From this many languages the list gets a search field (it scrolls inside the dialog regardless). */
+	const SEARCH_FROM_LANGUAGES = 8;
+
+	let query = $state('');
+	const matchingLanguages = $derived.by(() => {
+		const needle = query.trim().toLowerCase();
+		if (!needle) return OFFERED_LANGUAGES;
+		return OFFERED_LANGUAGES.filter(
+			(entry) => entry.name.toLowerCase().includes(needle) || entry.nativeName.toLowerCase().includes(needle)
+		);
+	});
+
 	const language = $derived(getLanguage(selected));
+	const cloudOnly = $derived(language ? isCloudOnly(language) : false);
 	const sttBytes = $derived(language ? (localSttModel(language.id)?.bytes ?? 0) : 0);
 	const voiceBytes = $derived(language ? (defaultVoiceOf(language)?.downloadBytes ?? 0) : 0);
 	const downloadBytes = $derived(
-		(sttMode === 'local' ? sttBytes : 0) + (ttsMode === 'local' ? voiceBytes : 0)
+		(sttMode === 'local' && language?.local.stt !== false ? sttBytes : 0) +
+			(ttsMode === 'local' && language?.local.tts !== false ? voiceBytes : 0)
 	);
 	const downloadLabel = $derived(`${Math.round(downloadBytes / 1e6)} MB`);
+
+	$effect(() => {
+		// Choosing a cloud-only language also moves any Local step to Cloud.
+		if (language?.local.stt === false) sttMode = 'cloud';
+		if (language?.local.correction === false) correctionMode = 'cloud';
+		if (language?.local.tts === false) ttsMode = 'cloud';
+	});
 
 	async function confirm(): Promise<void> {
 		if (saving) return;
 		saving = true;
 		try {
 			await setTargetLanguage(selected);
-			setSetting('sttMode', sttMode);
-			setSetting('correctionMode', correctionMode);
-			setSetting('ttsMode', ttsMode);
+			setSetting('sttMode', language?.local.stt === false ? 'cloud' : sttMode);
+			setSetting('correctionMode', language?.local.correction === false ? 'cloud' : correctionMode);
+			setSetting('ttsMode', language?.local.tts === false ? 'cloud' : ttsMode);
 			open = false;
 		} finally {
 			saving = false;
@@ -56,7 +79,7 @@
 	closedby="none"
 	rounded
 	elevation={3}
-	width={{ max: 'min(30rem, calc(100vw - 2rem))' }}
+	width={{ max: 'min(30rem, calc(var(--ui-vw) - 2rem))' }}
 	padding="0"
 	aria-label={step === 1
 		? 'Choose the language you want to study'
@@ -77,8 +100,24 @@
 				You can switch languages later in Settings. Nothing downloads until you ask.
 			</p>
 
-			<div class="mt-5 flex flex-col gap-2.5" role="radiogroup" aria-label="Supported languages">
-				{#each OFFERED_LANGUAGES as language (language.id)}
+			{#if OFFERED_LANGUAGES.length >= SEARCH_FROM_LANGUAGES}
+				<div class="mt-5">
+					<NeoInput
+						id="language-picker-search"
+						rounded
+						pressed
+						elevation={-2}
+						width="100%"
+						placeholder={`Search ${OFFERED_LANGUAGES.length} languages`}
+						aria-label="Search languages"
+						value={query}
+						oninput={(event: Event) => (query = (event.target as HTMLInputElement).value)}
+					/>
+				</div>
+			{/if}
+
+			<div class="language-list mt-3 flex flex-col gap-2.5" role="radiogroup" aria-label="Supported languages">
+				{#each matchingLanguages as language (language.id)}
 					{@const active = selected === language.id}
 					<NeoButton
 						class="language-option"
@@ -93,7 +132,7 @@
 						<span class="min-w-0 flex-1 text-left">
 							<span class="block text-sm font-semibold">{language.name}</span>
 							<span class="block text-xs text-muted-foreground">
-								{language.nativeName}{#if isCandidate(language)} · candidate, not yet approved{/if}
+								<span lang={language.locale} dir="auto">{language.nativeName}</span>{#if isCloudOnly(language)} · cloud only{/if}{#if isCandidate(language)} · candidate, not yet approved{/if}
 							</span>
 						</span>
 						{#if active}
@@ -102,6 +141,8 @@
 							</span>
 						{/if}
 					</NeoButton>
+				{:else}
+					<p class="py-4 text-sm text-muted-foreground">No language matches “{query.trim()}”.</p>
 				{/each}
 			</div>
 
@@ -143,6 +184,8 @@
 						]}
 						ariaLabel="Speech-to-text processing"
 						size="sm"
+						disabled={language?.local.stt === false}
+						lockedHint="This language is cloud-only for now."
 						onValueChange={(value) => (sttMode = value as 'local' | 'cloud')}
 					/>
 				</div>
@@ -164,6 +207,8 @@
 						]}
 						ariaLabel="LLM processing"
 						size="sm"
+						disabled={language?.local.correction === false}
+						lockedHint="This language is cloud-only for now."
 						onValueChange={(value) => (correctionMode = value as 'cloud' | 'local')}
 					/>
 				</div>
@@ -185,20 +230,30 @@
 						]}
 						ariaLabel="Text-to-speech processing"
 						size="sm"
+						disabled={language?.local.tts === false}
+						lockedHint="This language is cloud-only for now."
 						onValueChange={(value) => (ttsMode = value as 'local' | 'cloud')}
 					/>
 				</div>
 			</div>
 
-			<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
-				{#if downloadBytes > 0}
-					About {downloadLabel} will be downloaded for the local steps.
-				{:else}
-					No speech downloads.
-				{/if}
-				Cloud steps need their API keys, added later in Settings.{#if correctionMode === 'local'}
-					The LLM needs an OpenAI-compatible server you run (LM Studio, llama.cpp, Ollama).{/if}
-			</p>
+			{#if cloudOnly}
+				<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+					{language?.name} is cloud-only for now: speech-to-text, the LLM and read-back all
+					use the API keys you add later in Settings. Local models will come when one passes
+					the quality checks.
+				</p>
+			{:else}
+				<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+					{#if downloadBytes > 0}
+						About {downloadLabel} will be downloaded for the local steps.
+					{:else}
+						No speech downloads.
+					{/if}
+					Cloud steps need their API keys, added later in Settings.{#if correctionMode === 'local'}
+						The LLM needs an OpenAI-compatible server you run (LM Studio, llama.cpp, Ollama).{/if}
+				</p>
+			{/if}
 
 			<div class="mt-5 flex gap-2">
 				<NeoButton rounded elevation={2} onclick={() => (step = 1)} disabled={saving}>
@@ -224,6 +279,15 @@
 <style>
 	.brand-orb {
 		background: linear-gradient(145deg, var(--brand), var(--brand-2) 62%, var(--brand-3));
+	}
+	/* Every language the on-device voices speak: the list scrolls inside the dialog. */
+	.language-list {
+		max-height: min(22rem, calc(var(--ui-vh) - 26rem));
+		min-height: 9rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: 0.25rem 0.375rem 0.5rem;
+		margin-inline: -0.375rem;
 	}
 	:global(.neo-button.language-option) {
 		width: 100%;

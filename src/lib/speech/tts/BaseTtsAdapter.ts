@@ -8,7 +8,8 @@ export interface ITTSAdapter {
   progress: ModelProgress | null;
 
   load(onProgress?: (p: ModelProgress) => void): Promise<void>;
-  synthesize(text: string): Promise<TtsSynthesis>;
+  /** `pace` is a share of the voice's natural speaking rate (1 = natural; below 1 is slower). */
+  synthesize(text: string, pace?: number): Promise<TtsSynthesis>;
   dispose(): Promise<void>;
   isSupported(): boolean;
 }
@@ -28,13 +29,14 @@ export abstract class BaseTTSAdapter implements ITTSAdapter {
   }
 
   public abstract load(onProgress?: (p: ModelProgress) => void): Promise<void>;
-  protected abstract doSynthesize(text: string): Promise<{ audio: Float32Array; samplingRate: number }>;
+  /** Speaks `text` at `pace`, a share of the voice's natural speaking rate. */
+  protected abstract doSynthesize(text: string, pace: number): Promise<{ audio: Float32Array; samplingRate: number }>;
 
-  public async synthesize(text: string): Promise<TtsSynthesis> {
+  public async synthesize(text: string, pace = 1): Promise<TtsSynthesis> {
     if (this.status !== 'ready') await this.load();
 
     const started = performance.now();
-    const { audio, samplingRate } = await this.doSynthesize(text);
+    const { audio, samplingRate } = await this.doSynthesize(text, pace);
     const synthesisMs = Math.round(performance.now() - started);
     const durationSec = audio.length / samplingRate;
 

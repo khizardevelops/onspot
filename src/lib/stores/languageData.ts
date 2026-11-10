@@ -4,6 +4,7 @@ import { get, writable } from 'svelte/store';
 import {
 	defaultVoiceOf,
 	getExplanationVoice,
+	getLanguage,
 	getVoice,
 	requireLanguage,
 	type LanguageDefinition,
@@ -15,8 +16,8 @@ import {
 	prepareLocalStt
 } from '#lib/speech/stt/service.js';
 import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/speech/tts/service.js';
-import { isCached } from '#lib/speech/tts/piper/cachedFetch.js';
-import { voiceAssets } from '#lib/speech/tts/piper/assets.js';
+import { isCached } from '#lib/speech/tts/local/cachedFetch.js';
+import { voiceAssets } from '#lib/speech/tts/local/assets.js';
 import { notify } from '#lib/platform/notifications.js';
 import { appSettings } from './settings';
 import { toast } from './toast';
@@ -28,8 +29,8 @@ export interface LanguageParts {
 	stt: boolean;
 	voice: boolean;
 	/**
-	 * The English voice that reads explanations on the device, once one is
-	 * chosen. Practice does not wait for it; only explanation audio does.
+	 * The instruction-language voice that reads explanations on the device, once
+	 * one is chosen. Practice does not wait for it; only explanation audio does.
 	 */
 	explanationVoice: boolean;
 }
@@ -91,10 +92,14 @@ let phase: 'stt' | 'voice' | null = null;
 /** The local parts the current processing choices require. */
 function requiredParts(): LanguageParts {
 	const settings = get(appSettings);
+	const language = getLanguage(settings.targetLanguage);
+	const localStt = settings.sttMode === 'local' && language?.local.stt !== false;
+	const localTts = settings.ttsMode === 'local' && language?.local.tts !== false;
+
 	return {
-		stt: settings.sttMode === 'local',
-		voice: settings.ttsMode === 'local',
-		explanationVoice: settings.ttsMode === 'local' && getExplanationVoice(settings.instructionLanguage, settings.explanationVoice) !== undefined
+		stt: localStt,
+		voice: localTts,
+		explanationVoice: localTts && getExplanationVoice(settings.instructionLanguage, settings.explanationVoice) !== undefined
 	};
 }
 
@@ -133,16 +138,43 @@ function announceDownloadFinished(message: string): void {
 	if (typeof document !== 'undefined' && document.hidden) notify('onspot', message);
 }
 
-/** The voice's downloads that are not cached yet (a Japanese voice also needs its dictionary). */
-async function missingVoice(voice: LanguageVoice | undefined): Promise<{ bytes: number; transfer: number }> {
-	if (!voice) return { bytes: Number.POSITIVE_INFINITY, transfer: Number.POSITIVE_INFINITY };
+/** A voice's cache state: whether all of it is on the device, and what is left to download. */
+interface VoiceCacheState {
+	installed: boolean;
+	/** Missing bytes on the device, leaving out downloads already counted for another voice. */
+	bytes: number;
+	/** Missing bytes over the network, counted the same way. */
+	transfer: number;
+}
+
+const NO_VOICE_NEEDED: VoiceCacheState = { installed: true, bytes: 0, transfer: 0 };
+
+/**
+ * Which of the voice's downloads are not cached yet (a Japanese voice also
+ * needs its dictionary). Downloads in `alreadyCounted` belong to a voice
+ * counted before this one (two Supertonic voices share one model), so their
+ * bytes are left out and the estimate counts them once.
+ *
+ * @param voice The voice; none means no voice is available (nothing can be installed).
+ * @param alreadyCounted URLs whose bytes were already counted.
+ * @returns Whether the voice is fully cached, and its own missing bytes.
+ */
+async function voiceCacheState(
+	voice: LanguageVoice | undefined,
+	alreadyCounted: ReadonlySet<string> = new Set()
+): Promise<VoiceCacheState> {
+	if (!voice) return { installed: false, bytes: Number.POSITIVE_INFINITY, transfer: Number.POSITIVE_INFINITY };
+
 	const assets = voiceAssets(voice);
 	const cached = await Promise.all(assets.map((asset) => isCached(asset.url)));
-	return assets.reduce(
-		(sum, asset, index) =>
-			cached[index] ? sum : { bytes: sum.bytes + asset.bytes, transfer: sum.transfer + asset.transferBytes },
-		{ bytes: 0, transfer: 0 }
-	);
+	const missing = assets.filter((_, index) => !cached[index]);
+	const missingHere = missing.filter((asset) => !alreadyCounted.has(asset.url));
+
+	return {
+		installed: missing.length === 0,
+		bytes: missingHere.reduce((total, asset) => total + asset.bytes, 0),
+		transfer: missingHere.reduce((total, asset) => total + asset.transferBytes, 0)
+	};
 }
 
 interface LanguageCheck {
@@ -157,20 +189,21 @@ interface LanguageCheck {
  */
 async function checkLanguage(language: LanguageDefinition): Promise<LanguageCheck> {
 	const required = requiredParts();
-	const nothing = { bytes: 0, transfer: 0 };
+	const targetVoice = required.voice ? preferredVoice(language) : undefined;
+	const targetVoiceUrls = new Set(targetVoice ? voiceAssets(targetVoice).map((asset) => asset.url) : []);
 
 	const [sttMissing, voiceMissing, explanationMissing] = await Promise.all([
 		required.stt ? missingLocalSttBytes(language.id) : Promise.resolve(0),
-		required.voice ? missingVoice(preferredVoice(language)) : Promise.resolve(nothing),
-		required.explanationVoice ? missingVoice(chosenExplanationVoice()) : Promise.resolve(nothing)
+		required.voice ? voiceCacheState(targetVoice) : Promise.resolve(NO_VOICE_NEEDED),
+		required.explanationVoice ? voiceCacheState(chosenExplanationVoice(), targetVoiceUrls) : Promise.resolve(NO_VOICE_NEEDED)
 	]);
 
 	return {
 		required,
 		installed: {
 			stt: !required.stt || sttMissing === 0,
-			voice: !required.voice || voiceMissing.bytes === 0,
-			explanationVoice: !required.explanationVoice || explanationMissing.bytes === 0
+			voice: voiceMissing.installed,
+			explanationVoice: explanationMissing.installed
 		},
 		pending: {
 			stt: sttMissing,
@@ -246,6 +279,16 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 
 	if (!required.stt && !required.voice) {
 		void refreshLanguageData(language.id);
+		return Promise.resolve();
+	}
+
+	if ((required.stt && !language.local.stt) || (required.voice && !language.local.tts)) {
+		store.update((state) => ({
+			...state,
+			languageId: language.id,
+			status: 'error',
+			error: `${language.name} is cloud-only for now; no local speech data is offered.`
+		}));
 		return Promise.resolve();
 	}
 

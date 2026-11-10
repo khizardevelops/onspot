@@ -21,6 +21,7 @@ import type {
 	WordGlosses,
 	Prompt,
 	Session,
+	SessionSetup,
 	Setting,
 	SqlDriver,
 	SqlStatement,
@@ -179,22 +180,14 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 
 	async listSessions(): Promise<Session[]> {
 		const db = await this.sql();
-		return db.select<Session>(
-			`SELECT id, title, mode, started_at AS startedAt, ended_at AS endedAt,
-			        created_at AS createdAt, updated_at AS updatedAt
-			 FROM sessions ORDER BY created_at DESC`
-		);
+		const rows = await db.select<SessionRow>(`${SESSION_SELECT} ORDER BY created_at DESC`);
+		return rows.map(mapSession);
 	}
 
 	async getSession(id: string): Promise<Session | null> {
 		const db = await this.sql();
-		const rows = await db.select<Session>(
-			`SELECT id, title, mode, started_at AS startedAt, ended_at AS endedAt,
-			        created_at AS createdAt, updated_at AS updatedAt
-			 FROM sessions WHERE id = ?`,
-			[id]
-		);
-		return rows[0] ?? null;
+		const rows = await db.select<SessionRow>(`${SESSION_SELECT} WHERE id = ?`, [id]);
+		return rows[0] ? mapSession(rows[0]) : null;
 	}
 
 	async putSession(session: Session): Promise<void> {
@@ -207,7 +200,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				'started_at',
 				'ended_at',
 				'created_at',
-				'updated_at'
+				'updated_at',
+				'setup'
 			]),
 			[
 				session.id,
@@ -216,7 +210,8 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 				session.startedAt,
 				session.endedAt,
 				session.createdAt,
-				session.updatedAt
+				session.updatedAt,
+				session.setup ? JSON.stringify(session.setup) : null
 			]
 		);
 		markContentChanged();
@@ -636,6 +631,33 @@ function mapAttempt(row: AttemptRow): Attempt {
 		followUp: parseFollowUp(row.followUp),
 		wordGlosses: parseWordGlosses(row.wordGlosses)
 	};
+}
+
+const SESSION_SELECT = `
+	SELECT id, title, mode, started_at AS startedAt, ended_at AS endedAt,
+	       created_at AS createdAt, updated_at AS updatedAt, setup
+	FROM sessions`;
+
+interface SessionRow extends Omit<Session, 'setup'> {
+	setup: string | null;
+}
+
+/** The fields a stored setup must have; their values are checked where the setup is used (`parseSessionSetup`). */
+const SETUP_FIELDS = ['targetLanguage', 'instructionLanguage', 'ttsMode', 'ttsVoice', 'explanationVoice'] as const;
+
+function mapSession(row: SessionRow): Session {
+	return { ...row, setup: parseSetupColumn(row.setup) };
+}
+
+function parseSetupColumn(json: string | null): SessionSetup | null {
+	if (!json) return null;
+	try {
+		const parsed = JSON.parse(json) as Record<string, unknown>;
+		const complete = SETUP_FIELDS.every((field) => typeof parsed[field] === 'string') && typeof parsed.targetSpeechPace === 'number';
+		return complete ? (parsed as unknown as SessionSetup) : null;
+	} catch {
+		return null;
+	}
 }
 
 const EXPORT_TABLES = [

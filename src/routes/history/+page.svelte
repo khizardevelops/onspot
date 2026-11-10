@@ -466,7 +466,7 @@
 												</NeoPill>
 											</p>
 											{#if snippet}
-												<p class="mt-1 truncate font-serif text-[0.8125rem] text-muted-foreground">
+												<p class="mt-1 truncate font-serif text-[0.8125rem] text-muted-foreground" dir="auto">
 													{@html snippet}
 												</p>
 											{/if}

@@ -8,7 +8,7 @@
  * append-only: bump `SCHEMA_VERSION` and add a new entry to `MIGRATIONS`.
  */
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS: Record<number, string> = {
 	1: `
@@ -142,5 +142,12 @@ export const MIGRATIONS: Record<number, string> = {
 	// the learner hovers a word (JSON: { [text hash]: string[] }).
 	9: `
 		ALTER TABLE attempts ADD COLUMN word_glosses TEXT;
+	`,
+
+	// What each session is practised with: its languages, speech mode, voices
+	// and pace (JSON, see `SessionSetup`). Older sessions keep NULL until they
+	// are opened and theirs is worked out from their takes.
+	10: `
+		ALTER TABLE sessions ADD COLUMN setup TEXT;
 	`
 };

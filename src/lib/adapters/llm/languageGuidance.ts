@@ -27,18 +27,45 @@ Idiomatic: "Yesterday I had ramen with a friend near the station."
 Literal: "Yesterday, with a friend, at near the station, I ate ramen."
 Word-for-word: "Yesterday, friend [with] station ['s] near [at] ramen [object] ate (polite)."`;
 
+const PERSIAN_EVALUATION = `Persian-specific rules:
+- Persian is written right-to-left in the Perso-Arabic script. Keep the transcript and every correction in Persian script; never romanise, transliterate or switch to Arabic. Preserve the zero-width non-joiner (U+200C, نیم‌فاصله) inside compounds such as می‌خواهم and کتاب‌ها unless the correction itself changes the word. Use Persian punctuation (، ؛ ؟) and Persian ی/ک in corrections.
+- Do not treat speech-recognition artefacts (missing diacritics, spacing around the ZWNJ, punctuation) as learner errors.
+- Grammar focus: verb endings and person, tense/aspect, the را object marker, ezafe, plural/possessive forms, compound verbs (e.g. تصمیم گرفتن / تصمیم کردن), می/نمی prefixes and prepositions.
+- Register: EXAM mode expects formal Persian (می‌خواهم، نمی‌توانم، شما); CASUAL mode accepts natural colloquial Tehrani forms (می‌خوام، نمی‌تونم، تو). Flag mixing registers, and do not make casual speech stiff unless exam mode calls for it.
+- Fillers: خب، یعنی، دیگه، آخه، راستش are "filler". Suggest one natural hesitation device instead of repeated fillers.
+- Connectors: prefer spoken connectors that match the mode (exam: بنابراین، همچنین، سپس، اما، زیرا; casual: ولی، چون، بعد، خب). Avoid written-only constructions.
+- For a formal alternative, give the Persian form a learner can actually say in the requested register, not an Arabic-heavy construction.`;
+
+const PERSIAN_TRANSLATION = `Persian translation rules:
+- Persian is right-to-left and verb-final (SOV). Literal keeps the Persian clause order, ezafe links and verb-final structure where ${'${translationTarget}'} grammar allows.
+- Word-for-word follows the Persian token order exactly. Render grammatical markers as bracketed functions: را [object marker], ezafe [of/link], به [to], از [from], در [in], با [with], برای [for], که [that]. Keep compound verbs as one token with their meaning, e.g. تصمیم گرفتم "decided".
+- "wordBreakdown" (when requested): "source" is the exact Persian token or meaningful unit; "target" starts with its plain ${'${translationTarget}'} gloss, e.g. { "source": "بازار", "target": "market" }. Do not romanise unless the learner's instruction language is Latin-script and a reading is genuinely needed.
+- Preserve Persian names and ZWNJ exactly.
+
+Required contrastive example:
+Persian: "دیروز با دوستم به بازار رفتم و کمی میوه خریدم."
+Idiomatic: "Yesterday I went to the market with my friend and bought some fruit."
+Literal: "Yesterday with my friend to the market I went and a little fruit I bought."
+Word-for-word: "Yesterday friend-with to market went-I and little fruit bought-I."`;
+
 function fill(template: string, translationTarget: string): string {
 	return template.replaceAll('${translationTarget}', translationTarget);
 }
 
 /** Extra rules for the evaluation prompt, or '' when the language needs none. */
 export function evaluationGuidance(language: string, translationTarget: string): string {
-	return language.toLowerCase() === 'japanese' ? fill(JAPANESE_EVALUATION, translationTarget) : '';
+	const name = language.toLowerCase();
+	if (name === 'japanese') return fill(JAPANESE_EVALUATION, translationTarget);
+	if (name === 'persian') return fill(PERSIAN_EVALUATION, translationTarget);
+	return '';
 }
 
 /** Extra translation rules (incl. a contrastive example), or '' when none. */
 export function translationGuidance(language: string, translationTarget: string): string {
-	return language.toLowerCase() === 'japanese' ? fill(JAPANESE_TRANSLATION, translationTarget) : '';
+	const name = language.toLowerCase();
+	if (name === 'japanese') return fill(JAPANESE_TRANSLATION, translationTarget);
+	if (name === 'persian') return fill(PERSIAN_TRANSLATION, translationTarget);
+	return '';
 }
 
 /**

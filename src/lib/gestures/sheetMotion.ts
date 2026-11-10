@@ -24,10 +24,50 @@ export interface SettleMotion {
 	easing: string;
 }
 
-/** Leaving the screen: quick, accelerating away. */
-export const LEAVING: SettleMotion = { ms: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)' };
-/** Coming to rest in place (springing back, or arriving open): decelerating into place. */
-export const ARRIVING: SettleMotion = { ms: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' };
+/**
+ * The curve a sheet moves along, as cubic-bezier control points: it gathers
+ * speed over its first frames and eases into place. Its peak is about twice
+ * the average speed. The curves sheets used before moved 263 px in the first
+ * frame of a 700 px rise (180 ms, 0.22/1/0.36/1), which read as a jump; a
+ * sheet is large, and needs to be seen travelling. `PracticeScreen.svelte`'s
+ * `--feedback-sheet-easing` is this curve at rest.
+ */
+const SHEET_CURVE = { x1: 0.35, restingY1: 0.1, x2: 0.3, y2: 1 } as const;
+
+/** A sheet let go without a flick settles at this pace: a whole phone sheet (about 700 px) in about 420 ms. */
+const CALM_SETTLE_MS_PER_PX = 0.6;
+
+/** However short or fast, a settle takes this long at least (so it reads as motion, not a jump) and at most. */
+const SETTLE_MS = { min: 200, max: 420 } as const;
+
+/** The steepest the curve can start: its first control point at full height. */
+const STEEPEST_START = 1 / SHEET_CURVE.x1;
+
+/** `SHEET_CURVE` starting at `startSlope` times its average speed (never slower than at rest). */
+function sheetEasing(startSlope: number): string {
+	const y1 = Math.min(1, Math.max(SHEET_CURVE.restingY1, startSlope * SHEET_CURVE.x1));
+	return `cubic-bezier(${SHEET_CURVE.x1}, ${y1.toFixed(3)}, ${SHEET_CURVE.x2}, ${SHEET_CURVE.y2})`;
+}
+
+/**
+ * How a sheet settles once the finger lets it go. The further it still has
+ * to go, the longer it takes, so a sheet let go halfway eases the rest of the
+ * way instead of jumping there, and it starts at the speed the finger left
+ * it at: it does not lurch forward on a slow release or stall on a flick. A
+ * flick too fast for the curve to match shortens the settle instead.
+ *
+ * @param distance How far the sheet still has to go, in px.
+ * @param speed How fast the finger was moving that way as it lifted, px/ms; 0 or less when it was not.
+ */
+export function settleMotion(distance: number, speed: number): SettleMotion {
+	const remaining = Math.abs(distance);
+	const calmMs = remaining * CALM_SETTLE_MS_PER_PX;
+	const flungMs = speed > 0 ? (STEEPEST_START * remaining) / speed : Infinity;
+	const ms = Math.round(Math.min(SETTLE_MS.max, Math.max(SETTLE_MS.min, Math.min(calmMs, flungMs))));
+
+	const startSlope = remaining > 0 ? (speed * ms) / remaining : 0;
+	return { ms, easing: sheetEasing(startSlope) };
+}
 
 /** The axis the sheet moves along: down and up are `y`, sideways is `x`. */
 export type SheetAxis = 'x' | 'y';

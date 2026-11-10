@@ -2,9 +2,9 @@
 
 import { ort } from '#lib/ort.js';
 import { BaseTTSAdapter } from '../BaseTtsAdapter';
-import { cachedFetch, isCached } from './cachedFetch';
+import { cachedFetch, isCached } from '../local/cachedFetch';
 import { phonemize } from './phonemize';
-import { PIPER_VOICES_BASE as VOICES_BASE } from './assets';
+import { PIPER_VOICES_BASE as VOICES_BASE } from '../local/assets';
 import type { ModelProgress, TtsChoice, TtsModelConfig } from '#lib/types.js';
 
 
@@ -104,16 +104,17 @@ export class PiperAdapter extends BaseTTSAdapter {
     }
   }
 
-  protected async doSynthesize(text: string) {
+  protected async doSynthesize(text: string, pace: number) {
     const cfg = this.voiceConfig!;
     const ids = await phonemize(text, cfg.espeak.voice);
     if (!ids.length) throw new Error('Phonemizer returned no tokens');
 
     const { noise_scale, length_scale, noise_w } = cfg.inference;
+    // A longer length scale is slower speech; a pace below 1 asks for that.
     const feeds: Record<string, any> = {
       input: new ort.Tensor('int64', BigInt64Array.from(ids.map((n) => BigInt(n))), [1, ids.length]),
       input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
-      scales: new ort.Tensor('float32', Float32Array.from([noise_scale, length_scale, noise_w]), [3]),
+      scales: new ort.Tensor('float32', Float32Array.from([noise_scale, length_scale / pace, noise_w]), [3]),
     };
 
     // Multi-speaker graphs declare `sid`; single-speaker ones reject it.

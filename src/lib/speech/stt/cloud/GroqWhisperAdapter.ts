@@ -54,7 +54,7 @@ export class GroqWhisperAdapter extends BaseSTTAdapter {
 			modelRepoId: 'groq/whisper-large-v3-turbo',
 			parameterCount: 'N/A (cloud)',
 			quantizedSize: '0 MB · network',
-			language: 'Multilingual / French',
+			language: 'Multilingual',
 			status: 'unloaded'
 		};
 		super(config);

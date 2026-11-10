@@ -10,8 +10,9 @@
  *   the Cache API);
  * - API traffic (Groq, DeepSeek, ElevenLabs, OpenAI-compatible servers,
  *   Google, WebDAV) — stale answers or private data in a cache would be wrong;
- * - the large `piper-wasm` data or the hashed sample audio, so installing the
- *   app does not pull tens of megabytes it may never need.
+ * - the large `piper-wasm` data, the `sherpa-onnx` voice runtime or the hashed
+ *   sample audio, so installing the app does not pull tens of megabytes it may
+ *   never need.
  *
  * Updates wait. The page shows a Reload prompt and only then asks this worker
  * to take over, so a new version never replaces the app mid-take.
@@ -27,6 +28,7 @@ const PRECACHE = `onspot-${version}`;
 /** Assets that belong to the small app shell, not to optional local models. */
 const NOT_PRECACHED = [
 	/\/piper-wasm\//,
+	/\/sherpa-onnx\//,
 	/\/pwa\/splash\//,
 	// The ORT runtimes are tens of megabytes each and load only when a local model is used.
 	/ort-wasm/i,

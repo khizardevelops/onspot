@@ -4,6 +4,7 @@
 	import { quickCollapse } from '#lib/neo.js';
 	import { tick } from 'svelte';
 	import {
+		SPEECH_PACES,
 		appSettings,
 		resetVoiceTuning,
 		setSetting,
@@ -26,12 +27,12 @@
 		explanationVoicesFor,
 		getExplanationVoice,
 		getInstructionLanguage,
+		getLanguage,
 		getVoice,
 		isNeutralTuning,
 		requireLanguage,
 		type VoiceTuning
 	} from '#lib/languages/index.js';
-	import { PIPER_VOICES_BASE } from '#lib/speech/tts/piper/assets.js';
 	import { downloadLanguageData, languageData } from '#lib/stores/languageData.js';
 	import { formatBytes } from '#lib/utils/bytes.js';
 	import { listLocalVoices } from '#lib/speech/tts/service.js';
@@ -41,6 +42,9 @@
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import SettingSelect from '#lib/components/settings/SettingSelect.svelte';
 	import VoicePicker from '#lib/components/settings/VoicePicker.svelte';
+	import VoiceTrigger from '#lib/components/settings/VoiceTrigger.svelte';
+	import LanguageSupportNotice from '#lib/components/settings/LanguageSupportNotice.svelte';
+	import { openVoiceLibrary, voiceLibrary } from '#lib/stores/voiceLibrary.js';
 	import SecretInput from '#lib/components/settings/SecretInput.svelte';
 	import VoiceEqualizer from '#lib/components/settings/VoiceEqualizer.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
@@ -87,7 +91,8 @@
 		{ value: 'verse', label: 'Verse', description: 'Natural and versatile' }
 	];
 
-	const local = $derived($appSettings.ttsMode === 'local');
+	const language = $derived(getLanguage($appSettings.targetLanguage));
+	const local = $derived($appSettings.ttsMode === 'local' && language?.local.tts !== false);
 	const provider = $derived($appSettings.ttsCloudProvider);
 	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
 	const tuning = $derived(voiceTuning($appSettings, $appSettings.ttsVoice));
@@ -166,55 +171,21 @@
 		return 'custom';
 	});
 
-	const localVoiceOptions = $derived(
-		voices.map((voice) => ({
-			value: voice.id,
-			label: voice.label,
-			description: voice.note ?? 'On-device Piper voice'
-		}))
-	);
+	const chosenTargetVoice = $derived(getVoice($appSettings.targetLanguage, $appSettings.ttsVoice));
+
+	/** What each speaking pace is called next to its percentage. */
+	const PACE_NAMES: Record<(typeof SPEECH_PACES)[number], string> = { 0.8: 'slow', 0.9: 'relaxed', 1: 'natural', 1.1: 'brisk' };
+	const paceOptions = SPEECH_PACES.map((pace) => ({ value: String(pace), label: `${Math.round(pace * 100)}% · ${PACE_NAMES[pace]}` }));
 
 	/*
-	 * The voice for explanations, in the language of instruction: auditioned
-	 * from short hosted samples, so comparing them downloads no models; only the
-	 * chosen one is downloaded, with the language data.
+	 * The voice for explanations, in the language of instruction. It is chosen,
+	 * tried and downloaded in the voice library; this row shows the choice and
+	 * installs it with the language data.
 	 */
 	const targetLanguage = $derived(requireLanguage($appSettings.targetLanguage));
 	const instruction = $derived(getInstructionLanguage($appSettings.instructionLanguage));
-	const explanationVoiceOptions = $derived(
-		explanationVoicesFor(instruction.id).map((voice) => ({
-			value: voice.id,
-			label: voice.name,
-			description: `${voice.downloadSize} · on-device Piper voice`
-		}))
-	);
+	const hasExplanationVoices = $derived(explanationVoicesFor(instruction.id).length > 0);
 	const chosenExplanationVoice = $derived(getExplanationVoice(instruction.id, $appSettings.explanationVoice));
-	let sample: HTMLAudioElement | null = null;
-	let samplePlaying = $state(false);
-
-	function stopSample(): void {
-		sample?.pause();
-		sample = null;
-		samplePlaying = false;
-	}
-
-	function toggleSample(): void {
-		if (samplePlaying) {
-			stopSample();
-			return;
-		}
-		if (!chosenExplanationVoice?.samplePath) return;
-		sample = new Audio(`${PIPER_VOICES_BASE}${chosenExplanationVoice.samplePath}`);
-		sample.addEventListener('ended', stopSample);
-		samplePlaying = true;
-		sample.play().catch(stopSample);
-	}
-
-	// Another voice chosen: the sample playing belongs to the old one.
-	$effect(() => {
-		void $appSettings.explanationVoice;
-		return stopSample;
-	});
 
 	const elevenVoiceOptions = $derived.by((): { value: string; label: string; description?: string }[] => {
 		const options = elevenVoices.map((voice) => ({
@@ -351,15 +322,6 @@
 	}
 </script>
 
-{#snippet sampleButton()}
-	<NeoButton rounded class="small-button" disabled={!chosenExplanationVoice} onclick={toggleSample}>
-		{#snippet icon()}
-			{#if samplePlaying}<Pause class="size-3.5" />{:else}<Play class="size-3.5" />{/if}
-		{/snippet}
-		{samplePlaying ? 'Stop sample' : 'Play sample'}
-	</NeoButton>
-{/snippet}
-
 {#snippet previewButton()}
 	<NeoButton
 		rounded
@@ -380,18 +342,20 @@
 	</NeoButton>
 {/snippet}
 
+<LanguageSupportNotice steps={['text-to-speech']} />
+
 <div class:hidden={!local}>
 		<SettingRow label="Voice" for="ttsVoice">
 			<div class="w-full @md/field-group:w-72">
-				<VoicePicker
+				<VoiceTrigger
 					id="ttsVoice"
-					title="Piper voice"
-					options={localVoiceOptions}
-					value={$appSettings.ttsVoice}
-					onchange={(value) => setSetting('ttsVoice', value)}
-				>
-					{#snippet footer()}{@render previewButton()}{/snippet}
-				</VoicePicker>
+					label={chosenTargetVoice?.name ?? 'Choose a voice'}
+					detail={chosenTargetVoice?.downloadSize}
+					expanded={$voiceLibrary.open === 'target'}
+					opens="panel"
+					controls={$voiceLibrary.open === 'target' ? 'voice-library' : undefined}
+					onclick={() => openVoiceLibrary('target')}
+				/>
 			</div>
 			{#snippet below()}
 				{#if !showAdvanced}
@@ -435,34 +399,47 @@
 		</NeoCollapse>
 
 		<SettingRow
+			label="Speaking pace"
+			for="targetSpeechPace"
+			hint={`How fast the ${targetLanguage.name} voice speaks: read-back, tapped words and the ${targetLanguage.name} in explanations.`}
+		>
+			<SettingSelect
+				id="targetSpeechPace"
+				label="Speaking pace"
+				options={paceOptions}
+				value={String($appSettings.targetSpeechPace)}
+				onchange={(value) => setSetting('targetSpeechPace', Number(value))}
+			/>
+		</SettingRow>
+
+		<SettingRow
 			label={`${instruction.name} voice`}
 			for="explanationVoice"
-			hint={explanationVoiceOptions.length > 0
+			hint={hasExplanationVoices
 				? `Reads the ${instruction.name} of explanations; their ${targetLanguage.name} words keep the voice above.`
 				: `No on-device ${instruction.name} voice yet: explanations are spoken with Cloud text-to-speech.`}
 		>
-			<div class="w-full @md/field-group:w-72" class:hidden={explanationVoiceOptions.length === 0}>
-				<VoicePicker
+			<div class="w-full @md/field-group:w-72" class:hidden={!hasExplanationVoices}>
+				<VoiceTrigger
 					id="explanationVoice"
-					title={`${instruction.name} voice for explanations`}
-					options={explanationVoiceOptions}
-					value={$appSettings.explanationVoice}
-					onchange={(value) => setSetting('explanationVoice', value)}
-				>
-					{#snippet footer()}{@render sampleButton()}{/snippet}
-				</VoicePicker>
+					label={chosenExplanationVoice?.name ?? 'Choose a voice'}
+					detail={chosenExplanationVoice?.downloadSize ?? 'Try them in the voice library'}
+					expanded={$voiceLibrary.open === 'explanation'}
+					opens="panel"
+					controls={$voiceLibrary.open === 'explanation' ? 'voice-library' : undefined}
+					onclick={() => openVoiceLibrary('explanation')}
+				/>
 			</div>
 			{#snippet below()}
 				<p
 					class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground @md/field-group:justify-end"
-					class:hidden={explanationVoiceOptions.length === 0}
+					class:hidden={!hasExplanationVoices}
 				>
 					{!chosenExplanationVoice
 						? 'Pick one to hear explanations on this device.'
 						: $languageData.installed.explanationVoice
 							? 'Installed on this device.'
 							: 'Not installed yet.'}
-					{@render sampleButton()}
 					{#if chosenExplanationVoice && !$languageData.installed.explanationVoice && $languageData.status !== 'checking'}
 						<NeoButton
 							rounded

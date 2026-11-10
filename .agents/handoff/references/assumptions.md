@@ -25,6 +25,9 @@
   update flow used a static server over `build/` because Vite preview exits on a rebuild. Launch
   images and the iOS status bar are unverified. Google Drive and WebDAV in an installed app are
   unverified, and local WebGPU is unavailable because its 26.5 MiB binary is omitted.
+- **Persian:** the language renders RTL correctly for our sample; a live Groq transcription, LLM
+  correction and cloud read-back in Persian were not run, and Whisper's Persian accuracy on learner
+  speech is unmeasured.
 - Exact compliance with the stricter translation prompt across every configured LLM. The prompt
   carries a contrastive example and malformed output is repaired, but the browser regression used
   an intercepted provider response rather than a live model.

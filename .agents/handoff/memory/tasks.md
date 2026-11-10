@@ -1,5 +1,152 @@
 # Tasks
 
+## Sessions, voices per language, zoom (2026-11-08)
+- [x] Sessions record and restore their setup (migration 10); older ones inferred once.
+- [x] Voices remembered per language for read-back and explanations.
+- [x] Word popup placed correctly under the interface scale (CSS zoom).
+- [ ] neo menus/selects/tooltips under a non-100 % scale were not measured (same floating-ui
+      issue may apply; `onScreen` in `neo.ts` would be the place).
+- [ ] History could show each session's languages now that they are recorded.
+- [ ] Ask: should a never-chosen explanation language default to a voice (e.g. Supertonic, whose
+      model is shared) instead of asking once?
+
+## UI motion and floating surfaces (2026-11-08, built)
+- [x] Menus, selects, tooltips open in place at 90–150 %; select lists keep order, open at the choice.
+- [x] Feedback sheet slower and smooth; swipe release follows the finger. Practice freeze at 90 % fixed.
+- [x] Tooltips: 250 ms settle, even fade, crossfade between neighbours.
+- [x] Nothing floating scales (no letter wobble); floating surfaces close on page scroll; glare pauses under them.
+- [x] Settings selects fade only (neo's CSS scale removed).
+- [ ] Dropdowns sliding in from the right off 100 % scale in the user's Firefox: not reproduced for
+      PopMenus. Needs which dropdown, which scale, ideally a screen recording.
+- [ ] User feels the tooltips and the sheet on real hardware; say if another animation still looks wrong.
+
+## Voice loudness (2026-11-08, built)
+- [x] Every on-device clip leveled to −20 LUFS + look-ahead limiter in `processPcm`; Settings
+      preview levels the same way; `lufs-20` in cache keys (`decisions.md`). Verified in the app,
+      muted: five voices −27.4 … −15.0 raw → −20.00 … −20.05.
+- [ ] User listens: does −20 LUFS sit right against their music/system level, and do Tom and the
+      spikiest Supertonic voices (DE F1) sound unsquashed?
+- [ ] Ask: store clips at 64 kbps instead of 32? Opus at 32 kbps takes 2 dB (and some treble) off
+      Piper Tom's stored copies; 64 kbps keeps it (0.3 dB) at twice the size.
+- [ ] Cloud clips are not leveled (streamed ElevenLabs plays before it can be measured). Measure
+      OpenAI/ElevenLabs output against −20 before deciding.
+
+## Every on-device-voice language (2026-11-08)
+- [x] 35 study languages and 35 languages of instruction from `LANGUAGE_FACTS`.
+- [x] Urdu (Piper Fasih, Aegis) and Bengali (Piper Google) on the device; voice check 3/3.
+- [ ] User listens to Fasih vs Aegis (Fasih is the default only because its v2 is newer).
+- [x] Settings warns when the configured engines cannot handle a selected language (`support.ts`).
+- [x] Hindi/Greek sentence ends, Chinese word splitting, a searchable first-run picker.
+- [ ] Nothing is reviewed for the 32 new languages: listen to their default voices, try Whisper
+      small on real speech (weak for et/lv/lt/sl is likely), and record the evidence.
+- [ ] LLM rules exist only for Japanese and Persian (`languageGuidance.ts`); Chinese, Arabic,
+      Hindi, Korean may need script/register guidance.
+- [x] Arabic-script text (Urdu explanations broke: ہ/ے drawn by another font) → bundled Noto Naskh
+      Arabic in every stack; checked in a real card with an Urdu explanation.
+- [ ] Fonts for the other new scripts (Devanagari, Bengali, Hangul, Greek, Cyrillic) and
+      Latin-extended letters are the device's; not audited on phones.
+- [ ] Nastaliq for Urdu (Noto Nastaliq Urdu) if the user prefers it: needs `lang` on
+      instruction-language text and taller lines; Naskh is used for now.
+- [x] `۔`/`؟`/`。`/`।` count as sentence ends everywhere (one list in `segments.ts`); explanations
+      no longer end in `۔.` and Urdu/Persian pieces get sentence pauses.
+- [x] Follow-up questions in the wrong language are dropped (`couldBeWrittenIn`); the prompt says
+      "never in <instruction language>".
+- [ ] The first-run `LanguagePicker` never opens (`initSettings` always sets a language): decide
+      whether the welcome guide should ask for the language, or delete the picker.
+- [ ] ElevenLabs v3 (70+ languages) is not offered as a model; adding it would cover fa/ur/bn in the cloud.
+
+## Take card voice menu (2026-11-08)
+- [x] Voices inline in the card's actions menu, grouped by model; menus capped to the window.
+- [ ] Touch check on a real phone (the long list scrolls inside the menu).
+
+## Speaking pace (2026-11-08)
+- [x] Settings → Speaking pace (80–110 %, default 90 %) for the target voice, at generation.
+- [ ] Cloud read-back: ElevenLabs (`voice_settings.speed`) and OpenAI (`speed`) could honour the
+      same setting; not done.
+
+## Word taps (2026-11-08)
+- [x] Prepare the words of the take being read (correct version + follow-up) in the background.
+- [ ] Verify with a real take end to end (needs an LLM); watch phones, where preparing is slower.
+- [ ] If "You said" words are tapped often, consider preparing those too (more background work).
+
+## Supertonic sound (2026-11-08)
+- [x] 3 steps sounded watery → measured; now Supertone's reference 8 steps / speed 1.05.
+- [x] Explanation/long-text pieces lost up to 180 ms of their edge words → relative trimming.
+- [ ] User listens to the seeded A/B (5/1.0 vs 8/1.05); if 5 sounds as good, return to 5 for speed.
+- [ ] Explanation latency at 8 steps (42 s for six pieces under load): merge an explanation's
+      same-voice pieces, or prepare earlier, if the user keeps 8.
+- [ ] Build the sound-quality gate (noise, bandwidth, periodicity, clipping vs per-voice baseline).
+
+## Voice library in Settings (2026-11-08, uncommitted)
+- [x] Side panel beside Settings ≥1100 px, sheet below; grouped by model; download + cancel; Try / Sample.
+- [x] Supertonic checksum verification + readable runtime exceptions (user saw "19949696").
+- [ ] Ask the user where "19949696" happened (browser/Tauri, action) and whether it recurs after reload;
+      the console now names the C++ type.
+- [ ] Decide whether the cloud voice pickers should also open beside the settings.
+- [ ] Device check of the sheet on iPhone/Android and in the Tauri window.
+
+## On-device voices for any language: Supertonic 3 + Piper (2026-11-08, uncommitted on `main`)
+- [x] Spike in the scratchpad: prebuilt sherpa-onnx runs unmodified; RAM/speed/latency measured
+      (`docs/benchmarks/tts.md`); the user listened and chose Supertonic.
+- [x] `scripts/sherpa-tts-assets.sh` (pinned v2.0.1, SHA-256s, LICENSE), `.gitignore`, SPDX skip,
+      service-worker precache exclusion, a fetch step in the four CI workflows.
+- [x] `speech/tts/local/` (worker, `LocalVoiceWorker` proxy, registry, cache, assets) and
+      `speech/tts/supertonic/` (runtime loader, shared model, adapter; reference 8 steps / 1.05, peak ceiling).
+- [x] Voice table `languages/voices.ts` by language code for both roles; Supertonic for 31
+      languages; Piper Persian ×5 and Chinese Huayan; `voicesFor`/`explanationVoicesFor` read it.
+- [x] Language data counts shared downloads once; Settings labels engine-neutral; sample button
+      only for voices with a hosted sample.
+- [x] Dev voice check at `/model-lab/voices/`; 48/48 pass on dev, 2/2 on the production build.
+- [x] Fix: `globalThis.eval` (the bundler had turned an aliased eval into a direct eval).
+- [ ] Listen: Supertonic at 3 vs 5 steps (session clips were in the scratchpad; regenerate in the
+      model lab), and each language's voice in `/model-lab/voices/`; adjust `SUPERTONIC_STEPS`
+      (`supertonic/SupertonicAdapter.ts`) if 3 sounds worse. User accepts rtf ~1.3.
+- [ ] Turn on `local.tts` for Persian once a `fa_IR` voice passes the listening test.
+- [ ] Audition explanation voices that have no hosted sample (Supertonic) before downloading.
+- [x] Measure native Supertonic against WASM on laptop and phone (2026-11-10): 5× and 3.7× faster
+      at 2 threads, no crash on hostile text.
+- [ ] Native Supertonic for Tauri: the full plan is `docs/prompts/native-supertonic-voices.md`.
+      Paused at the user's request. First ask the two questions at the top of that file (native
+      clips by ear; memory of 350–385 MB against the 300 MB goal).
+- [ ] Japanese engine ticket: Supertonic `ja` vs piper-plus by ear (piper-plus left untouched).
+- [x] Urdu/Bengali on-device: rhasspy has Urdu (MIT) and Bengali (CC BY-SA data) Piper voices;
+      added 2026-11-08 (MMS was never needed).
+- [ ] Device checks: iPhone/iPad Safari memory with the 512 MiB prebuilt heap; Android WebView.
+- [ ] Commit when the user asks (the working tree also holds the 2026-11-07 Persian/zoom work).
+
+## Persian (cloud only) and RTL (2026-11-07, branch `fix/dark-mode-visual-depth`)
+- [x] Registry: Persian `fa` (`rtl`, cloud only), `direction` and `local` flags, `isCloudOnly()`.
+- [x] Enforce cloud-only in the first-run picker, `setTargetLanguage`, `initSettings`,
+      `processing.ts`, `languageData.ts`, the three Settings panels and `CapabilityRow`.
+- [x] RTL rendering: `directionForText` + `dir` on transcripts, questions, corrections and word
+      pairs; `--font-persian`; `؟`/`،`/`؛` in sentence/clause splitting; ZWNJ kept in words.
+- [x] Persian LLM evaluation/translation guidance and a Persian contrastive example.
+- [x] Persian sample for Settings → Text size; preview waits for settings hydration.
+- [x] Onboarding: no on-device voice for cloud-only languages; coach step forces cloud STT.
+- [x] Docs (languages.md, supported-languages.md, README) and archive the shipped ideas.
+- [x] Verify: check/build, persistence, locked rows, no install gate, RTL sample, no overflow.
+- [ ] Run one real Persian take with live Groq + LLM + ElevenLabs keys.
+- [ ] Check Persian on a real iPhone/Safari and on a device without Noto Naskh.
+- [ ] Find local Persian STT/TTS models and re-enable `local` flags (active idea).
+- [ ] Commit/push when the user asks.
+
+## Global interface scale (2026-11-07, branch `fix/dark-mode-visual-depth`)
+- [x] `zoom.svelte.ts`: 80–150% in 5% steps, device-local, applied before first render; 100%
+      clears storage.
+- [x] Settings → Learning → Interface scale: NeoRange slider, zoom keys, live percentage, reset;
+      phone layout puts the track on its own row.
+- [x] Root `zoom` with `--ui-vw`/`--ui-vh`; page/html/main height compensation and window-bar
+      subtraction; fixed overlays use the divided viewport helpers.
+- [x] Cap the iOS install card at `--ui-vh - 84px` with a scrolling body.
+- [x] Verify desktop 80/100/125/150, iPhone 100/125/150, dark 125, controls/keys/reset, text-size
+      editor, no overflow; check/build.
+- [ ] Verify on real iPhone/iPad Safari, Firefox, Android WebView, and the Tauri desktop window
+      bar at 125–150%.
+- [ ] Drag the slider while the layout resizes and check each dialog at 150%.
+- [ ] Deploy with `scripts/cf-deploy.sh` when the user asks; the live Worker still has the prior
+      build.
+- [ ] Commit/push when the user asks.
+
 ## iOS PWA live (2026-11-06, branch `fix/dark-mode-visual-depth`)
 - [x] Cloudflare Workers static assets deployed with `cf deploy --prebuilt` at
       **https://onspot.khizardevelops.workers.dev**; `scripts/cf-deploy.sh`, `.github/workflows/cloudflare.yml`,

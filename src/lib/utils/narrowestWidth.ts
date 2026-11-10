@@ -14,6 +14,7 @@
  * happens inside one task: nothing is painted, and no ResizeObserver ever sees
  * a trial size, so measuring cannot feed back into itself.
  */
+import { cssZoomOf } from './floatingZoom';
 
 /** Where a watched element sits, in the terms that matter for "laid out the same". */
 interface ElementShape {
@@ -57,7 +58,9 @@ export function narrowestWidthKeepingLayout({ box, maxWidth, watched, scrollers 
 		};
 
 		// `fitting` always keeps the layout and `tooNarrow` never does; close the gap to a pixel.
-		let fitting = fullWidth;
+		// Whole numbers: from a fractional width (any interface scale can give one) the
+		// midpoint could round back down to `tooNarrow` and the search would never end.
+		let fitting = Math.ceil(fullWidth);
 		let tooNarrow = 0;
 		while (fitting - tooNarrow > 1) {
 			const trialWidth = Math.floor((fitting + tooNarrow) / 2);
@@ -65,7 +68,7 @@ export function narrowestWidthKeepingLayout({ box, maxWidth, watched, scrollers 
 			else tooNarrow = trialWidth;
 		}
 
-		return Math.ceil(fitting);
+		return fitting;
 	} finally {
 		box.style.removeProperty('min-width');
 		box.style.removeProperty('max-width');
@@ -78,11 +81,15 @@ export function narrowestWidthKeepingLayout({ box, maxWidth, watched, scrollers 
 	}
 }
 
-/** Pins the box to `width` and returns the width it then lays out at, in px. */
+/**
+ * Pins the box to `width` and returns the width it then lays out at, in CSS
+ * px: the unit trial widths are set in. `getBoundingClientRect` reports zoomed
+ * pixels under the interface scale.
+ */
 function layOutAt(box: HTMLElement, width: string): number {
 	box.style.minWidth = width;
 	box.style.maxWidth = width;
-	return box.getBoundingClientRect().width;
+	return box.getBoundingClientRect().width / cssZoomOf(box);
 }
 
 function readShape(element: HTMLElement): ElementShape {

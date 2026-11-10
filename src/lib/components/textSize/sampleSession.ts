@@ -124,7 +124,86 @@ const LONG_TAKE: SampleTake = {
 	]
 };
 
-const SAMPLE_TAKES: Record<TakeLength, SampleTake> = { short: SHORT_TAKE, long: LONG_TAKE };
+const PERSIAN_SHORT_TAKE: SampleTake = {
+	durationSec: 6,
+	transcript: 'دیروز رفتم بازار و کمی میوه خریدم.',
+	mistakes: [
+		{
+			label: 'Missing preposition with a place',
+			original: 'رفتم بازار',
+			replacement: 'به بازار رفتم',
+			replacementTranslation: 'I went to the market',
+			explanation: 'For going to a place, Persian says «به بازار رفتم»: the preposition marks the destination.'
+		}
+	],
+	explanation:
+		'Nice and clear! Say <right>به بازار رفتم</right> instead of <wrong>رفتم بازار</wrong>: <key>به</key> marks where you went.',
+	followUp: {
+		question: 'چه میوه‌ای خریدید؟',
+		translation: 'What fruit did you buy?'
+	},
+	idiomatic: 'Yesterday I went to the market and bought some fruit.',
+	idiomaticVariant: 'I went to the market yesterday and picked up some fruit.',
+	literal: 'Yesterday went-I market and a little fruit bought-I.',
+	wordForWord: 'Yesterday went-I market and little fruit bought-I.',
+	words: [
+		['دیروز', 'yesterday'],
+		['رفتم', 'I went'],
+		['بازار', 'market'],
+		['و', 'and'],
+		['کمی', 'a little'],
+		['میوه', 'fruit'],
+		['خریدم', 'I bought']
+	]
+};
+
+const PERSIAN_LONG_TAKE: SampleTake = {
+	durationSec: 94,
+	transcript:
+		'هفتهٔ گذشته من با دوستم به شمال ایران رفتیم. هوا خیلی خوب بود و صبح‌ها کنار دریا قدم می‌زدیم. یک روز به بازار محلی رفتیم و ماهی تازه خریدیم. شب ماهی را در خانه‌ای که اجاره کرده بودیم کباب کردیم. دوستم گفت که این بهترین سفرش بوده است. روز دوم به جنگل رفتیم و صدای پرنده‌ها را شنیدیم. بعد از ظهر در یک کافهٔ کوچک چای نوشیدیم و دربارهٔ برنامهٔ فردا صحبت کردیم. سه روز آنجا ماندیم و هر روز غذای محلی خوردیم. وقتی برگشتیم، خیلی خسته بودیم اما خوشحال. این سفر یکی از بهترین خاطرات ما شد.',
+	mistakes: [
+		{
+			label: 'Subject with a plural verb',
+			original: 'من با دوستم',
+			replacement: 'من و دوستم',
+			replacementTranslation: 'my friend and I',
+			explanation: 'The verb is first-person plural (رفتیم), so join the subject with «و» rather than «با».'
+		}
+	],
+	explanation:
+		'What a warm trip to the north! One subject fix: with <key>رفتیم</key>, join the subject as <right>من و دوستم</right>, not <wrong>من با دوستم</wrong>. Your past-tense storytelling was clear and easy to follow.',
+	followUp: {
+		question: 'دوست دارید تابستان دوباره به شمال بروید؟',
+		translation: 'Would you like to go back to the north in the summer?'
+	},
+	idiomatic:
+		'Last week my friend and I went to northern Iran. The weather was lovely and we walked by the sea in the mornings. One day we went to the local market and bought fresh fish. That night we grilled it at the house we had rented. My friend said it was his best trip ever. On the second day we went into the forest and listened to the birds. In the afternoon we drank tea in a small café and talked about the next day. We stayed there for three days and ate local food every day. We were tired when we came back, but happy. It became one of our best memories.',
+	idiomaticVariant:
+		'My friend and I spent three days in northern Iran last week: the sea, the forest, the local market, fresh fish and plenty of tea.',
+	literal:
+		'The week last I with my friend to north Iran went. Weather very good was and mornings beside the sea we walked. One day to the local market we went and fresh fish we bought. Night the fish in a house that rented we had grilled we. My friend said that this best trip-his has been. Second day to the forest we went and the sound of the birds we heard. Afternoon in a small café tea we drank and about the plan of tomorrow we spoke. Three days there we stayed and every day local food we ate. When we returned, very tired we were but happy. This trip one of the best memories-our became.',
+	wordForWord:
+		'Week last I friend-with to north Iran went-we. Weather very good was and mornings beside sea walk-we. One day to market local went-we and fish fresh bought-we. Night fish in house that rented had-we grilled we. Friend-my said that this best trip-his has-been. Day second to forest went-we and sound of birds heard-we. Afternoon in café small tea drank-we and about plan of tomorrow spoke-we. Three days there stayed-we and every day food local ate-we. When returned-we, very tired were-we but happy. This trip one of best memories-our became.',
+	words: [
+		['هفتهٔ گذشته', 'last week'],
+		['من و دوستم', 'my friend and I'],
+		['شمال', 'the north'],
+		['دریا', 'the sea'],
+		['قدم می‌زدیم', 'we walked'],
+		['بازار محلی', 'local market'],
+		['ماهی تازه', 'fresh fish'],
+		['اجاره کرده بودیم', 'we had rented'],
+		['کباب کردیم', 'we grilled'],
+		['برگشتیم', 'we returned'],
+		['خسته', 'tired'],
+		['خاطرات', 'memories']
+	]
+};
+
+const SAMPLE_TAKES: Record<string, Record<TakeLength, SampleTake>> = {
+	fr: { short: SHORT_TAKE, long: LONG_TAKE },
+	fa: { short: PERSIAN_SHORT_TAKE, long: PERSIAN_LONG_TAKE }
+};
 
 /** The take's text with its mistakes put right. */
 function correctedText(take: SampleTake): string {
@@ -161,8 +240,12 @@ function sampleCorrections(take: SampleTake, attemptId: string, createdAt: strin
  * @param length Which sample: a short take or a long one.
  * @param instructionLanguage The learner's language of instruction: the translations count as written in it, so the card shows them.
  */
-function sampleAttempt(length: TakeLength, instructionLanguage: string): AttemptView {
-	const take = SAMPLE_TAKES[length];
+function sampleAttempt(
+	length: TakeLength,
+	instructionLanguage: string,
+	takes: Record<TakeLength, SampleTake>
+): AttemptView {
+	const take = takes[length];
 	const id = `text-size-sample-${length}`;
 	const createdAt = new Date(0).toISOString();
 	const corrected = correctedText(take);
@@ -192,10 +275,10 @@ function sampleAttempt(length: TakeLength, instructionLanguage: string): Attempt
 	};
 }
 
-/** The bar's prompt, which the long take answers. */
+/** The bar's prompt, which the long take answers (language-neutral, like a real prompt). */
 const SAMPLE_PROMPT = {
 	id: 'text-size-sample-prompt',
-	title: 'A trip to Lyon (sample)',
+	title: 'A trip (sample)',
 	text: 'Tell me about a trip you enjoyed: where you went and what you did there.'
 };
 
@@ -204,9 +287,14 @@ const SAMPLE_PROMPT = {
  * take on top.
  *
  * @param instructionLanguage The learner's language of instruction (see `sampleAttempt`).
+ * @param targetLanguageId The studied language; Persian gets its own RTL sample.
  */
-export function sampleSession(instructionLanguage: string): PracticeSession {
-	const attempts = [sampleAttempt('short', instructionLanguage), sampleAttempt('long', instructionLanguage)];
+export function sampleSession(instructionLanguage: string, targetLanguageId = 'fr'): PracticeSession {
+	const takes = SAMPLE_TAKES[targetLanguageId] ?? SAMPLE_TAKES.fr;
+	const attempts = [
+		sampleAttempt('short', instructionLanguage, takes),
+		sampleAttempt('long', instructionLanguage, takes)
+	];
 	const state = writable<PracticeState>({
 		phase: 'idle',
 		prompt: SAMPLE_PROMPT,

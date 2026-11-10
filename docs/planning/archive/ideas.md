@@ -3,6 +3,44 @@
 > Archived 2026-11-03 from `docs/planning/ideas.md`. Frozen; current work is in
 > [`docs/planning/ideas.md`](../ideas.md).
 
+## Archived 2026-11-07
+
+### iPhone and iPad as an installable PWA (implemented 2026-11-07)
+
+iOS is the only platform without onspot, and the App Store needs a paid Apple account, so the
+static web build ships as an installable home-screen app instead. Live at
+[onspot.khizardevelops.workers.dev](https://onspot.khizardevelops.workers.dev) as Cloudflare
+Workers static assets, deployed with `cf deploy --prebuilt` (`cf` cannot build SvelteKit directly;
+`scripts/cf-deploy.sh` assembles the Build Output Specification). It has a web manifest, 192/512/
+maskable icons and 28 iOS launch images, iOS meta tags with a theme-aware status bar, a
+production-only service worker (offline shell, cached SQLite WASM, waiting-worker Reload prompt,
+never registered in dev or the Tauri apps), and a dismissible install card plus a permanent
+Settings → iPhone and iPad section. Local speech downloads stay available; cloud speech is a
+recommendation on iPhone, and system notifications are honestly reported as unavailable there.
+The brief is [`docs/prompts/ios-focused-pwa.md`](../../prompts/ios-focused-pwa.md); the platform
+notes are in [`docs/architecture/platforms.md`](../../architecture/platforms.md#ios-and-ipados-pwa).
+
+Remaining (tracked in `.agents/handoff/memory/tasks.md`): a real-device pass, the Google OAuth web
+origin, Google Drive/WebDAV in the installed app, local model measurements on an iPhone, and the
+GitHub Pages export-and-move notice.
+
+### Persian support (cloud only) and right-to-left text (implemented 2026-11-07)
+
+Persian ships with the cloud pipeline only: Groq `whisper-large-v3-turbo` (`language=fa`) for
+speech-to-text, any configured cloud LLM for corrections and translation, and ElevenLabs or an
+OpenAI-compatible voice for read-back. No local model has passed the human quality gates, so the
+registry's `local` flags are all `false` and the app offers no download it cannot stand behind:
+choosing Persian switches any Local step to Cloud, Settings → Processing locks the three switches
+to Cloud with an honest hint, and the first-run picker disables the local choices.
+
+Right-to-left text is decided by the script itself (`directionForText`), so transcripts,
+corrections, follow-up questions, word lists and the Text size sample lay out RTL with a Persian
+font stack, while the language of instruction stays LTR. `؟`, `،` and `؛` split sentences and
+clauses, word tokens keep the zero-width non-joiner, and the LLM prompts carry Persian rules
+(script/ZWNJ preservation, formal vs colloquial register, را/ezafe, a contrastive example). Details:
+[`docs/architecture/supported-languages.md`](../../architecture/supported-languages.md#persian-fa--cloud-only).
+The follow-up, finding local models for cloud-only languages, stays active in `ideas.md`.
+
 ## Archived 2026-11-06
 
 ### First-run onboarding for keys (implemented 2026-11-06)

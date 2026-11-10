@@ -77,7 +77,7 @@
 		{/if}
 	</div>
 
-	<p class="mt-3 font-serif text-[0.9375rem] leading-relaxed italic">“{language?.preview}”</p>
+	<p class="mt-3 font-serif text-[0.9375rem] leading-relaxed italic" dir="auto">“{language?.preview}”</p>
 	<p class="mt-2 text-xs leading-relaxed text-muted-foreground">
 		Generated once and cached on this device, so replaying is free.
 		{#if local}Equalizer changes are heard live while it plays; turn on Loop to keep listening.{/if}
@@ -158,7 +158,7 @@
 	elevation={3}
 	aria-labelledby="regenerate-preview-title"
 	aria-describedby="regenerate-preview-description"
-	width="min(28rem, calc(100vw - 2rem))"
+	width="min(28rem, calc(var(--ui-vw) - 2rem))"
 	padding="1.25rem 1.5rem"
 >
 	<div class="flex flex-col gap-3">

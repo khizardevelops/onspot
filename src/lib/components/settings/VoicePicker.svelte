@@ -7,7 +7,8 @@
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoInput } from '@dvcol/neo-svelte/inputs';
 	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
-	import { Check, ChevronDown, X } from '@lucide/svelte';
+	import VoiceTrigger from '#lib/components/settings/VoiceTrigger.svelte';
+	import { Check, X } from '@lucide/svelte';
 
 	export interface VoiceOption {
 		value: string;
@@ -117,22 +118,14 @@
 	});
 </script>
 
-<button
-	type="button"
+<VoiceTrigger
 	{id}
-	class="voice-trigger"
-	aria-haspopup="dialog"
-	aria-expanded={open}
+	label={current?.label ?? 'Choose a voice'}
+	detail={current?.description}
+	expanded={open}
+	opens="dialog"
 	onclick={() => void show()}
->
-	<span class="min-w-0 flex-1 text-left">
-		<span class="block truncate text-sm font-medium">{current?.label ?? 'Choose a voice'}</span>
-		{#if current?.description}
-			<span class="voice-trigger-detail">{current.description}</span>
-		{/if}
-	</span>
-	<ChevronDown class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-</button>
+/>
 
 <NeoDialog
 	{...quickDialog}
@@ -141,7 +134,7 @@
 	rounded
 	filled
 	elevation={3}
-	width={{ max: 'min(31rem, calc(100vw - 2rem))' }}
+	width={{ max: 'min(31rem, calc(var(--ui-vw) - 2rem))' }}
 	padding="0"
 	aria-labelledby="voice-picker-title"
 	aria-describedby="voice-picker-description"
@@ -152,7 +145,7 @@
 			<div class="min-w-0 flex-1">
 				<h2 id="voice-picker-title" class="voice-dialog-title">{title}</h2>
 				<p id="voice-picker-description" class="voice-dialog-description">
-					Pick the voice spoken replies use. You can preview before you practise.
+					Pick the voice spoken replies use. You can preview it before you practise.
 				</p>
 			</div>
 			<button
@@ -229,44 +222,10 @@
 </NeoDialog>
 
 <style>
-	.voice-trigger {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		min-height: 2.5rem;
-		padding: 0.4rem 0.75rem;
-		border: 1px solid var(--control-line);
-		border-radius: 14px;
-		background: var(--control);
-		color: inherit;
-		cursor: pointer;
-		transition:
-			background-color 120ms ease,
-			border-color 120ms ease;
-	}
-	.voice-trigger:hover {
-		background: var(--control-hover);
-	}
-	.voice-trigger:focus-visible {
-		outline: 2px solid var(--focus-ring, var(--primary));
-		outline-offset: 2px;
-	}
-	.voice-trigger-detail {
-		display: block;
-		margin-top: 0.125rem;
-		overflow: hidden;
-		font-size: 0.75rem;
-		line-height: 1.1rem;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		/* --muted-foreground is 4.49:1 on the control surface in light mode. */
-		color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
-	}
 	.voice-dialog {
 		display: flex;
 		flex-direction: column;
-		max-height: min(38rem, calc(100dvh - 4rem));
+		max-height: min(38rem, calc(var(--ui-vh) - 4rem));
 		padding: 1.25rem 0 0;
 	}
 	.voice-dialog-header {

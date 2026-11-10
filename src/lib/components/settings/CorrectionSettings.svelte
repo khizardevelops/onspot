@@ -10,6 +10,7 @@
 		localLlmApiKey
 	} from '#lib/stores/secrets.js';
 	import { currentLlmEndpoint, resolveLlmEndpoint } from '#lib/stores/llm.js';
+	import { getLanguage } from '#lib/languages/index.js';
 	import {
 		AUTOMATIC_MODEL,
 		LLM_PROVIDERS,
@@ -48,7 +49,10 @@
 	let testMessage = $state('');
 	let testedSignature = '';
 
-	const local = $derived($appSettings.correctionMode === 'local');
+	const language = $derived(getLanguage($appSettings.targetLanguage));
+	const local = $derived(
+		$appSettings.correctionMode === 'local' && language?.local.correction !== false
+	);
 	const providerConfig = $derived(getProvider($appSettings.llmProvider));
 
 	const localPreset = $derived.by(() => {

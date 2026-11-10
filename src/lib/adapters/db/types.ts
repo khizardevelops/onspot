@@ -139,6 +139,29 @@ export interface Session {
 	endedAt: string | null;
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * What the session is practised with (migration 10); null on sessions from
+	 * before, until they are opened and theirs is worked out from their takes.
+	 */
+	setup: SessionSetup | null;
+}
+
+/**
+ * A session's languages and how it is spoken, so opening it again shows its
+ * takes as they were practised (`practice/sessionSetup.ts`).
+ */
+export interface SessionSetup {
+	/** The studied language (a `LANGUAGES` id). */
+	targetLanguage: string;
+	/** The language of instruction (an `INSTRUCTION_LANGUAGES` id). */
+	instructionLanguage: string;
+	ttsMode: 'local' | 'cloud';
+	/** The on-device read-back voice. */
+	ttsVoice: string;
+	/** The on-device explanation voice; empty when none was chosen. */
+	explanationVoice: string;
+	/** How fast the studied language is spoken (`SPEECH_PACES`). */
+	targetSpeechPace: number;
 }
 
 /** One recorded answer inside a session. */

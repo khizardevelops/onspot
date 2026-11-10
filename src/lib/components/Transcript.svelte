@@ -4,7 +4,7 @@
 	import type { Correction, CorrectionSeverity, TextGlosses } from '#lib/adapters/db/index.js';
 	import { playWord } from '#lib/stores/pronunciation.js';
 	import type { TextSpan } from '#lib/utils/segments.js';
-	import { isJapaneseText, tokenizeWords } from '#lib/utils/words.js';
+	import { directionForText, isJapaneseText, tokenizeWords } from '#lib/utils/words.js';
 	import { TranscriptMeanings } from './transcriptMeanings.svelte.js';
 	import { TouchWordSelection, WordDragSelection, selectedWordRange } from './wordSelection.js';
 	import WordGloss from './WordGloss.svelte';
@@ -36,6 +36,10 @@
 		requestPhrase?: (start: number, end: number, phrase: string) => Promise<string>;
 		/** Reads words of this text aloud in its language; given, a selection's meaning gets a speaker button. */
 		speak?: (words: string) => void;
+		/** Text direction; by default it follows the script (RTL for Persian/Arabic/Hebrew). */
+		direction?: 'ltr' | 'rtl' | 'auto';
+		/** BCP 47 language tag for assistive technology and font fallback. */
+		locale?: string;
 		class?: string;
 	}
 
@@ -52,9 +56,12 @@
 		requestGlosses,
 		requestPhrase,
 		speak,
+		direction,
+		locale,
 		class: className = ''
 	}: Props = $props();
 
+	const textDirection = $derived(direction ?? directionForText(text));
 	let root = $state<HTMLElement | null>(null);
 	const showsMeanings = $derived(Boolean(requestGlosses));
 
@@ -303,6 +310,9 @@
 	bind:this={root}
 	class="transcript-text {className}"
 	class:has-marks={markedTokens !== null}
+	class:rtl={textDirection === 'rtl'}
+	dir={textDirection}
+	lang={locale}
 	style="white-space: pre-wrap"
 	style:--word-pad={unspaced ? '0px' : '0.125rem'}
 	onmousedown={(event) => showsMeanings && wordDrag.press(event)}
@@ -389,6 +399,10 @@
 	 * untouched, so it still copies. Each word and each gap is its own element, so the band is
 	 * the same on all of them and joins without seams; only the ends differ.
 	 */
+	.transcript-text.rtl {
+		font-family: var(--font-arabic-script);
+	}
+
 	.transcript-text {
 		--highlighter-ink: rgb(255 230 0 / 0.5);
 		--highlighter-pool: rgb(255 208 0 / 0.72);

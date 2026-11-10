@@ -101,3 +101,15 @@ export async function isCached(url: string): Promise<boolean> {
   const cache = await openCache();
   return !!(await cache?.match(url));
 }
+
+/** Removes a stored copy (e.g. one that failed its checksum), so the next fetch downloads it again. */
+export async function forgetCached(url: string): Promise<void> {
+  const cache = await openCache();
+  await cache?.delete(url).catch(() => undefined);
+}
+
+/** The SHA-256 of `bytes`, as lowercase hex. */
+export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}

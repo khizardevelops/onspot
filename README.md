@@ -1,8 +1,8 @@
 <div align="center">
-
 <div style="display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;">
   <img src="brand-assets/v2/app-icon-squircle-dark-tile.svg" width="52" height="52" alt="onspot app icon: a spotlight shining on a sound wave">
   <h1 style="margin: 0; font-size: 2rem; line-height: 1; display: flex; align-items: center;">onspot</h1>
+</div>
 </div>
 
 ### Stop tapping flashcards. Open your mouth.
@@ -11,6 +11,10 @@
 gives you a prompt, listens to you talk for 60 seconds, then marks your spoken French the way a
 good teacher would: every mistake pinned to the exact words you said, explained in plain English,
 and read back to you the way a native speaker would say it.
+
+> [!NOTE] 
+> **Built for intermediate learners**\
+> onspot is made for intermediate learners in mind who have basic vocabulary and grammar down, but struggle to talk without hesitating. By putting you on the clock, onspot trains you to think fast, recall what you know, and speak fluently in spontaneous on the spot just like how people use language in real life.
 
 [**Download the app**](https://github.com/khizardevelops/onspot/releases/latest) ·
 [How it works](#how-a-session-works) ·
@@ -24,17 +28,13 @@ and read back to you the way a native speaker would say it.
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-0f766e)
 ![Status](https://img.shields.io/badge/status-early%20release-b7791f)
 
-</div>
-
 > [!IMPORTANT]
 > **Setup (2 Minutes)**:
-> To get feedback, onspot needs to connect to an AI provider. This is **completely free** and requires **no payment** info or loaded credits.
-> Just grab a **free Groq key** from [console.groq.com](https://console.groq.com/keys), paste it into **Settings → LLM**, and you're ready to speak!
-> 
+> For the app to work, onspot needs to connect to an AI provider. This is **completely free** and requires **no payment** info or loaded credits.
+> Just grab a **free Groq API key** from [console.groq.com](https://console.groq.com/keys), paste it into **Settings → LLM**, and you're ready to speak!
 >
 > **That's it!** Speech recognition and voices run locally on your device by default however you do have the option to use cloud text-to-speech and cloud speech-to-text too
 > *(Optional: If you prefer premium cloud voices over the local ones, you can add a free ElevenLabs key in Settings later. Full guide [here](https://www.google.com/search?q=%23get-your-keys-two-minutes)).*
-
 
 <div align="center">
 
@@ -203,6 +203,11 @@ There's also a word-by-word breakdown and alternative phrasings when you want to
 - **Insights** finds your *recurring* mistakes across all sessions (the patterns worth drilling)
   and takes you straight back to every time they happened.
 
+### 🔍 Make it fit your screen
+A **global interface scale** from 80% to 150% resizes the whole app — text, cards, spacing and
+controls — in 5% steps. A separate **Text size** editor can still size each part of a take on its
+own. Both choices are remembered on this device.
+
 ### 🎛️ Make it sound right to you
 A per-voice **4-band equaliser and volume** with a live preview. Tune the voice until it's
 comfortable to listen to for an hour, without ever changing the approved defaults.
@@ -242,20 +247,29 @@ onspot has **no server, no account and no tracking**. It was built privacy-first
 
 ## Languages
 
-**French is the only language that is fully approved today.** Japanese is in development and is
-hidden in production builds until a human has listened to its voices and checked its transcripts.
-Adding a language is not a settings toggle: it needs model selection, prompt work and a quality
-pass. That is the bottleneck, and it is being worked through one language at a time.
+**French is fully approved on your device; Persian is ready as a cloud-only language.** Japanese is
+in development and is hidden in production builds until a human has listened to its voices and
+checked its transcripts. Adding a language is not a settings toggle: it needs model selection,
+prompt work and a quality pass. That is the bottleneck, and it is being worked through one language
+at a time.
 
 | Language | Status | Speech recognition | Voice |
 |---|---|---|---|
-| 🇫🇷 French | ✅ Ready | Whisper small (q4) | Piper Tom + 3 more voices |
+| 🇫🇷 French | ✅ Ready | Whisper small (q4), on your device | Piper Tom + 3 more voices |
+| 🇮🇷 Persian | ✅ Ready (cloud) | Groq Whisper, in the cloud | ElevenLabs or an OpenAI-compatible voice |
 | 🇯🇵 Japanese | 🧪 In development | Whisper small (q4), shared with French | piper-plus with OpenJTalk (3 voices) |
 
-Nothing is bundled with the app: each language's models download on demand from their public
-hosts, and languages share what they can. Japanese reuses French's speech model, so it adds only
-about 100 MB. Settings tells you exactly how much space a language will take before you download
-it. Full model list and sizes: [`docs/supported-languages.md`](docs/supported-languages.md).
+**Persian needs no download:** speech-to-text, the coach and read-back all use the cloud keys you
+add in Settings, and the app locks those steps to Cloud rather than offering a local model it
+cannot vouch for. It is the first right-to-left language, so transcripts, corrections and word
+lists read properly in Persian script. On-device Persian models are planned once one passes the
+quality checks.
+
+Nothing is bundled with the app: each on-device language's models download on demand from their
+public hosts, and languages share what they can. Japanese reuses French's speech model, so it adds
+only about 100 MB. Settings tells you exactly how much space a language will take before you
+download it. Full model list and sizes:
+[`docs/supported-languages.md`](docs/supported-languages.md).
 
 A language only ships once a human has **listened to its voices and checked its transcripts**.
 Model choices are made by measurement, not marketing: French speech recognition runs at **5.5%
@@ -363,6 +377,9 @@ bun install
 mkdir -p static/piper-wasm
 cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/
 
+# Fetch the Supertonic voice runtime (prebuilt sherpa-onnx, 14 MB, gitignored and hash-checked)
+scripts/sherpa-tts-assets.sh
+
 bun run dev          # web app at http://localhost:5173
 bun run tauri dev    # desktop app
 ```
@@ -424,8 +441,8 @@ Drive API, and set `VITE_GOOGLE_CLIENT_ID_DESKTOP` and/or `VITE_GOOGLE_CLIENT_ID
 | Desktop | [Tauri v2](https://tauri.app) |
 | UI | [`@dvcol/neo-svelte`](https://github.com/dvcol/neo-svelte) neumorphic components, Tailwind CSS v4, a paper-textured theme with light and dark modes |
 | Speech-to-text | [Transformers.js](https://huggingface.co/docs/transformers.js) running `whisper-small` q4 on ONNX Runtime Web (WASM), in a Web Worker; Groq Whisper in the cloud |
-| Text-to-speech | [Piper](https://github.com/rhasspy/piper) and [piper-plus](https://github.com/ayutaz/piper-plus) VITS voices on ONNX Runtime Web, in a lazily loaded Web Worker; [ElevenLabs](https://elevenlabs.io) or an OpenAI-compatible API in the cloud |
-| Pronunciation (G2P) | eSpeak-ng (French), OpenJTalk/jpreprocess compiled to WASM (Japanese) |
+| Text-to-speech | [Supertonic 3](https://huggingface.co/Supertone/supertonic-3) (31 languages, one shared model) on the prebuilt [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) WASM runtime, plus [Piper](https://github.com/rhasspy/piper) and [piper-plus](https://github.com/ayutaz/piper-plus) VITS voices on ONNX Runtime Web, in a lazily loaded Web Worker; [ElevenLabs](https://elevenlabs.io) or an OpenAI-compatible API in the cloud |
+| Pronunciation (G2P) | eSpeak-ng (Piper voices), OpenJTalk/jpreprocess compiled to WASM (Japanese); Supertonic reads text directly |
 | Audio | Web Audio: EQ, compressor, limiter and loudness normalisation per voice |
 | Storage | SQLite everywhere: `sqlite-wasm` on OPFS in the browser, native SQLite on desktop, behind one adapter |
 | Cloud sync | Google Drive (app-private folder, OAuth 2.0) and WebDAV, as whole-database snapshots |

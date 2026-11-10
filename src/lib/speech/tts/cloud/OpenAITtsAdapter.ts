@@ -51,7 +51,7 @@ export class OpenAITtsAdapter extends BaseTTSAdapter {
 			remote: true,
 			modelRepoId: 'openai/gpt-4o-mini-tts',
 			downloadSize: '0 MB · network',
-			language: 'French (fr)',
+			language: 'Multilingual',
 			canReturnAudio: true,
 			status: 'unloaded'
 		};

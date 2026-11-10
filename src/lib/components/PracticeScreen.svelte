@@ -567,7 +567,7 @@
 				{:else}
 					<!-- The prompt is the page's heading in every phase (it is what the learner talks about); the session is the line under it. -->
 					<div class="bar-prompt" in:fade={{ duration: 200 }}>
-						<h1 class="prompt-text" data-text-section="prompt" title={$practice.prompt.text}>{$practice.prompt.text}</h1>
+						<h1 class="prompt-text" data-text-section="prompt" dir="auto" title={$practice.prompt.text}>{$practice.prompt.text}</h1>
 						{#if !phone}<p class="session-line">{@render sessionLine()}</p>{/if}
 					</div>
 				{/if}
@@ -734,9 +734,18 @@
 		--neo-shadow-margin-lg: 0;
 		/* Transparent so the app's paper texture shows behind the practice stage. */
 		background: transparent;
-		/* How long the Feedback sidebar takes to slide in or out (desktop), or the sheet to rise (tablets). */
+		/* How long the Feedback sidebar takes to slide in or out (desktop). */
 		--feedback-slide-duration: 180ms;
 		--feedback-slide-easing: cubic-bezier(0.22, 1, 0.36, 1);
+		/*
+		 * The Feedback sheet (phones, tablets) comes up on a curve that starts
+		 * gently (`SHEET_CURVE`, gestures/sheetMotion.ts): it travels most of the
+		 * screen, and 180 ms on a front-loaded curve moved it 263 px in one frame,
+		 * which read as a jump. It goes down faster than it came, accelerating away.
+		 */
+		--feedback-sheet-rise: 420ms;
+		--feedback-sheet-drop: 260ms;
+		--feedback-sheet-easing: cubic-bezier(0.35, 0.1, 0.3, 1);
 		/* The ambience's two inks: brand by default, mode-coloured once a session exists. */
 		--glare-one: var(--brand);
 		--glare-two: var(--brand);
@@ -968,6 +977,21 @@
 		50% { transform: translate3d(-8%, -5%, 0) scale(1.1); }
 		100% { transform: translate3d(7%, 4%, 0) scale(0.94); }
 	}
+	/*
+	 * The drift has the whole window redrawn every frame: 23 ms frames against
+	 * 16.7 with it paused (measured 2026-11-08), which stuttered every other
+	 * animation on this page, and only this page. So it holds still while a
+	 * tooltip, menu or list is up, or the phone's Feedback sheet is open. At a
+	 * 40-second drift the pause does not show.
+	 */
+	:global(html:has(.neo-tooltip:not([hidden]))) .ambient {
+		animation-play-state: paused;
+	}
+	@media (max-width: 640px) {
+		.practice-grid:not(.coach-closed) .ambient {
+			animation-play-state: paused;
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
 		.ambient {
 			animation: none;
@@ -975,7 +999,7 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.practice-grid { --feedback-slide-duration: 1ms; }
+		.practice-grid { --feedback-slide-duration: 1ms; --feedback-sheet-rise: 1ms; --feedback-sheet-drop: 1ms; }
 		.waveform span { transition-duration: 1ms !important; }
 	}
 	/*
@@ -1040,7 +1064,7 @@
 	/* Tablets: the panel rises into the room under the takes. */
 	@media (min-width: 641px) and (max-width: 1023px) {
 		.practice-grid:not(.coach-closed) :global(aside.feedback-shell) {
-			animation: sheet-in var(--feedback-slide-duration) var(--feedback-slide-easing);
+			animation: sheet-in var(--feedback-sheet-rise) var(--feedback-sheet-easing);
 		}
 	}
 	.coach-scrim { display: none; }
@@ -1212,13 +1236,14 @@
 			background-color: var(--card);
 			box-shadow: var(--shadow-float);
 			translate: 0 0;
-			transition: translate var(--feedback-slide-duration) var(--feedback-slide-easing);
+			transition: translate var(--feedback-sheet-rise) var(--feedback-sheet-easing);
 			will-change: translate;
 		}
 		/* Out of sight, its shadow too; it leaves faster than it came. */
 		.practice-grid.coach-closed :global(aside.feedback-shell) {
 			box-shadow: none;
 			translate: 0 calc(100% + 24px);
+			transition-duration: var(--feedback-sheet-drop);
 			transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
 		}
 		.coach-scrim {
@@ -1228,7 +1253,7 @@
 			z-index: 65;
 			border: 0;
 			background: color-mix(in srgb, #000 32%, transparent);
-			animation: scrim-in 200ms ease-out;
+			animation: scrim-in var(--feedback-sheet-rise) ease-out;
 			/* Its own layer: it fades with every move of a swipe, which otherwise redrew the screen under it. */
 			will-change: opacity;
 		}

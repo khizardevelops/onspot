@@ -6,7 +6,7 @@ is in [`README.md`](./README.md).
 
 When a bug is fixed, move it to the archive under a dated heading and remove it from this file.
 
-> Last reviewed: 2026-11-03.
+> Last reviewed: 2026-11-08.
 
 ## App
 
@@ -20,4 +20,5 @@ When a bug is fixed, move it to the archive under a dated heading and remove it 
   session must keep that session's language and prompts, even if the global language has changed.
   Once a session has started in a language, it cannot switch.
 
-- [] the audio of some local tts is either too loud or too slow. normalise the audio before output
+- [ ] highlighting words makes them really blurry
+- [ ] current component lib problem: docs/scratch/neosvelte_component_lib_problem.md

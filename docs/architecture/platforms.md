@@ -91,7 +91,8 @@ unverified.
   all of them from `src-tauri/icons/ios/AppIcon-512@2x.png`.
 - **Offline.** `src/service-worker/index.ts` uses SvelteKit 3's `$app/service-worker`,
   `$app/manifest` and `$app/env`. It registers only in production web builds, precaches the small
-  app shell, excludes `piper-wasm`, launch images, sample audio and the ORT runtimes, and caches
+  app shell, excludes `piper-wasm`, the `sherpa-onnx` voice runtime, launch images, sample audio
+  and the ORT runtimes, and caches
   each WASM runtime on first use. Deep-link navigations fall back to the cached shell with a
   pinned `<base>`; updates stay waiting until the learner presses **Reload**.
 - **Install guide.** `PwaInstallPrompt` appears on an iPhone/iPad browser tab (not on the welcome
@@ -109,6 +110,9 @@ unverified.
 
 ## Shared behaviour
 
+- Interface scale is a device-local display setting: 80–150% in 5% steps on the root's CSS `zoom`,
+  with `--ui-vw`/`--ui-vh` compensating fixed overlays and the page height. It is separate from
+  the per-part Text size multipliers.
 - Last approved language data is downloaded per device; nothing is bundled.
 - All local inference is client-side. Cloud is BYOK and labelled.
 - API keys and OAuth/WebDAV credentials live in `localStorage`, never in the database or exports.

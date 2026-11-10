@@ -10,9 +10,9 @@
 	import SecretInput from '#lib/components/settings/SecretInput.svelte';
 	import { ExternalLink } from '@lucide/svelte';
 
-	const local = $derived($appSettings.sttMode === 'local');
 	const language = $derived(getLanguage($appSettings.targetLanguage));
-	const model = $derived(language ? localSttModel(language.id) : null);
+	const local = $derived($appSettings.sttMode === 'local' && language?.local.stt !== false);
+	const model = $derived(language && local ? localSttModel(language.id) : null);
 	/** The LLM card already exposes this key when Groq is the cloud provider. */
 	const sharedGroqKey = $derived(
 		$appSettings.correctionMode === 'cloud' && $appSettings.llmProvider === 'groq'

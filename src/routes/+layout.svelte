@@ -14,8 +14,10 @@
 	import { shouldOfferOnboarding } from '#lib/onboarding.js';
 	import { registerPwa } from '#lib/platform/pwa.js';
 	import { applyTheme, theme } from '#lib/stores/theme.svelte.js';
-	// Applies the learner's text sizes (Settings → Text size) before the first render.
+	// Applies the learner's text sizes (Settings → Text size) and the whole-app
+	// interface scale before the first render.
 	import '#lib/stores/textSize.svelte.js';
+	import '#lib/stores/zoom.svelte.js';
 	import { toast } from '#lib/stores/toast.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
@@ -151,7 +153,7 @@
 	{/if}
 	<!-- Navigation lives in each page's top bar (AppHeader); the page has the rest of the window. -->
 	<main
-		class="app-page paper-surface relative z-[1] h-dvh min-w-0 overflow-hidden text-foreground"
+		class="app-page paper-surface relative z-[1] min-w-0 overflow-hidden text-foreground"
 		class:under-window-bar={hasWindowBar}
 	>
 		{#key page.url.pathname}
@@ -182,12 +184,18 @@
 		z-index: 0;
 		pointer-events: none;
 	}
-	main.under-window-bar {
-		height: calc(100dvh - var(--window-bar-height));
-	}
-	/* The installed app draws under a translucent status bar on every width. */
+	/*
+	 * `--ui-vh` is the viewport height in the root's pre-zoom pixels, so the
+	 * zoomed page still fills the window instead of becoming taller than it.
+	 * The window bar sits outside `main` and is zoomed too, so it is subtracted
+	 * after the division.
+	 */
 	:global(main.app-page) {
+		height: var(--ui-vh);
 		padding-top: env(safe-area-inset-top);
+	}
+	main.under-window-bar {
+		height: calc(var(--ui-vh) - var(--window-bar-height));
 	}
 	/*
 	 * Each page fades in as it replaces the last. A CSS animation, not a Svelte

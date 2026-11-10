@@ -19,15 +19,7 @@
  * and the sheet and the list both moved, flickering.
  */
 import { FlingVelocity, TOUCH_SCREEN_QUERY, TOUCH_SLOP_PX, keepsItsOwnDrag } from './touch';
-import {
-	ARRIVING,
-	FLING_PX_PER_MS,
-	LEAVING,
-	MIN_FLING_PX,
-	SETTLE_FRACTION,
-	SheetMover,
-	applyStylesNow
-} from './sheetMotion';
+import { FLING_PX_PER_MS, MIN_FLING_PX, SETTLE_FRACTION, SheetMover, applyStylesNow, settleMotion } from './sheetMotion';
 
 /** Which way the surface leaves the screen. */
 export type DismissDirection = 'down' | 'right';
@@ -143,14 +135,14 @@ export class SwipeToDismiss {
 		const velocity = this.#velocity.current();
 		const draggedFar = this.#offset >= this.#travel * SETTLE_FRACTION;
 		const flicked = velocity >= FLING_PX_PER_MS && this.#offset >= MIN_FLING_PX;
-		if (draggedFar || flicked) this.#leave();
-		else this.#springBack();
+		if (draggedFar || flicked) this.#leave(velocity);
+		else this.#springBack(-velocity);
 	};
 
 	#abandon = (): void => {
 		const wasDragging = this.#phase === 'dragging';
 		this.#phase = 'idle';
-		if (wasDragging) this.#springBack();
+		if (wasDragging) this.#springBack(0);
 	};
 
 	/** A touch on content scrolled away from its start is a scroll, never a swipe. */
@@ -198,10 +190,12 @@ export class SwipeToDismiss {
 	 * its own styles. Its closing transition (the stats sheet slides down) must
 	 * not play as well: the closed styles are applied with transitions off, and
 	 * only then is the offset dropped, so it stays out of sight throughout.
+	 *
+	 * @param speed How fast the finger was going that way as it lifted, px/ms.
 	 */
-	#leave(): void {
+	#leave(speed: number): void {
 		this.#options.onProgress?.(1);
-		this.#mover.settle(this.#travel, LEAVING, () => {
+		this.#mover.settle(this.#travel, settleMotion(this.#travel - this.#offset, speed), () => {
 			const surface = this.#options.surface();
 			if (surface) surface.style.transition = 'none';
 			this.#options.onDismiss();
@@ -213,9 +207,10 @@ export class SwipeToDismiss {
 		});
 	}
 
-	#springBack(): void {
+	/** Goes back into place; `speed` is how fast the finger was going back as it lifted, px/ms. */
+	#springBack(speed: number): void {
 		this.#options.onProgress?.(0);
-		this.#mover.settle(0, ARRIVING, () => this.#restore());
+		this.#mover.settle(0, settleMotion(this.#offset, speed), () => this.#restore());
 	}
 
 	#restore(): void {

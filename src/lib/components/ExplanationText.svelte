@@ -13,6 +13,7 @@
 	import { untrack, type ComponentProps } from 'svelte';
 	import { quickCollapse } from '#lib/neo.js';
 	import { separateFollowUp } from '#lib/adapters/llm/index.js';
+	import { directionForText } from '#lib/utils/words.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { Loader2, Pause, Volume2 } from '@lucide/svelte';
@@ -65,6 +66,7 @@
 	});
 
 	const explanation = $derived(separateFollowUp(markup));
+	const questionDirection = $derived(directionForText(question));
 
 	let showTranslation = $state(untrack(() => translationShown));
 </script>
@@ -73,7 +75,7 @@
 	{#if explanation.parts.length > 0}
 		<p class="explanation-text {className}" data-text-section="explanation" dir="auto">
 			{#each explanation.parts as part, position (position)}
-				{#if part.highlight}<mark class="learner-highlight" data-highlight={part.highlight} lang={targetLocale}>{part.text}</mark>{:else}{part.text}{/if}
+				{#if part.highlight}<mark class="learner-highlight" data-highlight={part.highlight} lang={targetLocale} dir={directionForText(part.text)}>{part.text}</mark>{:else}{part.text}{/if}
 			{/each}
 		</p>
 	{/if}
@@ -108,7 +110,12 @@
 					</button>
 				{/if}
 			</div>
-			<p class="follow-up-question {className}" lang={targetLocale}>
+			<p
+				class="follow-up-question {className}"
+				class:rtl={questionDirection === 'rtl'}
+				dir={questionDirection}
+				lang={targetLocale}
+			>
 				{#if questionMeanings}<Transcript text={question} {...questionMeanings} />{:else}{question}{/if}
 			</p>
 			{#if translation}
@@ -139,6 +146,16 @@
 		font-family: var(--font-serif);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
+	}
+
+	/*
+	 * An Arabic-script word keeps the Arabic-script face (`--font-arabic-script`)
+	 * and an upright style with room for its dots; the face also backs every UI
+	 * stack, so a word is never shaped from two fonts.
+	 */
+	.learner-highlight[dir='rtl'] {
+		font-family: var(--font-arabic-script);
+		line-height: 1.75;
 	}
 
 	/* What the learner said wrongly, marked like a correction's original in the Feedback panel. */
@@ -205,6 +222,11 @@
 		text-transform: uppercase;
 		color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
 	}
+	.follow-up-question.rtl {
+		font-family: var(--font-arabic-script);
+		font-style: normal;
+	}
+
 	.follow-up-question {
 		font-family: var(--font-serif);
 		font-style: italic;

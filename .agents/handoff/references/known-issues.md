@@ -50,6 +50,103 @@ brief's Phase 0 walk-through is done (`docs/prompts/ios-focused-pwa.md`).
   live site is a Workers static-assets Worker (`cf deploy --prebuilt`), not the empty legacy Pages
   project `onspot-4k1.pages.dev`. The Pages-only `_redirects`/`wrangler.toml` were removed.
 
+## Voice loudness: what leveling does not cover (2026-11-08)
+
+- **Stored copies lose a little in Opus (32 kbps):** most voices 0.2–0.8 dB; Piper Tom 2 dB, because
+  almost half his weighted loudness is treble that Opus at this rate keeps a third of. The first
+  play (WAV) is exact; the stored replay is slightly quieter and duller. 64 kbps would keep it,
+  at twice the size (`SPEECH_BITRATE`, `speech/audioFormat.ts`); not changed without the user.
+- **Cloud clips are not leveled:** a streamed clip plays before it can be measured.
+- **The Settings preview's limiter is the browser's compressor**, not a hard ceiling (it plays
+  live); stored clips use the look-ahead limiter in `utils/peakLimiter.ts`.
+
+## Languages offered without review (2026-11-08)
+
+- 32 study languages (and Japanese) are offered at the user's request with nothing measured:
+  Whisper small on learner speech, the default voices, and the on-device LLM's writing in them.
+  Low-resource ones (Estonian, Latvian, Lithuanian, Slovenian) are the likeliest to disappoint.
+- The support notices only know the providers' published lists (checked 2026-11-08) and nothing
+  about a custom OpenAI-compatible server.
+- Scripts other than Latin and Arabic use the device's fonts (Devanagari, Bengali, Hangul,
+  Greek, Cyrillic, CJK); the UI faces bundle only their Latin subsets, so Latin-extended letters
+  (Czech ř, Vietnamese tones) also come from a system face. Not checked on iOS or Android.
+- The model can write a field in the wrong language when the two languages share a script.
+  `couldBeWrittenIn` (`languages/textLanguage.ts`) catches what letters prove (wrong script;
+  Urdu-only letters in Persian/Arabic; kana in Chinese; Ukrainian/Russian-only letters) and the
+  follow-up is dropped then. Same-letter pairs (Spanish/Portuguese) are not caught. Takes stored
+  before 2026-11-08 keep their follow-up as it was.
+
+## Persian (cloud recognition) and RTL
+
+- Persian recognition and correction have **no on-device stack** (`local: { stt: false, tts: true,
+  correction: false }`); read-back can use Piper's Persian voices. A learner without a Groq key
+  cannot record in Persian; the Processing rows say so. ElevenLabs does not speak Persian.
+- Groq Whisper's Persian accuracy on learner speech is **not measured**. The first real take should
+  be reviewed before claiming quality; the registry's approval line says this is cloud-only
+  support, not a model-quality approval.
+- Direction is decided per text (`directionForText`), so mixed content (an English sample under a
+  Persian target, or a Persian word inside an English explanation) depends on correct `dir`
+  attributes at each site. New target-language text should set `dir="auto"` or use `Transcript`.
+- **One font per Arabic-script word:** letters from two fonts do not join. Noto Naskh Arabic is
+  bundled (Arabic subset, no Latin) and backs every UI stack, so any Arabic-script text is drawn
+  by it; `--font-arabic-script` (the same face) is for target words set on their own, with
+  `dir`. Never put a face that lacks some Urdu letters (Vazirmatn was one candidate) ahead of it:
+  Urdu explanations drew کہا as ک + o + ا when the system font lacked ہ and ے (2026-11-08).
+- Bidi punctuation around inline chips (e.g. a Latin "or" page marker inside an RTL note) was not
+  audited beyond the sample.
+
+## Interface Scale and CSS `zoom`
+
+- **floating-ui does not know CSS `zoom`** (1.8.0): it measures the reference and the window in
+  zoomed px but the floating element's size in CSS px, and the `left`/`top` it returns are
+  zoomed again. `utils/floatingZoom.ts` corrects this: `WordGloss` through `zoomedPlatform`, neo's
+  menus, selects and tooltips through the `placedUnderZoom` middleware (`neo.ts` presets).
+  **A neo floating surface must be portaled** (`portal: true`) for it to be right: inside a card,
+  floating-ui reads the zoom as a scale on the offset parent and the correction applies it twice.
+- **Off 100 %, neo's floating surfaces land on fractional device pixels** (`useFloating` rounds to whole
+  CSS px, the zoom then scales them: 311 px is 388.75 at 125 %). Harmless in every measurement so far,
+  but it is the one difference from 100 %, and Firefox is the user's browser: test there, not only Chromium.
+- **Anything measuring with `getBoundingClientRect` and setting CSS lengths must divide by the
+  zoom, and a binary search over px must use whole numbers:** `narrowestWidth.ts` looped forever
+  on a fractional width (the page froze at 90 %).
+
+- The global interface scale uses CSS `zoom` on `:root`. Chromium and WebKit support it; Firefox
+  126+ does too, but older Firefox ignores it and the control would appear inert. Real Safari,
+  Android WebView and the Tauri webviews are not device-tested.
+- `zoom` scales `100vw`/`100dvh` themselves. Any new fixed overlay must use
+  `--ui-vw`/`--ui-vh` (not raw viewport units) or it will overflow above 100%.
+- `html` and `main` use `--ui-vh`; `main.under-window-bar` subtracts `--window-bar-height` after
+  the division. The Tauri window bar path has not been run at 125–150%.
+- Media queries still use the physical viewport, so the layout breakpoints do not switch the way
+  browser zoom would; the app scales as an OS fractional-scale display, which is the requested
+  behaviour.
+- At 150% on a 390 px phone the first-visit iOS install card is capped and scrolls its body;
+  other dialogs were not all exercised at that scale.
+
+## Supertonic in the Browser (prebuilt sherpa-onnx WASM)
+
+- **Escaped C++ exceptions are bare numbers.** The prebuilt uses JavaScript exception handling, so
+  a failure inside onnxruntime/sherpa throws a pointer (e.g. `19949696`). `readableRuntimeError`
+  (`supertonic/sherpaRuntime.ts`) turns it into a learner message and logs the C++ type; the
+  exception's own message cannot be read reliably. A truncated model file produces
+  `N3Ort9ExceptionE`; files are now checksum-verified on load.
+- **One thread only.** The prebuilt runtime has no threads and the web build is not
+  cross-origin isolated, so Supertonic at Supertone's reference 8 steps runs at rtf ~1.6 per sentence
+  (unloaded), and an explanation, spoken in many short pieces, takes far longer than its audio (42 s
+  for a six-piece one under memory pressure). 3–4 steps leave audible noise (the user: "under water");
+  5 vs 8 is an open listening decision. Explanation latency is the cost to watch. Phones are slower; not measured on a device. Faster needs threads
+  (cross-origin isolation, which fights the Google Drive popup, plus a threaded build) or the
+  native sherpa-onnx engine in the Tauri apps (sherpa-onnx's Rust API has a Supertonic example).
+- **Memory only goes back when the worker ends.** The prebuilt reserves a 512 MiB heap (mostly
+  untouched pages) and `free()` never shrinks it. Two Supertonic voices measured ~262 MB of worker
+  memory; a pair with a Piper voice is 300–490 MB. The proxy's 90 s idle shutdown is the release.
+- **The Tauri apps use the same WASM path in their webview** until a native TTS engine exists.
+  Untested in WebKitGTK, WKWebView and Android WebView.
+- **No hosted samples.** Supertonic voices cannot be auditioned before the 145 MB download (the
+  explanation-voice "Play sample" button only shows for Piper voices).
+- **Licence:** Supertone's weights are OpenRAIL-M (use restrictions, attribution); the sherpa-onnx
+  runtime is Apache-2.0 (its LICENSE is copied next to the served files).
+
 ## French TTS in the Browser: G2P Is the Bottleneck
 
 Everything below was verified in headful Chrome before being accepted or rejected.

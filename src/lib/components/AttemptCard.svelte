@@ -21,12 +21,12 @@
 	import { appSettings } from '#lib/stores/settings.js';
 	import { currentTextDevice, textScaleFor, type TakeLength } from '#lib/stores/textSize.svelte.js';
 	import { practiceSession } from '#lib/stores/practiceSession.js';
-	import { getInstructionLanguage, getLanguage } from '#lib/languages/index.js';
-	import { listLocalVoices } from '#lib/speech/tts/service.js';
+	import { getInstructionLanguage, getLanguage, voicesFor } from '#lib/languages/index.js';
+	import { groupVoicesByModel } from '#lib/stores/voiceLibrary.js';
 	import { splitSentences } from '#lib/utils/segments.js';
 	import { correctedPassages } from '#lib/utils/correctedPassages.js';
 	import { fitFontSize } from '#lib/utils/fitText.js';
-	import { layoutLength, sameWords } from '#lib/utils/words.js';
+	import { directionForText, layoutLength, sameWords } from '#lib/utils/words.js';
 	import { audioActivity, togglePlay } from '#lib/stores/audio.js';
 	import Transcript from './Transcript.svelte';
 	import CorrectedPassages from './CorrectedPassages.svelte';
@@ -52,7 +52,6 @@
 		Pause,
 		Play,
 		RotateCcw,
-		Volume2,
 		X
 	} from '@lucide/svelte';
 
@@ -75,7 +74,8 @@
 	const showsEveryText = !live;
 	type TranslationView = 'off' | 'idiomatic' | 'literal' | 'wordForWord' | 'all';
 
-	const voices = $derived(listLocalVoices($appSettings.targetLanguage));
+	/** The target language's on-device voices, by the model that speaks them. */
+	const voiceGroups = $derived(groupVoicesByModel(voicesFor($appSettings.targetLanguage)));
 
 	/*
 	 * Takes run from a sentence to several minutes of speech. Short takes read
@@ -305,19 +305,25 @@
 		{ value: 'regenerate', label: 'Regenerate saved translations', before: menuIcon }
 	]);
 
+	/*
+	 * The voices are sections of the menu itself, one per model, not a hover
+	 * submenu: with a dozen voices the submenu was pushed to the far edge of the
+	 * screen, and the pointer left it on the way there, so it closed.
+	 */
+	const voiceSections = $derived<NeoMenuItem[]>(
+		voiceGroups.map((group, groupIndex) => ({
+			value: `voice-model:${group.engine}`,
+			label: `Voice · ${group.model.name}`,
+			section: true,
+			divider: { top: groupIndex === 0 },
+			items: group.voices.map((voice) => ({ value: `voice:${voice.id}`, label: voice.name, after: optionCheck }))
+		}))
+	);
+
 	const actionItems = $derived<NeoMenuItem[]>([
 		{ value: 'replay', label: 'Replay your recording', before: menuIcon },
 		{ value: 'segments', label: 'Sentence playback', before: menuIcon, after: optionCheck },
-		...($appSettings.ttsMode === 'local'
-			? [
-					{
-						value: 'voice',
-						label: 'Text-to-speech voice',
-						before: menuIcon,
-						items: voices.map((voice) => ({ value: `voice:${voice.id}`, label: voice.label, after: optionCheck }))
-					}
-				]
-			: [])
+		...($appSettings.ttsMode === 'local' ? voiceSections : [])
 	]);
 
 	function isChecked(value: unknown): boolean {
@@ -431,7 +437,7 @@
 </script>
 
 {#snippet menuIcon({ item }: { item: { value: unknown } })}
-	{#if item.value === 'segments'}<ListMusic size={16} />{:else if item.value === 'voice'}<Volume2 size={16} />{:else}<RotateCcw size={16} />{/if}
+	{#if item.value === 'segments'}<ListMusic size={16} />{:else}<RotateCcw size={16} />{/if}
 {/snippet}
 
 {#snippet optionCheck({ item }: { item: { value: unknown } })}
@@ -693,10 +699,10 @@
 										<NeoCollapse transition={quickCollapse} open={showWordBreakdown}>
 											{#if vocabulary.length > 0}
 												<!-- Each pair is a column: the source word above, its meaning below, joined by a rule. -->
-												<ol class="vocab-list" data-text-section="words">
+												<ol class="vocab-list" data-text-section="words" dir="auto">
 													{#each vocabulary as item, position (`${item.source}-${position}`)}
 														<li class="vocab-entry">
-															<span class="vocab-source">{item.source}</span>
+															<span class="vocab-source" dir={directionForText(item.source)}>{item.source}</span>
 															<span class="vocab-rule" aria-hidden="true"></span>
 															<span class="vocab-target" dir="auto">{item.target}</span>
 														</li>
@@ -1102,6 +1108,11 @@
 		line-height: 1.35;
 		text-align: center;
 		overflow-wrap: anywhere;
+	}
+	/* Arabic-script words keep the bundled Arabic-script face (Persian, Arabic, Urdu). */
+	.vocab-source[dir='rtl'] {
+		font-family: var(--font-arabic-script);
+		font-weight: 600;
 	}
 	/* A clean connector joining the source word to its meaning: one thin line, fading at both ends. */
 	.vocab-rule {

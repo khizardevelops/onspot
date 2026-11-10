@@ -7,19 +7,19 @@
 	 * STT: the product engine (Transformers.js whisper-small q4, via the
 	 * product STT worker) side by side with whisper.cpp small q5_1 / q8_0
 	 * (`@transcribe/shout`, in `whispercpp.worker.ts`). TTS: every voice the
-	 * selected language offers, on the product Piper worker.
+	 * selected language offers, on the product on-device voice worker.
 	 *
 	 * Dev tooling like `ui-sandbox` / `stt-bench`: not linked from the nav, and
 	 * imports no stores or database, so nothing here touches saved sessions or
 	 * the TTS cache.
 	 */
 	import { onDestroy } from 'svelte';
-	import { OFFERED_LANGUAGES, NEUTRAL_TUNING } from '#lib/languages/index.js';
+	import { OFFERED_LANGUAGES, NEUTRAL_TUNING, voicesFor } from '#lib/languages/index.js';
 	import { PRESET_FRENCH_SAMPLES, AudioRecorder, resampleAudioTo16kHz } from '#lib/utils/audio.js';
 	import { calculateWER } from '#lib/utils/metrics.js';
 	import { processPcm } from '#lib/utils/audioEffects.js';
 	import { WorkerWhisperAdapter } from '#lib/speech/stt/transformers/WorkerWhisperAdapter.js';
-	import { WorkerPiperAdapter } from '#lib/speech/tts/piper/WorkerPiperAdapter.js';
+	import { LocalVoiceWorker } from '#lib/speech/tts/local/LocalVoiceWorker.js';
 	import { pcmToWavUrl } from '#lib/utils/wav.js';
 	import WhisperCppWorker from './whispercpp.worker?worker';
 	import WhisperGpuWorker from './whispergpu.worker?worker';
@@ -357,7 +357,8 @@
 	}
 
 	let voiceResults = $state<Record<string, VoiceResult>>({});
-	const piper = new WorkerPiperAdapter();
+	const voices = $derived(voicesFor(language.id));
+	const piper = new LocalVoiceWorker();
 
 	function changeLanguage(id: string) {
 		languageId = id;
@@ -379,7 +380,7 @@
 			const started = performance.now();
 			const speech = await piper.synthesize(voiceId, ttsText);
 			const seconds = (performance.now() - started) / 1000;
-			const voice = language.voices.find((entry) => entry.id === voiceId);
+			const voice = voices.find((entry) => entry.id === voiceId);
 			const pcm = applyProfile
 				? await processPcm(speech.audio, speech.samplingRate, voice?.processing, NEUTRAL_TUNING)
 				: speech.audio;
@@ -395,7 +396,7 @@
 	}
 
 	async function speakAll() {
-		for (const voice of language.voices) await speak(voice.id);
+		for (const voice of voices) await speak(voice.id);
 	}
 
 	onDestroy(() => {
@@ -518,9 +519,8 @@
 	<section>
 		<h2>Text-to-speech</h2>
 		<p class="muted">
-			There is no GGUF / whisper.cpp-style alternative runtime for these voices (Piper and
-			piper-plus are ONNX-only), so the variants here are the voices {language.name} offers. Each
-			downloads on first use.
+			The variants here are the voices {language.name} offers: Piper and piper-plus on ONNX
+			Runtime Web, Supertonic on the prebuilt sherpa-onnx runtime. Each downloads on first use.
 		</p>
 		<textarea bind:value={ttsText} rows="3"></textarea>
 		<div class="row wrap">
@@ -532,7 +532,7 @@
 		</div>
 
 		<div class="cards">
-			{#each language.voices as voice (voice.id)}
+			{#each voices as voice (voice.id)}
 				{@const result = voiceResults[voice.id]}
 				<div class="card">
 					<strong>{voice.name}</strong>

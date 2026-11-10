@@ -60,6 +60,11 @@ jobs:
           mkdir -p static/piper-wasm
           cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data} static/piper-wasm/
 
+      # The sherpa-onnx voice runtime (Supertonic) is gitignored too; the script pins and verifies it.
+      - name: Fetch the sherpa-onnx voice runtime into static/
+        shell: bash
+        run: scripts/sherpa-tts-assets.sh
+
       - name: Explain missing Cloudflare credentials
         if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == ''
         run: |

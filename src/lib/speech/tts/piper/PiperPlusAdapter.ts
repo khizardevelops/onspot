@@ -9,7 +9,7 @@ import {
 } from 'piper-plus';
 import { ort } from '#lib/ort.js';
 import { BaseTTSAdapter } from '../BaseTtsAdapter';
-import { cachedFetch } from './cachedFetch';
+import { cachedFetch } from '../local/cachedFetch';
 import { createPhonemizer, loadJapaneseG2p, type WasmPhonemizer } from './japaneseG2p';
 import type { ModelProgress, TtsModelConfig } from '#lib/types.js';
 
@@ -116,7 +116,7 @@ export class PiperPlusAdapter extends BaseTTSAdapter {
 		}
 	}
 
-	protected async doSynthesize(text: string) {
+	protected async doSynthesize(text: string, pace: number) {
 		const config = this.voiceConfig!;
 		const encoded = this.phonemizer!.phonemize(text, this.language);
 		let phonemeIds: number[];
@@ -150,7 +150,8 @@ export class PiperPlusAdapter extends BaseTTSAdapter {
 			input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(length)]), [1]),
 			scales: new ort.Tensor(
 				'float32',
-				Float32Array.from([scales.noiseScale, config.inference?.length_scale ?? DEFAULT_LENGTH_SCALE, scales.noiseW]),
+				// A longer length scale is slower speech; a pace below 1 asks for that.
+				Float32Array.from([scales.noiseScale, (config.inference?.length_scale ?? DEFAULT_LENGTH_SCALE) / pace, scales.noiseW]),
 				[3]
 			)
 		};

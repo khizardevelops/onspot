@@ -16,15 +16,8 @@
 	 * can travel from the words to the speaker without passing over anything
 	 * that would replace it. A word's label lets the pointer through.
 	 */
-	import {
-		autoUpdate,
-		computePosition,
-		flip,
-		hide,
-		offset,
-		shift,
-		type ReferenceElement
-	} from '@floating-ui/dom';
+	import { autoUpdate, computePosition, flip, hide, offset, shift, type ReferenceElement } from '@floating-ui/dom';
+	import { cssZoomOf, zoomedPlatform } from '#lib/utils/floatingZoom.js';
 	import { Volume2 } from '@lucide/svelte';
 
 	interface Props {
@@ -85,17 +78,26 @@
 		const side = placement;
 		let nextFrame = 0;
 
-		const place = () =>
+		// Measured and placed under the interface scale (see `floatingZoom.ts`).
+		const place = () => {
+			const zoom = cssZoomOf(floating);
 			void computePosition(reference, floating, {
 				strategy: 'fixed',
 				placement: side,
-				middleware: [offset(GAP_PX), flip(), shift({ padding: EDGE_PADDING_PX }), hide({ strategy: 'referenceHidden' })]
+				platform: zoomedPlatform(zoom),
+				middleware: [
+					offset(GAP_PX * zoom),
+					flip(),
+					shift({ padding: EDGE_PADDING_PX * zoom }),
+					hide({ strategy: 'referenceHidden' })
+				]
 			}).then((position) => {
-				x = position.x;
-				y = position.y;
+				x = position.x / zoom;
+				y = position.y / zoom;
 				anchorOutOfSight = (position.middlewareData.hide?.referenceHidden ?? false) || isCovered(reference);
 				placedSide = position.placement.startsWith('top') ? 'top' : 'bottom';
 			});
+		};
 
 		// The takes' stack poses its cards in the frame after a scroll (see
 		// AttemptStream). Placed only when the scroll arrives, the label would
@@ -147,7 +149,7 @@
 	.word-gloss {
 		position: fixed;
 		z-index: 140;
-		max-width: min(18rem, calc(100vw - 16px));
+		max-width: min(18rem, calc(var(--ui-vw) - 16px));
 		padding: 0.25rem 0.5rem;
 		border-radius: 0.5rem;
 		background: var(--foreground);

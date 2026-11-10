@@ -182,7 +182,7 @@
 	rounded
 	elevation={3}
 	closedby="none"
-	width={{ max: 'min(30rem, calc(100vw - 2rem))' }}
+	width={{ max: 'min(30rem, calc(var(--ui-vw) - 2rem))' }}
 	aria-labelledby="permissions-title"
 >
 	<div class="flex flex-col gap-4 p-1">

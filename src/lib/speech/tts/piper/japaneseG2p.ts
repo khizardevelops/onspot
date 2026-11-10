@@ -13,30 +13,20 @@
  * only after its SHA-256 matches the file published to npm as
  * piper-plus@0.7.0. Loaded once per worker and shared by every Japanese voice.
  */
-import { cachedFetch } from './cachedFetch';
-import { JAPANESE_G2P_BYTES } from '#lib/languages/index.js';
-import { JAPANESE_G2P_SHA256 as G2P_SHA256, JAPANESE_G2P_URL as G2P_URL } from './assets';
+import { cachedFetch, forgetCached, sha256Hex } from '../local/cachedFetch';
+import { JAPANESE_G2P_BYTES } from '#lib/languages/voices.js';
+import { JAPANESE_G2P_SHA256 as G2P_SHA256, JAPANESE_G2P_URL as G2P_URL } from '../local/assets';
 import initPhonemizer, { WasmPhonemizer } from './vendor/piper-plus-wasm/piper_plus_wasm.js';
 
-const CACHE_NAME = 'onspot-tts-cache';
-
 let ready: Promise<void> | null = null;
-
-async function sha256(bytes: ArrayBuffer): Promise<string> {
-	const digest = await crypto.subtle.digest('SHA-256', bytes);
-	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
 
 async function download(onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer> {
 	// The CDN compresses the transfer, so Content-Length (if any) is not the
 	// size of the bytes read; report progress against the known file size.
 	const bytes = await cachedFetch(G2P_URL, (loaded) => onProgress?.(loaded, JAPANESE_G2P_BYTES));
-	if ((await sha256(bytes)) !== G2P_SHA256) {
+	if ((await sha256Hex(bytes)) !== G2P_SHA256) {
 		// Never run unverified code, and never keep serving a bad cached copy.
-		await caches
-			.open(CACHE_NAME)
-			.then((cache) => cache.delete(G2P_URL))
-			.catch(() => undefined);
+		await forgetCached(G2P_URL);
 		throw new Error('The Japanese dictionary download was corrupted or altered. Try the download again.');
 	}
 	return bytes;

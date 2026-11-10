@@ -64,7 +64,16 @@ async function addLongTakes(): Promise<string> {
 		startedAt: at(0),
 		endedAt: null,
 		createdAt: at(0),
-		updatedAt: at(60_000)
+		updatedAt: at(60_000),
+		// French taught in English, read by the default French voice.
+		setup: {
+			targetLanguage: 'fr',
+			instructionLanguage: 'en',
+			ttsMode: 'local',
+			ttsVoice: 'piper-tom-medium',
+			explanationVoice: '',
+			targetSpeechPace: 0.9
+		}
 	});
 
 	for (const [index, take] of (takes as SimulatedTake[]).entries()) {

@@ -1,5 +1,197 @@
 # Last Session
 
+## 2026-11-10 (latest): Rust question, then native Supertonic measured and planned
+
+- **Asked:** would Rust or the Rune UI framework have been better, and would the models run faster?
+  Answer: no. Rune (github.com/anomalyco/rune) has no Android target, records the microphone only on
+  macOS, has an experimental web target, and has no effect on inference. The real gap is that
+  Supertonic still runs as single-thread WASM inside the Tauri apps. The user chose to plan that.
+- **Measured, no repo changes:** native at 2 threads against WASM on the same sentences: laptop 0.33
+  against 1.68, S24 FE 0.51 against 1.87 (seconds of computing per second of speech). More threads
+  were slower. No crash on hostile text on either device. Peak memory 350–385 MB.
+- **Paused at the user's request.** Everything needed to continue is in
+  `docs/prompts/native-supertonic-voices.md`, which starts with two questions for the user.
+- **Not done:** the phone IPC probe (moved to the first APK), and the user's listening comparison.
+- **Phone:** the test folder was removed from `/data/local/tmp`; the installed app was not touched.
+  Results and the bench kit stay outside the repo, in
+  `/mnt/data/not_synced/dev-cache/native-bench/supertonic-gate/`.
+
+## 2026-11-08: Dropdowns, tooltips, feedback sheet motion, a freeze
+
+- **Asked:** "serious ui issues with drop down menus", "buggy animation", tooltips "come out of
+  now where", the feedback swipe-up "not so fast it looks buggy".
+- **Found, by recording every frame (muted):** a global transition animated the position of every
+  neo floating surface (slid in from the top-left, at any scale); neo's menus/selects/tooltips
+  ignored the interface scale (menu 71 px off and off-window, select 215 px aside at 125 %); select
+  lists reversed when opening upwards; the sheet moved 263 px in one frame. And a real freeze:
+  `narrowestWidth.ts` looped forever on fractional widths (the Practice page hung at 90 %).
+- **Built:** `utils/floatingZoom.ts`, presets in `neo.ts`, `.neo-tooltip` rule in `app.css`,
+  `SettingSelect` opens at the choice, `settleMotion` in `gestures/sheetMotion.ts`, sheet timings.
+- **Verified:** check 0/0; frame recordings at 90/100/125/150 % desktop and 100/125 % at 390 px;
+  14 scales for hangs; sheet by button and by real touch events; word popup regression 0–1 px.
+- **Tools:** `scratchpad/tools/{floating-frames,tooltip-debug,select-check,sheet-motion-check,hang-check}.mjs`.
+  A `.neo-tooltip-trigger` is not always a hover tooltip: menu triggers use it too.
+- **Then:** "the tooltips animation is still fucked": I had only checked where they end up. Recorded
+  open/close frames (`tools/tooltip-frames.mjs`) and retimed them (`decisions.md`). A passing pointer
+  now opens nothing; neighbours crossfade with no gap. Lesson: check a motion complaint frame by
+  frame through open, close and the next open, not the settled position.
+- **Then:** "jittery on some, and on other not" + an open dropdown moving on scroll: see `decisions.md`.
+  A survey across every tooltip (`tools/tooltip-survey.mjs`) found 100 % opening, so "hit or miss" was
+  smoothness: per-letter wobble from scaling (`tools/tooltip-wobble.mjs`), and the takes page's glare.
+- **Then:** dropdowns "transition from the right side and jitter", only away from 100 % scale. **The
+  user runs Firefox (a firefoxpwa runtime, KDE Wayland; monitors at 1× and 1.25×), everything before
+  this was tested in Chromium.** Matching Firefox is in the scratchpad (`browsers/`, run with
+  `PLAYWRIGHT_BROWSERS_PATH`; `tools/menu-frames-firefox.mjs`, `ff-anything-moves.mjs`, `ff-video.mjs`).
+  Fixed the one surface measured moving: selects (neo's `.neo-fade` CSS scale, `app.css`).
+  **Not reproduced:** PopMenus do not move in Firefox or Chromium at 100/110/125/150 %, 1× or 1.25×,
+  overlay or classic scrollbars, by layout on every frame or by painted video. The one measured
+  difference off 100 %: floating surfaces land on fractional pixels (388.75, 252.5), since useFloating
+  rounds in CSS px before the zoom. Needs the user to name the dropdown and scale, or a recording.
+- **Open:** fades on the takes page are still ~23 ms a frame headless (17 on Settings); software
+  compositing, not separable from a real GPU here. Not felt on real hardware. Not committed.
+
+## 2026-11-08 (earlier today): Voice loudness leveling
+
+- **Asked:** "why didn't you move forward with the audio normalisation fix?" then "implement it …
+  then move the implemented idea into the archive"; music playing, so no model audio may be audible.
+- **Built:** `utils/loudness.ts` (BS.1770 meter), `utils/peakLimiter.ts`, `processPcm` rewritten
+  (tone → level → volume → limit → top-up), preview leveling in `stores/ttsPreview.ts`,
+  explanation voice with its own profile, pieces trimmed before processing, `lufs-20` cache tag.
+  Archived the bug in `docs/planning/archive/bugs.md`; numbers in `docs/benchmarks/tts.md#loudness`.
+- **Verified:** check 0/0, SPDX; the meter vs the Python reference on 51 clips (0.005 LU); muted
+  headless Chromium on the dev server (`--mute-audio`): five voices, a long text, two explanations,
+  a tuned voice, the stored copies and the Settings preview (`tools/leveling-app-check.mjs`).
+- **Found:** Opus at 32 kbps takes 2 dB off Tom's stored copies (his treble); pre-existing, not
+  changed (size trade-off for the user). Always pass `--mute-audio` when the user is listening to
+  something.
+- **Open:** see `tasks.md` "Voice loudness"; earlier open decisions unchanged. Not committed.
+
+## 2026-11-08 (earlier): Every on-device-voice language; support notices; card menu fit
+
+- **Asked:** (1) the card's text-to-speech submenu opened at the far edge, unclickable; (2) "add all
+  the languages that the offline tts supports" to both language lists, and tell the learner when
+  their cloud API or offline model does not support a selected language.
+- **Built:** see `state.md` and `decisions.md` (2026-11-08 entries): `LANGUAGE_FACTS`,
+  `requestedLanguage()`, `defaultInstructionLanguageFor`, `languages/support.ts`,
+  `LanguageSupportNotice.svelte`, sentence/word splitting for hi/el/zh, picker search, inline card
+  voices, the menu-list height cap in `neo.ts`. Docs: `docs/architecture/{languages,supported-languages}.md`
+  (also corrected 5 → 8 Supertonic steps there).
+- **Verified:** check 0/0; SPDX; bun checks of the splitters; scratchpad Playwright script
+  (`tools/languages-check.mjs`) on the user's dev server: counts 33/35, four notice scenarios, the
+  phone select (34 options, scrolls, no overflow), Korean and English switches, card menu on
+  desktop and phone. Profiles in `~/.cache`, deleted.
+- **Gotchas:** a fresh profile on `/` shows the permissions prompt (set
+  `onspot.permissions.microphone=granted`); cards behind the front of the stack are `inert`
+  (select `:not([inert] button)`); an ASCII `;` was nearly added as the Greek question mark (check
+  code points when adding punctuation).
+- **Then:** the user pointed out Piper's Urdu voices; added Urdu Fasih/Aegis and Bengali Google
+  (voice check 3/3 via `tools/run-voice-check.mjs … ur,bn`), the Urdu full stop `۔`; 35/35 lists.
+  Lesson: check rhasspy's full `voices.json` for a language before calling it cloud-only.
+- **Then:** Urdu text rendered broken; the user suspected encoding/zero-width characters. The
+  code points were right: ہ and ے came from a second font. Bundled Noto Naskh Arabic in every
+  stack; fixed `۔.` (shared sentence marks); wrong-language follow-ups dropped. Verified with
+  `tools/urdu-check.mjs` (seeds the long-takes session through the app's own module URLs: a
+  plain `/src/...` import gets a separate module instance).
+- **Then:** asked how to even out voice loudness (answered with measurements, not built); the word
+  popup "elsewhere for Persian" was CSS zoom (fixed in `WordGloss`); sessions now keep their setup
+  (migration 10) and voices are remembered per language. Test harness gotcha: the long-takes
+  fixture now records a French setup, so a test that seeds other-language takes into it must set
+  the session's setup too, or opening it switches the test's Settings back to French.
+- **Open:** user decisions still pending: 5 vs 8 steps; the sound-quality gate; cloud pickers beside Settings; cloud read-back honouring pace; Fasih vs Aegis by
+  ear; Naskh vs Nastaliq for Urdu; a default explanation voice for a new language. Commit when asked.
+
+## 2026-11-08 (later): Voice library beside Settings; Supertonic error hardening
+
+- **Asked:** voice selector as a window beside Settings (not a modal), more detail, grouped by model,
+  download and try from there. Mid-task the user reported "supertonic model fails: 19949696".
+- **Error:** could not reproduce with any text, reloads or mixed scripts in headless Chromium;
+  a truncated cached model reproduces the exact shape (Ort::Exception as a bare pointer). Added
+  SHA-256 checks with self-healing re-download (verified in the app with a planted damaged
+  vocoder) and readable errors naming the C++ type. Still need the user's environment/action.
+- **Built:** see the 2026-11-08 voice-library entry in `decisions.md` and `state.md`.
+- **Verified:** library-check script (scratchpad) on the dev server at 1440/900/390 px; check 0/0;
+  build; SPDX. Test profiles in `~/.cache` deleted afterwards.
+
+## 2026-11-08: On-device voices for any language (Supertonic 3 on prebuilt sherpa-onnx)
+
+- **Asked:** critique a pasted plan to replace piper-wasm with sherpa-onnx (Matcha/Supertonic/VITS/
+  MMS); then the user set requirements: <300 MB RAM, <500 MB storage, quick, Tauri + web,
+  multilingual, high quality, for **any instruction + any target language**. No custom builds, no
+  scope creep (`no-overkill-vendor-prebuilt` memory). After hearing spike clips: "Supertonic sounds
+  really good"; then "IMPLEMENT". Latency ~1.3 rtf is acceptable (feedback is after the take).
+- **Spike (scratchpad, measured):** prebuilt sherpa-onnx runs unmodified (empty `getPreloadedPackage`);
+  Supertonic 262 MB for both roles, 145 MB once, rtf ~0.9–1.1 per sentence at 5 steps (3 was tried and sounded watery); Piper on
+  sherpa no faster and heavier, needs re-exported files → Piper stays on ORT + piper-wasm. The
+  pasted plan's class names/models (OfflineTtsMatcha, French Matcha, ru-supertonic) did not exist.
+- **Built:** see `state.md` (2026-11-08 entry) — voice table, `tts/local/`, `tts/supertonic/`,
+  asset script + CI + LICENSE, languageData dedupe, Settings labels, `/model-lab/voices/`, docs.
+- **Bug caught by the build:** the bundler turned an aliased `eval` into a direct `eval`; now
+  `globalThis.eval`, re-verified on the built app.
+- **Verification:** 48/48 voices; product path; Settings at 390/1280 px; build. Test browser
+  profiles lived in `~/.cache` (not tmpfs) and were deleted afterwards.
+- **Gotchas:** `bun run check` (`svelte-kit sync`) and editing an imported `src/` module reload the
+  dev page mid-test; `pkill -f <pattern>` can kill its own shell (exit 144) when the pattern is in
+  the command line; `curl` was not on this shell's PATH once (use `/usr/bin/curl`).
+- **Next:** listen 3 vs 5 steps; Persian `local.tts` after a listening pass; native Supertonic for
+  Tauri; Japanese engine ticket; commit when asked.
+
+## 2026-11-07: Persian support (cloud only) and right-to-left text
+
+- **Asked:** add Persian using only cloud APIs for STT/TTS/LLM, handle RTL "beautifully", defer
+  local models; also move implemented ideas from `docs/planning/ideas.md` to the archive.
+- **Registry:** `LanguageDefinition` gained `direction` and `local: { stt, tts, correction }`.
+  Persian `fa` is `rtl`, `voices: []`, `defaultVoice: ''`, all three `local` flags `false`, prompts
+  and a preview sentence; `isCloudOnly()` beside `LANGUAGES`. French/Japanese keep all local
+  engines on.
+- **Enforcement:** first-run picker + `setTargetLanguage` switch Local → Cloud and disable Local;
+  `initSettings` repairs stale/restored settings; `processing.ts`, `languageData.ts`, the three
+  Settings panels and `CapabilityRow` (`localAllowed`) treat `local.* === false` as Cloud. No
+  "Install data" gate for Persian.
+- **RTL:** new `directionForText()`; `Transcript` takes `direction`/`locale`; `dir` on follow-up
+  questions, inline explanation `<mark>`s, corrections, alternatives, word pairs, the Prompt and
+  History snippets; `--font-persian` on every Arabic-script run (transcript, marks, word-pair
+  source); the Feedback correction line is `dir=rtl` with a rotated arrow; `؟`/`،`/`؛` in
+  `segments.ts`; U+200C kept in `SPACED_TOKEN`; Persian LLM rules in `languageGuidance.ts`.
+- **Gotcha found late:** Persian text styled with the UI serif/sans (inline `<mark>`, word-pair
+  source) picked a fallback face that shaped letters wrongly (detached dots, broken joining). The
+  fix is the Persian stack on any RTL run, not a bidi or line-height issue.
+- **Text size preview:** `sampleSession(instructionLanguage, targetLanguageId)` with a Persian
+  sample; the route now waits for `settingsReady` (it used to snapshot defaults, showing French).
+- **Onboarding:** cloud-only languages disable the on-device voice card and force cloud STT.
+- **Docs/archive:** languages.md, supported-languages.md (Persian + RTL sections), README language
+  table, decisions entry; PWA and Persian moved to `archive/ideas.md` (2026-11-07) and the
+  local-models follow-up left active in `ideas.md`.
+- **Verified:** check 0/0, build; Playwright: persistence across reload, all three rows locked to
+  Cloud with hints, Practice names Persian with no install gate, Text size sample `dir=rtl` with
+  Persian font for transcript/question/vocab, no overflow, no page errors.
+- **Gotchas:** the Text size preview previously captured `get(appSettings)` before hydration, so a
+  non-default language never reached the sample; the language select's trigger has empty
+  `textContent` (its value lives in an input), so assert via the Processing rows or a reload.
+- **Not verified:** live Groq/LLM/ElevenLabs Persian run, real iPhone/Safari, Persian model quality.
+
+## 2026-11-07: Global interface scale (80–150%)
+
+- **Asked:** add a global zoom level adjustor with fractional scaling, on top of the existing
+  per-part Text size settings.
+- **Built:** `stores/zoom.svelte.ts` (device-local `onspot.ui-zoom.v1`, 80–150%, 5% steps,
+  pre-paint in `app.html`), `settings/ZoomSettings.svelte` (NeoRange, zoom keys, live percentage,
+  reset; phone track on its own row), Settings import/hash, and the new section before Text size.
+- **Layout:** root `zoom`, `--ui-vw`/`--ui-vh` divided by the scale; `html`/`main` heights use
+  `--ui-vh`; Tauri window bar subtracted after the division; paper sizes and fixed overlay widths
+  (`PwaUpdate`, `WordGloss`, `VoicePreview`, `VoicePicker`, `LanguagePicker`, `PermissionsPrompt`,
+  `SyncConflictDialog`, `RestoreDatabaseButton`, `TextSizeEditor`) use the divided helpers. The iOS
+  install card is capped at `--ui-vh - 84px` and scrolls its body.
+- **Gotchas:** root `zoom` scales `100vw`/`100dvh` themselves, so fixed overlays overflow unless
+  they use `--ui-vw`/`--ui-vh`; NeoRange's default `20rem` container floor pushed the value/keys
+  off a phone (override `min-width: 0` and let the phone track take a full row); setting `html`
+  height to `100%` still made the document taller than the window until it used `--ui-vh`.
+- **Verified:** check/build/SPDX; Playwright desktop 80/100/125/150, iPhone 100/125/150, dark 125;
+  main/doc exactly the viewport, no horizontal scroll; slider, zoom keys and reset update root and
+  storage; text-size editor and practice screen fit at 150; install card capped.
+- **Not verified:** real Safari/WebKit, Firefox, Android WebView, Tauri window bar at 150%, drag
+  while resizing, every dialog at 150%; not deployed yet.
+- **Next:** device/webview pass, then `scripts/cf-deploy.sh` when asked.
+
 ## 2026-11-07: Release 0.2.4 (all installers on Releases)
 
 - **Asked:** "just make all the github action artifacts appear in the release section … I want all

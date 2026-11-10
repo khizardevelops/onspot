@@ -2,6 +2,7 @@
 
 <script lang="ts">
 	import { quickSelect } from '#lib/neo.js';
+	import { cssZoomOf } from '#lib/utils/floatingZoom.js';
 	import { NeoSelect } from '@dvcol/neo-svelte/inputs';
 
 	interface Option {
@@ -35,6 +36,25 @@
 		open = false;
 		document.getElementById(id)?.focus({ preventScroll: true });
 	}
+
+	/** Puts the current choice in the middle of the list; neo keeps a closed list in the page, so each is marked with its select. */
+	function centreCurrentChoice(): void {
+		const list = document.querySelector<HTMLElement>(`[data-select-list="${id}"]`);
+		const choice = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+		if (!list || !choice) return;
+
+		const listBox = list.getBoundingClientRect();
+		const choiceBox = choice.getBoundingClientRect();
+		const offCentre = choiceBox.top + choiceBox.height / 2 - (listBox.top + listBox.height / 2);
+		list.scrollTop += offCentre / cssZoomOf(list);
+	}
+
+	// A list opens at the current choice, as a native picker does, however long it is.
+	$effect(() => {
+		if (!open) return;
+		const frame = requestAnimationFrame(centreCurrentChoice);
+		return () => cancelAnimationFrame(frame);
+	});
 </script>
 
 <div class="setting-select w-full {className}">
@@ -53,7 +73,7 @@
 		aria-label={label}
 		containerProps={{ id, 'aria-label': label, 'aria-haspopup': 'listbox' }}
 		{...quickSelect}
-		listProps={{ ...quickSelect.listProps, 'aria-label': label }}
+		listProps={{ ...quickSelect.listProps, 'aria-label': label, 'data-select-list': id }}
 	/>
 </div>
 

@@ -38,6 +38,7 @@
 	import { practiceSession } from '#lib/stores/practiceSession.js';
 	import { correctionTitle, isDeletion, isInsertion } from '#lib/utils/corrections.js';
 	import { parseExplanation } from '#lib/adapters/llm/index.js';
+	import { directionForText } from '#lib/utils/words.js';
 	import { narrowestWidthKeepingLayout } from '#lib/utils/narrowestWidth.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
@@ -120,6 +121,11 @@
 		warning: 'Warning',
 		suggestion: 'Suggestion'
 	};
+
+	/** A correction line reads in the direction of its own text, so "said → say" runs the right way. */
+	function correctionLineDirection(correction: Correction): 'ltr' | 'rtl' {
+		return directionForText(correction.original) === 'rtl' ? 'rtl' : 'ltr';
+	}
 
 	/** What the header says is showing. */
 	const FILTER_LABEL: Record<Filter, string> = {
@@ -531,17 +537,17 @@
 								</span>
 
 								<!-- One line: what was said, struck through, then what to say. -->
-								<span class="correction-line">
+								<span class="correction-line" dir={correctionLineDirection(correction)}>
 									{#if isDeletion(correction)}
-										<span class="wrong-text">{correction.original}</span>
+										<span class="wrong-text" dir={directionForText(correction.original)}>{correction.original}</span>
 										<span class="tag tag-remove">Remove</span>
 									{:else if isInsertion(correction)}
 										<span class="tag tag-add">Add</span>
-										<span class="right-text">{correction.replacement}</span>
+										<span class="right-text" dir={directionForText(correction.replacement)}>{correction.replacement}</span>
 									{:else}
-										<span class="wrong-text">{correction.original}</span>
-										<ArrowRight class="size-3.5 shrink-0 opacity-50" />
-										<span class="right-text">{correction.replacement}</span>
+										<span class="wrong-text" dir={directionForText(correction.original)}>{correction.original}</span>
+										<ArrowRight class="correction-arrow size-3.5 shrink-0 opacity-50" />
+										<span class="right-text" dir={directionForText(correction.replacement)}>{correction.replacement}</span>
 									{/if}
 								</span>
 								{#if correction.replacementTranslation && !isDeletion(correction)}
@@ -563,7 +569,7 @@
 										<div class="mt-2 flex flex-wrap items-center gap-1.5">
 											<span class="text-xs text-faint">Try instead</span>
 											{#each correction.formalAlternatives as alternative (alternative)}
-												<span class="tag">{alternative}</span>
+												<span class="tag" dir={directionForText(alternative)}>{alternative}</span>
 											{/each}
 										</div>
 									{/if}
@@ -1112,6 +1118,12 @@
 		box-shadow: var(--paper-depth), var(--card-shadow-lifted);
 		transform: translateY(-2px);
 	}
+	.wrong-text[dir='rtl'],
+	.right-text[dir='rtl'],
+	.tag[dir='rtl'] {
+		font-family: var(--font-arabic-script);
+	}
+
 	/* The correction picked in the transcript. */
 	.feedback-card.linked {
 		outline: 1.5px solid color-mix(in srgb, var(--brand) 70%, transparent);
@@ -1207,6 +1219,14 @@
 		gap: 0.3125rem;
 		font-size: calc(0.8125rem * var(--text-scale-feedback, 1));
 		line-height: 1.3;
+	}
+	/* Reading right-to-left, the arrow points from what was said to the fix. */
+	.correction-line[dir='rtl'] :global(.correction-arrow) {
+		rotate: 180deg;
+	}
+	.correction-line[dir='rtl'] .wrong-text,
+	.correction-line[dir='rtl'] .right-text {
+		line-height: 1.6;
 	}
 	.wrong-text {
 		opacity: 0.6;

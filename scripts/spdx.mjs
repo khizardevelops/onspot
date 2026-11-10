@@ -42,6 +42,7 @@ const SKIP_PATHS = [
 	'src/lib/speech/tts/piper/vendor',
 	'src/routes/model-lab/vendor',
 	'static/piper-wasm',
+	'static/sherpa-onnx',
 	'src-tauri/gen',
 	'src-tauri/target'
 ];

@@ -7,30 +7,26 @@ Current, unimplemented ideas only. Completed and rejected ideas are in
 When an idea ships or is rejected, move it to the archive under a dated heading and remove it
 from this file.
 
-> Last reviewed: 2026-11-06.
+> Last reviewed: 2026-11-07.
 
 ## Product
 
 - [ ] **Add a streak system.**
-
-- [ ] **Support iPhone and iPad as a PWA.** iOS is the only platform without onspot, and the App
-  Store needs a paid Apple account, so ship the web build as an installable home-screen app
-  instead. The full brief for the implementing agent, with phases, iOS limits to verify and the
-  questions to answer first, is [`docs/prompts/ios-focused-pwa.md`](../prompts/ios-focused-pwa.md).
-  - **2026-11-06:** the installable PWA is live at
-    [onspot.khizardevelops.workers.dev](https://onspot.khizardevelops.workers.dev). It is a
-    Cloudflare Workers static-assets site deployed with `cf deploy --prebuilt` (the `cf` CLI cannot
-    build SvelteKit directly), with manifest/icons/launch images, a production-only offline
-    service worker, update prompt, and the iPhone/iPad install guide. Browser-verified. Remaining:
-    verify on a real iPhone/iPad, test Google Drive and local models there, add the new origin to
-    the Google OAuth client, and keep the old GitHub Pages origin up with an export-and-move
-    notice.
-
-- [ ] lets try out adding persian support for this. we will only use the cloud api key provided for inference and tts, sst, and llm. once we beautifully implement support for persian (and right-to-left languages) then we ill figure out finding the best light weight local models for these cloud / online only supported languags
-
-
-
+- [ ] Add a link to the github repo in the app. add a github icon, add a section in the app called "about" or about onspot or smth, it should lay out the aims of this app, what this app can and cannot do (delete the preexsiting section from settings). add a link to the repo of this app and a link to my dev twitter (x.com/khizardevelops)
+- [ ] after changing the language of instructiom, the prompts should also change so that they are in the language of instruction
+- [ ] the font size of the text in the follow up should be dynamic. less text, bigger font size. a lot of text, smaller font size. there should be a floor and a ceiling set
+- [ ] add localisation 
+- [ ] add a free flowing speaking mode, unprompted where the user can just speak about anything without any prompt. the speaker will be graded on how coherant they were if they were saying anything of substanc rather than speaking mindlessly utter gibberish
+- [ ] the hover over words for translation should also incldude info like if the word is a noun, verb, adjective etc. this detailed hover over needs to be enabled by the user tho in the settings
 ## Models and performance
+
+- [ ] **Bring Persian (and other cloud-only languages) onto the device.** Persian ships today as a
+  cloud-only language (Groq speech-to-text, a cloud LLM, a cloud voice) because no local model has
+  passed the human gates. Find lightweight local STT/TTS options for cloud-only languages (Persian,
+  Arabic, Urdu, Hindi/Bengali, Korean, Vietnamese…), measure them like the model lab did, and turn
+  the registry's `local` flags back on once one is good enough. The local path, and what it needs,
+  is described in
+  [`docs/architecture/supported-languages.md`](../architecture/supported-languages.md#persian-fa--cloud-only).
 
 - [ ] **Find a lighter STT model or runtime.** Research
   [`model_problem.md`](../research/model_problem.md) and look for alternatives manually.

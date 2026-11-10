@@ -71,7 +71,7 @@
 	backdrop
 	rounded
 	elevation={3}
-	width={{ max: 'min(32rem, calc(100vw - 2rem))' }}
+	width={{ max: 'min(32rem, calc(var(--ui-vw) - 2rem))' }}
 	aria-labelledby="sync-conflict-title"
 	aria-describedby="sync-conflict-description"
 >

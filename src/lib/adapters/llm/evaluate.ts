@@ -21,6 +21,8 @@ import {
 	type FollowUp
 } from './explanation';
 import { sameWords } from '#lib/utils/words.js';
+import { languageIdByName } from '#lib/languages/index.js';
+import { couldBeWrittenIn } from '#lib/languages/textLanguage.js';
 import { MAX_EVALUATION_TOKENS } from '../../config';
 import type {
 	ConnectorSuggestion,
@@ -141,17 +143,39 @@ function mapConnector(raw: unknown): ConnectorSuggestion | null {
  * in the explanation would have it spoken twice and shown twice, so the
  * question is lifted out, and used as the follow-up (without a translation)
  * when the model gave no `followUp`.
+ *
+ * @param language The studied language's English name, when known: a
+ *   follow-up written in another language is dropped (`followUpInLanguage`).
  */
 function explanationAndFollowUp(
 	rawExplanation: unknown,
-	rawFollowUp: unknown
+	rawFollowUp: unknown,
+	language?: string
 ): { explanation: string; followUp: FollowUp | null } {
 	const { parts, askedQuestion } = separateFollowUp(composeExplanation(rawExplanation));
 	const explanation = formatExplanation(parts).trim();
 	const followUp =
 		normalizeFollowUp(rawFollowUp) ?? (askedQuestion ? { question: askedQuestion, translation: '' } : null);
 
-	return { explanation, followUp };
+	return { explanation, followUp: followUpInLanguage(followUp, language) };
+}
+
+/**
+ * The follow-up, if its question can be in the studied language. The question
+ * is shown as the studied language and read by its voice, so one the model
+ * wrote in another language (Urdu for a Persian learner taught in Urdu: both
+ * share a script) would be read aloud wrongly. It is dropped instead; the
+ * explanation stays.
+ *
+ * @param followUp The model's follow-up.
+ * @param language The studied language's English name ("Persian").
+ */
+function followUpInLanguage(followUp: FollowUp | null, language: string | undefined): FollowUp | null {
+	const languageId = language ? languageIdByName(language) : undefined;
+	if (!followUp || !languageId || couldBeWrittenIn(followUp.question, languageId)) return followUp;
+
+	console.warn(`[evaluate] dropped a follow-up question that is not in ${language}:`, followUp.question);
+	return null;
 }
 
 /** Validates and normalises a model response into a trusted `EvaluationResult`. */
@@ -170,7 +194,7 @@ export function normalizeEvaluation(raw: unknown, transcript: string, language?:
 		: [];
 
 	const correctedText = asString(r.correctedText).trim() || transcript;
-	const { explanation, followUp } = explanationAndFollowUp(r.explanation, r.followUp);
+	const { explanation, followUp } = explanationAndFollowUp(r.explanation, r.followUp, language);
 
 	// A take in the wrong language has no French mistakes to list, so the model
 	// returns none, and an empty list reads as a clean take. Flag the whole take

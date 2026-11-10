@@ -11,6 +11,8 @@ import {
 	DEFAULT_LANGUAGE_ID,
 	INSTRUCTION_LANGUAGES,
 	NEUTRAL_TUNING,
+	defaultInstructionLanguageFor,
+	getExplanationVoice,
 	getLanguage,
 	getVoice,
 	type VoiceTuning
@@ -35,6 +37,18 @@ export interface AppSettings {
 	ttsMode: 'local' | 'cloud';
 	/** Local TTS voice id from the registry. */
 	ttsVoice: string;
+	/**
+	 * The read-back voice last chosen for each studied language, by language
+	 * code, so switching back to a language brings its voice back
+	 * (`withRememberedVoices`).
+	 */
+	targetVoiceByLanguage: Record<string, string>;
+	/**
+	 * How fast the target-language voice speaks on the device, as a share of
+	 * its natural pace (`SPEECH_PACES`): read-back, tapped words and the
+	 * target-language words of explanations. Slower helps a learner follow.
+	 */
+	targetSpeechPace: number;
 	/** Correction endpoint: a cloud provider or a local OpenAI-compatible server. */
 	correctionMode: 'cloud' | 'local';
 	/** Local correction server, e.g. LM Studio, llama.cpp or Ollama. */
@@ -66,6 +80,8 @@ export interface AppSettings {
 	 * Empty until the learner picks one.
 	 */
 	explanationVoice: string;
+	/** The explanation voice last chosen for each language of instruction, by language code. */
+	explanationVoiceByLanguage: Record<string, string>;
 	targetLanguage: string;
 	/**
 	 * The language the learner is taught in (`INSTRUCTION_LANGUAGES`):
@@ -89,12 +105,25 @@ export interface AppSettings {
 	reminderFrequency: 'frequent' | 'infrequent';
 }
 
+/**
+ * The speaking paces a learner can choose for the target-language voice, as
+ * shares of the voice's natural pace. The voices slow down when they make the
+ * audio (Supertonic's duration, Piper's length scale), which sounds natural,
+ * unlike slowing a clip down when it plays.
+ */
+export const SPEECH_PACES = [0.8, 0.9, 1, 1.1] as const;
+
+/** A little slower than natural: the user found the voices' natural pace too fast to follow (2026-11-08). */
+export const DEFAULT_TARGET_SPEECH_PACE = 0.9;
+
 export const DEFAULT_SETTINGS: AppSettings = {
 	level: 'B1',
 	mode: 'exam',
 	sttMode: 'local',
 	ttsMode: 'local',
 	ttsVoice: 'piper-tom-medium',
+	targetVoiceByLanguage: {},
+	targetSpeechPace: DEFAULT_TARGET_SPEECH_PACE,
 	correctionMode: 'cloud',
 	localLlmUrl: 'http://localhost:1234/v1',
 	localLlmModel: '',
@@ -109,6 +138,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	customBaseUrl: '',
 	customModel: '',
 	explanationVoice: '',
+	explanationVoiceByLanguage: {},
 	// French is currently the only approved language. A usable default avoids an
 	// indeterminate first boot that otherwise stays at “Checking language data…”.
 	targetLanguage: DEFAULT_LANGUAGE_ID,
@@ -261,17 +291,28 @@ export async function initSettings(): Promise<void> {
 	// more languages are approved, this remains a safe default rather than a
 	// null state that prevents the data gate from resolving.
 	loaded.targetLanguage = match?.id ?? DEFAULT_LANGUAGE_ID;
+	// Cloud-only languages must not load with stale local modes (e.g. settings
+	// written before the language became cloud-only, or a restored backup).
+	const targetLanguage = getLanguage(loaded.targetLanguage);
+	if (targetLanguage) {
+		if (!targetLanguage.local.stt) loaded.sttMode = 'cloud';
+		if (!targetLanguage.local.tts) loaded.ttsMode = 'cloud';
+		if (!targetLanguage.local.correction) loaded.correctionMode = 'cloud';
+	}
 	loaded.voiceTunings = sanitizeTunings(loaded.voiceTunings);
-	// An unknown instruction language, or the studied language itself, falls back to English.
+	// An unknown instruction language, or the studied language itself, falls back to the default.
 	const teachable = INSTRUCTION_LANGUAGES.some(
 		(language) => language.id === loaded.instructionLanguage && language.id !== loaded.targetLanguage
 	);
-	if (!teachable) loaded.instructionLanguage = DEFAULT_INSTRUCTION_LANGUAGE_ID;
+	if (!teachable) loaded.instructionLanguage = defaultInstructionLanguageFor(loaded.targetLanguage);
 	// A voice saved for another language (or removed from the registry) would
 	// leave the Voice select blank and read-backs on an unknown voice.
 	if (!getVoice(loaded.targetLanguage, loaded.ttsVoice)) {
 		loaded.ttsVoice = getLanguage(loaded.targetLanguage)?.defaultVoice ?? DEFAULT_SETTINGS.ttsVoice;
 	}
+	loaded.targetVoiceByLanguage = rememberedVoices(loaded.targetVoiceByLanguage, getVoice);
+	loaded.explanationVoiceByLanguage = rememberedVoices(loaded.explanationVoiceByLanguage, getExplanationVoice);
+	Object.assign(loaded, withRememberedVoices(loaded, loaded));
 	// Before Automatic, every learner had a model saved: the provider's preset
 	// unless they changed it, and the preset was never a choice. A non-chat
 	// model (a classifier such as gpt-oss-safeguard) can never evaluate a take.
@@ -290,6 +331,9 @@ export async function initSettings(): Promise<void> {
 		if (!allowed.includes(loaded[field] as string)) {
 			(loaded as unknown as Record<string, unknown>)[field] = DEFAULT_SETTINGS[field];
 		}
+	}
+	if (!(SPEECH_PACES as readonly number[]).includes(loaded.targetSpeechPace)) {
+		loaded.targetSpeechPace = DEFAULT_TARGET_SPEECH_PACE;
 	}
 	// A choice made while the database was being read wins over the stored value.
 	const chosenWhileLoading = [...pending.keys()];
@@ -329,7 +373,59 @@ export const appSettings = {
 };
 
 export function setSetting<K extends keyof AppSettings>(field: K, value: AppSettings[K]): void {
-	store.update((current) => ({ ...current, [field]: value }));
+	store.update((current) => withRememberedVoices(current, { ...current, [field]: value }));
+}
+
+/**
+ * Keeps each language's voices: a voice chosen for a language is remembered
+ * under it (separately for read-back and for explanations), and a change of
+ * language brings back the voice last chosen for the new one. Without a
+ * remembered voice, read-back takes the language's default voice, and an
+ * explanation voice stays empty for the learner to choose by ear.
+ *
+ * @param before The settings before the change.
+ * @param next The settings with the change applied.
+ * @returns `next`, with voices and memories that agree with its languages.
+ */
+function withRememberedVoices(before: AppSettings, next: AppSettings): AppSettings {
+	const settings = { ...next };
+
+	if (settings.targetLanguage !== before.targetLanguage) {
+		const remembered = settings.targetVoiceByLanguage[settings.targetLanguage];
+		if (getVoice(settings.targetLanguage, remembered)) settings.ttsVoice = remembered;
+		else if (!getVoice(settings.targetLanguage, settings.ttsVoice)) {
+			settings.ttsVoice = getLanguage(settings.targetLanguage)?.defaultVoice ?? settings.ttsVoice;
+		}
+	}
+	if (settings.instructionLanguage !== before.instructionLanguage) {
+		const remembered = settings.explanationVoiceByLanguage[settings.instructionLanguage];
+		if (getExplanationVoice(settings.instructionLanguage, remembered)) settings.explanationVoice = remembered;
+		else if (!getExplanationVoice(settings.instructionLanguage, settings.explanationVoice)) settings.explanationVoice = '';
+	}
+
+	if (getVoice(settings.targetLanguage, settings.ttsVoice) && settings.targetVoiceByLanguage[settings.targetLanguage] !== settings.ttsVoice) {
+		settings.targetVoiceByLanguage = { ...settings.targetVoiceByLanguage, [settings.targetLanguage]: settings.ttsVoice };
+	}
+	const explanationVoice = getExplanationVoice(settings.instructionLanguage, settings.explanationVoice);
+	if (explanationVoice && settings.explanationVoiceByLanguage[settings.instructionLanguage] !== settings.explanationVoice) {
+		settings.explanationVoiceByLanguage = { ...settings.explanationVoiceByLanguage, [settings.instructionLanguage]: settings.explanationVoice };
+	}
+	return settings;
+}
+
+/**
+ * A stored voice memory, keeping only voices that still speak their language.
+ *
+ * @param value The stored value (any shape).
+ * @param find Looks a voice up for a language: `getVoice` or `getExplanationVoice`.
+ */
+function rememberedVoices(value: unknown, find: (languageId: string, voiceId: string) => unknown): Record<string, string> {
+	if (!value || typeof value !== 'object') return {};
+	return Object.fromEntries(
+		Object.entries(value as Record<string, unknown>).filter(
+			(entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(find(entry[0], entry[1]))
+		)
+	);
 }
 
 /** Per-voice tuning values are clamped to the UI's ±12 dB range. */

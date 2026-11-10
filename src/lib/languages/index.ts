@@ -6,7 +6,8 @@
  * This is the single source of truth for what the app can teach. Adding a
  * language means adding one `LanguageDefinition` here after its local STT and
  * TTS candidates have passed a **manual quality test** (a human listening to /
- * reading the model output), then pointing `approval` at that evidence.
+ * reading the model output), then pointing `approval` at that evidence. Its
+ * on-device voices live in `./voices.ts`, by language code.
  *
  * Rules carried from the model lab (see .agents/handoff):
  * - No model is listed as approved until a human has tested its output and the
@@ -17,6 +18,8 @@
  * - Nothing here is hosted by the app. Every entry is a download descriptor;
  *   the bytes are fetched from the public model hosts by the user's device.
  */
+
+import { JAPANESE_PENDING, VOICE_SAMPLE_SENTENCES, VOICES_BY_LANGUAGE } from './voices';
 
 export interface LanguageApproval {
 	status: 'approved' | 'candidate';
@@ -29,17 +32,16 @@ export interface LanguageApproval {
 }
 
 /**
- * Optional studio-style cleanup applied to a local voice's PCM before it is
- * written to the read-back WAV. All values are deliberately declarative so a
+ * Optional studio-style tone fixes for a local voice, applied to its PCM
+ * before its level is evened out with every other voice's
+ * (`utils/audioEffects.ts`). All values are deliberately declarative so a
  * voice can be tuned without touching the DSP code.
  *
- * The learner can nudge the bands and loudness further in Settings → Advanced;
- * that tuning is stored per voice (`VoiceTuning`) and layered on top of these
- * approved defaults.
+ * The learner can nudge the bands and the volume further in Settings →
+ * Advanced; that tuning is stored per voice (`VoiceTuning`) and layered on
+ * top of these approved defaults.
  */
 export interface AudioProcessingProfile {
-	/** Peak target for loudness normalization, 0–1. Leaves codec headroom. */
-	targetPeak: number;
 	/** Low-shelf used to add or remove weight. */
 	lowShelf: { frequency: number; gainDb: number };
 	/** Peaking band in the low mids, where a voice sounds warm or boxy. */
@@ -48,15 +50,13 @@ export interface AudioProcessingProfile {
 	presence: { frequency: number; gainDb: number; q: number };
 	/** High-shelf EQ used to restore consonants that the voice dulls. */
 	highShelf: { frequency: number; gainDb: number };
-	/** Compressor that doubles as the limiter; `null` skips compression. */
+	/** Compressor that evens out the voice's own dynamics; `null` skips compression. */
 	dynamics: { threshold: number; knee: number; ratio: number; attack: number; release: number } | null;
-	/** Makeup gain applied before the limiter, in dB. */
-	makeupGainDb: number;
 }
 
 /** Per-voice learner adjustments, layered on top of the approved profile. */
 export interface VoiceTuning {
-	/** Extra output loudness in dB, applied after compression. */
+	/** Louder or softer than the shared loudness every voice is brought to, in dB. */
 	volumeDb: number;
 	bassDb: number;
 	bodyDb: number;
@@ -115,40 +115,58 @@ export interface LanguageStt {
 }
 
 /**
- * How a voice turns text into speech. Both run in the lazy TTS worker, on the
- * worker's own onnxruntime-web instance.
- *   piper       rhasspy Piper VITS; eSpeak G2P (`espeakVoice`) — Latin-script languages
- *   piper-plus  piper-plus VITS; OpenJTalk (jpreprocess) G2P compiled to WASM, with
- *               pitch-accent prosody features — Japanese
+ * How a voice turns text into speech. All three run in the lazy on-device
+ * voice worker (`speech/tts/local/`).
+ *   piper       rhasspy Piper VITS on onnxruntime-web; eSpeak G2P (the voice config names
+ *               the eSpeak voice)
+ *   piper-plus  piper-plus VITS on onnxruntime-web; OpenJTalk (jpreprocess) G2P compiled to
+ *               WASM, with pitch-accent prosody features — Japanese
+ *   supertonic  Supertonic 3 on the prebuilt sherpa-onnx runtime; one shared model speaks
+ *               31 languages with its own text front end
  */
-export type VoiceEngine = 'piper' | 'piper-plus';
+export type VoiceEngine = 'piper' | 'piper-plus' | 'supertonic';
 
-export interface LanguageVoice {
+/** What every on-device voice has, whatever its engine. */
+interface VoiceCommon {
 	id: string;
 	name: string;
-	/** Defaults to `piper`. */
-	engine?: VoiceEngine;
-	/**
-	 * `piper`: path inside `rhasspy/piper-voices`.
-	 * `piper-plus`: the ONNX file's full URL (its `config.json` sits beside it).
-	 */
-	voicePath: string;
 	downloadSize: string;
 	/**
 	 * Approximate download size in bytes, used for the combined progress bar.
-	 * Includes the voice's phonemizer when it is a separate download.
+	 * Includes what the voice shares with others (a phonemizer, the Supertonic model).
 	 */
 	downloadBytes: number;
-	/** eSpeak voice code used by the Piper phonemizer, e.g. `fr`. Unused by piper-plus. */
-	espeakVoice: string;
-	/** piper-plus only: the `language_id_map` key the voice is driven with, e.g. `ja`. */
-	modelLanguage?: string;
 	/** Path inside `rhasspy/piper-voices` of a short recording, to audition the voice without downloading it. */
 	samplePath?: string;
 	/** `null` leaves the raw model output untouched. */
 	processing: AudioProcessingProfile | null;
 	approval: LanguageApproval;
 }
+
+export interface PiperVoice extends VoiceCommon {
+	engine: 'piper';
+	/** Path inside `rhasspy/piper-voices`. */
+	voicePath: string;
+}
+
+export interface PiperPlusVoice extends VoiceCommon {
+	engine: 'piper-plus';
+	/** The ONNX file's full URL (its `config.json` sits beside it). */
+	voicePath: string;
+	/** The `language_id_map` key the voice is driven with, e.g. `ja`. */
+	modelLanguage: string;
+}
+
+export interface SupertonicVoice extends VoiceCommon {
+	engine: 'supertonic';
+	/** The language Supertonic speaks it in (its `lang` option), e.g. `fr`. */
+	language: string;
+	/** The preset voice style, as its speaker id in `voice.bin` (0–9). */
+	style: number;
+}
+
+/** An on-device voice; `engine` says which fields it has. */
+export type LanguageVoice = PiperVoice | PiperPlusVoice | SupertonicVoice;
 
 export interface LanguagePrompt {
 	title: string;
@@ -184,10 +202,25 @@ export function resourceLevelOf(webTextPercent: number): LanguageResourceLevel {
 /**
  * How the language is written, which decides how transcripts are split into
  * clickable words and sentences.
- *   spaced    words are separated by spaces (French)
+ *   spaced    words are separated by spaces (French, Persian)
  *   unspaced  no spaces between words; split with `Intl.Segmenter` (Japanese)
  */
 export type WritingSystem = 'spaced' | 'unspaced';
+
+/** The text direction target-language content is laid out in. */
+export type TextDirection = 'ltr' | 'rtl';
+
+/**
+ * Which engines this language can use on the device. Cloud-only languages keep
+ * the same cloud pipeline but do not expose a local STT/TTS download, usually
+ * because no local model has passed the human quality gates yet.
+ */
+export interface LanguageLocalEngines {
+	stt: boolean;
+	tts: boolean;
+	/** The local OpenAI-compatible correction server. */
+	correction: boolean;
+}
 
 export interface LanguageDefinition {
 	/** ISO 639-1 code, stored in settings and used as the DB key. */
@@ -195,6 +228,8 @@ export interface LanguageDefinition {
 	/** BCP 47 locale for `Intl.Segmenter` and similar APIs. */
 	locale: string;
 	writing: WritingSystem;
+	/** Text direction for the target language's own text. */
+	direction: TextDirection;
 	/** English name, e.g. `French`. */
 	name: string;
 	/** Endonym shown under the English name, e.g. `Français`. */
@@ -203,33 +238,53 @@ export interface LanguageDefinition {
 	webTextPercent: number;
 	approval: LanguageApproval;
 	stt: LanguageStt;
-	voices: LanguageVoice[];
+	/** The voice a new learner hears (its voices are listed in `./voices.ts`); empty when it has none. */
 	defaultVoice: string;
 	/** Speaking prompts shown to the learner for this language. */
 	prompts: LanguagePrompt[];
 	/** Short sentence in the target language used by the Settings voice preview. */
 	preview: string;
+	/** The local engines offered for this language (cloud-only languages disable all three). */
+	local: LanguageLocalEngines;
 }
 
+/** Speaking prompts that suit any language; a language can add its own (see Japanese, Persian). */
+const GENERAL_PROMPTS: LanguagePrompt[] = [
+	{ title: 'Morning routine', text: 'Describe your morning routine.' },
+	{ title: 'Favorite city', text: 'Talk about your favorite city.' },
+	{ title: 'Last weekend', text: 'What did you do last weekend?' },
+	{ title: 'Influential person', text: 'Describe a person who influenced you.' },
+	{ title: 'A book that changed me', text: 'Talk about a book that changed your perspective.' },
+	{ title: 'A free year', text: 'What would you do with a free year?' },
+	{ title: 'A memorable meal', text: "Describe a meal you'll never forget." },
+	{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
+];
+
 /**
- * Piper Tom carries the listening test's two fixes: a high-shelf lift for the
- * muted consonants and a loudness pass. Threshold/ratio are limiter-like so the
- * makeup gain cannot clip; the service applies peak normalization afterwards.
+ * Recorded for the languages offered because the user asked for every
+ * language the on-device voices speak. Like Persian's, it says what was
+ * decided and what was not: nothing about these models has been reviewed yet.
  */
-const TOM_PROCESSING: AudioProcessingProfile = {
-	targetPeak: 0.89,
-	lowShelf: { frequency: 200, gainDb: 0 },
-	body: { frequency: 500, gainDb: 0, q: 1 },
-	presence: { frequency: 1200, gainDb: 0, q: 0.9 },
-	highShelf: { frequency: 3200, gainDb: 5 },
-	dynamics: { threshold: -20, knee: 6, ratio: 8, attack: 0.003, release: 0.25 },
-	makeupGainDb: 5
+const REQUESTED_LANGUAGE_APPROVAL: LanguageApproval = {
+	status: 'approved',
+	by: "Offered at the user's request with every language the on-device voices speak (2026-11-08). Speech recognition and voices not yet reviewed for this language",
+	at: '2026-11-08',
+	evidence: 'docs/architecture/supported-languages.md'
+};
+
+const WHISPER_NOT_REVIEWED: LanguageApproval = {
+	status: 'candidate',
+	by: 'Whisper lists this language; its accuracy on learner speech is not measured',
+	at: '2026-11-08',
+	evidence: 'docs/benchmarks/stt.md'
 };
 
 const FRENCH: LanguageDefinition = {
 	id: 'fr',
 	locale: 'fr',
 	writing: 'spaced',
+	direction: 'ltr',
+	local: { stt: true, tts: true, correction: true },
 	name: 'French',
 	nativeName: 'Français',
 	webTextPercent: 4.76,
@@ -250,161 +305,28 @@ const FRENCH: LanguageDefinition = {
 			evidence: 'docs/benchmarks/stt.md'
 		}
 	},
-	voices: [
-		{
-			id: 'piper-tom-medium',
-			name: 'Piper Tom (M, medium)',
-			voicePath: 'fr/fr_FR/tom/medium/fr_FR-tom-medium.onnx',
-			downloadSize: '~64 MB · 44 kHz',
-			downloadBytes: 64_000_000,
-			espeakVoice: 'fr',
-			processing: TOM_PROCESSING,
-			approval: {
-				status: 'approved',
-				by: 'Human listening test — ranked 1st',
-				at: '2026-09-13',
-				evidence: 'docs/benchmarks/tts.md'
-			}
-		},
-		{
-			id: 'piper-upmc-medium',
-			name: 'Piper UPMC (medium)',
-			voicePath: 'fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx',
-			downloadSize: '~77 MB · 22 kHz · 2 speakers',
-			downloadBytes: 77_000_000,
-			espeakVoice: 'fr',
-			processing: null,
-			approval: {
-				status: 'approved',
-				by: 'Human listening test — ranked 2nd (jessica)',
-				at: '2026-09-13',
-				evidence: 'docs/benchmarks/tts.md'
-			}
-		},
-		{
-			id: 'piper-siwis-medium',
-			name: 'Piper Siwis (F, medium)',
-			voicePath: 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx',
-			downloadSize: '~63 MB · 22 kHz',
-			downloadBytes: 63_000_000,
-			espeakVoice: 'fr',
-			processing: null,
-			approval: {
-				status: 'approved',
-				by: 'Human listening test — ranked 3rd',
-				at: '2026-09-13',
-				evidence: 'docs/benchmarks/tts.md'
-			}
-		},
-		{
-			id: 'piper-mls-medium',
-			name: 'Piper MLS (medium)',
-			voicePath: 'fr/fr_FR/mls/medium/fr_FR-mls-medium.onnx',
-			downloadSize: '~77 MB · 22 kHz · 125 speakers',
-			downloadBytes: 77_000_000,
-			espeakVoice: 'fr',
-			processing: null,
-			approval: {
-				status: 'approved',
-				by: 'Listening test — kept unranked for later auditioning',
-				at: '2026-09-13',
-				evidence: 'docs/benchmarks/tts.md'
-			}
-		}
-	],
 	defaultVoice: 'piper-tom-medium',
 	preview:
 		"Bonjour ! Voici un aperçu de la voix qui vous accompagnera pendant vos séances d'oral, avec la prononciation et le rythme corrigés après chaque prise.",
-	prompts: [
-		{ title: 'Morning routine', text: 'Describe your morning routine.' },
-		{ title: 'Favorite city', text: 'Talk about your favorite city.' },
-		{ title: 'Last weekend', text: 'What did you do last weekend?' },
-		{ title: 'Influential person', text: 'Describe a person who influenced you.' },
-		{ title: 'A book that changed me', text: 'Talk about a book that changed your perspective.' },
-		{ title: 'A free year', text: 'What would you do with a free year?' },
-		{ title: 'A memorable meal', text: "Describe a meal you'll never forget." },
-		{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
-	]
+	prompts: GENERAL_PROMPTS
 };
-
-/**
- * Japanese G2P for every piper-plus voice: the OpenJTalk/jpreprocess
- * phonemizer (NAIST-JDIC bundled) compiled to WASM by piper-plus. One shared
- * 60 MB download (≈20 MB compressed), verified by SHA-256 before it runs;
- * see `speech/tts/piper/japaneseG2p.ts`.
- */
-export const JAPANESE_G2P_BYTES = 60_077_874;
-/** What the dictionary costs over the network: the CDN compresses it. */
-export const JAPANESE_G2P_TRANSFER_BYTES = 19_806_684;
-
-/** Recorded for a candidate: nothing has been human-tested yet. */
-const JAPANESE_PENDING: LanguageApproval = {
-	status: 'candidate',
-	by: 'Not yet tested — needs a human listening test / transcript review',
-	at: '2026-09-25',
-	evidence: 'docs/benchmarks/tts.md, docs/benchmarks/stt.md (Japanese sections to be added)'
-};
-
-const PIPER_PLUS_BASE = 'https://huggingface.co';
 
 const JAPANESE: LanguageDefinition = {
 	id: 'ja',
 	locale: 'ja',
 	writing: 'unspaced',
+	direction: 'ltr',
+	local: { stt: true, tts: true, correction: true },
 	name: 'Japanese',
 	nativeName: '日本語',
 	webTextPercent: 4.89,
-	approval: JAPANESE_PENDING,
+	approval: REQUESTED_LANGUAGE_APPROVAL,
 	stt: {
 		models: WHISPER_SMALL,
 		decoderLanguage: 'japanese',
 		code: 'ja',
 		approval: JAPANESE_PENDING
 	},
-	voices: [
-		{
-			id: 'piper-plus-css10-ja',
-			name: 'CSS10 (F) · piper-plus',
-			engine: 'piper-plus',
-			voicePath: `${PIPER_PLUS_BASE}/ayousanz/piper-plus-css10-ja-6lang/resolve/main/css10-ja-6lang-fp16.onnx`,
-			downloadSize: '~40 MB voice + 20 MB Japanese dictionary · 22 kHz',
-			downloadBytes: 39_700_000 + JAPANESE_G2P_BYTES,
-			espeakVoice: '',
-			modelLanguage: 'ja',
-			processing: null,
-			approval: {
-				...JAPANESE_PENDING,
-				by: `${JAPANESE_PENDING.by}. Dataset: CSS10 Japanese (public-domain audiobook)`
-			}
-		},
-		{
-			id: 'piper-plus-mera',
-			name: 'Mera (F) · piper-plus',
-			engine: 'piper-plus',
-			voicePath: `${PIPER_PLUS_BASE}/kizuna-intelligence/piper-plus-mera-multilingual/resolve/main/mera-multilingual.onnx`,
-			downloadSize: '~39 MB voice + 20 MB Japanese dictionary · 22 kHz',
-			downloadBytes: 39_400_000 + JAPANESE_G2P_BYTES,
-			espeakVoice: '',
-			modelLanguage: 'ja',
-			processing: null,
-			approval: { ...JAPANESE_PENDING, by: `${JAPANESE_PENDING.by}. Licence: Apache-2.0` }
-		},
-		{
-			id: 'piper-plus-tsukuyomi',
-			name: 'Tsukuyomi-chan (F) · piper-plus',
-			engine: 'piper-plus',
-			voicePath: `${PIPER_PLUS_BASE}/ayousanz/piper-plus-tsukuyomi-chan/resolve/main/tsukuyomi-chan-6lang-fp16.onnx`,
-			downloadSize: '~40 MB voice + 20 MB Japanese dictionary · 22 kHz',
-			downloadBytes: 39_700_000 + JAPANESE_G2P_BYTES,
-			espeakVoice: '',
-			modelLanguage: 'ja',
-			processing: null,
-			approval: {
-				...JAPANESE_PENDING,
-				by: `${JAPANESE_PENDING.by}. Licence: Tsukuyomi-chan corpus terms (credit required)`
-			}
-		}
-	],
 	defaultVoice: 'piper-plus-css10-ja',
 	preview:
 		'こんにちは。これから一緒に話す練習をする声です。毎回の録音のあとで、発音とリズムを直した文を読み上げます。',
@@ -420,8 +342,184 @@ const JAPANESE: LanguageDefinition = {
 	]
 };
 
-/** Every language that has ever been declared, approved or not. */
-export const LANGUAGES: readonly LanguageDefinition[] = [FRENCH, JAPANESE];
+/**
+ * Persian recognition and correction are cloud-only: the learner uses Groq
+ * Whisper for speech-to-text and the configured cloud LLM for corrections. No
+ * local recognition or correction model has passed the human quality gates
+ * yet, so those local options stay off; the registry's `local` flags enforce
+ * that everywhere. Read-back can run on the device since 2026-11-08: Piper's
+ * five Persian voices load and speak in the browser voice check, and the
+ * learner auditions them (they are candidates).
+ */
+const PERSIAN_APPROVAL: LanguageApproval = {
+	status: 'approved',
+	by: "Requested by the user; Groq Whisper + cloud LLM, read-back by a cloud voice or Piper's Persian voices",
+	at: '2026-11-08',
+	evidence: 'docs/architecture/languages.md'
+};
+
+const PERSIAN: LanguageDefinition = {
+	id: 'fa',
+	locale: 'fa',
+	writing: 'spaced',
+	direction: 'rtl',
+	// Read-back can run on the device (Piper's Persian voices); recognition and correction stay cloud.
+	local: { stt: false, tts: true, correction: false },
+	name: 'Persian',
+	nativeName: 'فارسی',
+	webTextPercent: 0.62,
+	approval: PERSIAN_APPROVAL,
+	stt: {
+		models: WHISPER_SMALL,
+		decoderLanguage: 'persian',
+		code: 'fa',
+		approval: {
+			...PERSIAN_APPROVAL,
+			by: 'Groq whisper-large-v3-turbo (language fa); no local model offered'
+		}
+	},
+	// Piper's Persian voices (`./voices.ts`); the learner auditions them (candidates).
+	defaultVoice: 'piper-fa-amir-medium',
+	preview:
+		'سلام! این نمونهٔ صدای همراه شماست. بعد از هر تمرین، جملهٔ اصلاحشده را با لحن طبیعی برایتان میخوانم.',
+	prompts: [
+		{ title: 'Morning routine', text: 'Describe your morning routine.' },
+		{ title: 'A Persian dish', text: 'Talk about a Persian dish you enjoy and how it is made.' },
+		{ title: 'Last weekend', text: 'What did you do last weekend?' },
+		{ title: 'A place in Iran', text: 'Describe a place in Iran you would like to visit.' },
+		{ title: 'Influential person', text: 'Describe a person who influenced you.' },
+		{ title: 'A book or film', text: 'Talk about a book or film that stayed with you.' },
+		{ title: 'A free year', text: 'What would you do with a free year?' },
+		{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
+	]
+};
+
+/** What onspot needs to know about a language, whatever role it plays. */
+interface LanguageFacts {
+	/** English name, as the prompts name it. */
+	name: string;
+	/** Endonym, shown under the English name. */
+	nativeName: string;
+	/** Share of the web in this language, in percent of pages (Common Crawl CC-MAIN-2026-43). */
+	webTextPercent: number;
+	/** The language name Whisper expects. */
+	whisperLanguage: string;
+	writing: WritingSystem;
+	direction: TextDirection;
+	/** The Unicode scripts its letters are written in, as `\p{Script=…}` names them. */
+	scripts: readonly string[];
+}
+
+function facts(name: string, nativeName: string, webTextPercent: number, whisperLanguage: string, extra: Partial<LanguageFacts> = {}): LanguageFacts {
+	return { name, nativeName, webTextPercent, whisperLanguage, writing: 'spaced', direction: 'ltr', scripts: ['Latin'], ...extra };
+}
+
+const ARABIC_SCRIPT = ['Arabic'];
+const CYRILLIC_SCRIPT = ['Cyrillic'];
+
+/**
+ * Every language onspot knows, by ISO 639-1 code: the languages the on-device
+ * voices speak (`./voices.ts`). A language here without voices would be a
+ * language of instruction only, explained by a cloud voice. Web shares from
+ * Common Crawl's CC-MAIN-2026-43 language table.
+ */
+const LANGUAGE_FACTS: Readonly<Record<string, LanguageFacts>> = {
+	ar: facts('Arabic', 'العربية', 0.67, 'arabic', { direction: 'rtl', scripts: ARABIC_SCRIPT }),
+	bg: facts('Bulgarian', 'Български', 0.24, 'bulgarian', { scripts: CYRILLIC_SCRIPT }),
+	bn: facts('Bengali', 'বাংলা', 0.11, 'bengali', { scripts: ['Bengali'] }),
+	cs: facts('Czech', 'Čeština', 1.15, 'czech'),
+	da: facts('Danish', 'Dansk', 0.52, 'danish'),
+	de: facts('German', 'Deutsch', 5.77, 'german'),
+	el: facts('Greek', 'Ελληνικά', 0.51, 'greek', { scripts: ['Greek'] }),
+	en: facts('English', 'English', 42.56, 'english'),
+	es: facts('Spanish', 'Español', 4.74, 'spanish'),
+	et: facts('Estonian', 'Eesti', 0.15, 'estonian'),
+	fa: facts('Persian', 'فارسی', 0.62, 'persian', { direction: 'rtl', scripts: ARABIC_SCRIPT }),
+	fi: facts('Finnish', 'Suomi', 0.38, 'finnish'),
+	fr: facts('French', 'Français', 4.76, 'french'),
+	hi: facts('Hindi', 'हिन्दी', 0.21, 'hindi', { scripts: ['Devanagari'] }),
+	hr: facts('Croatian', 'Hrvatski', 0.22, 'croatian'),
+	hu: facts('Hungarian', 'Magyar', 0.53, 'hungarian'),
+	id: facts('Indonesian', 'Bahasa Indonesia', 1.06, 'indonesian'),
+	it: facts('Italian', 'Italiano', 2.58, 'italian'),
+	ja: facts('Japanese', '日本語', 4.89, 'japanese', { writing: 'unspaced', scripts: ['Han', 'Hiragana', 'Katakana'] }),
+	ko: facts('Korean', '한국어', 0.88, 'korean', { scripts: ['Hangul', 'Han'] }),
+	lt: facts('Lithuanian', 'Lietuvių', 0.17, 'lithuanian'),
+	lv: facts('Latvian', 'Latviešu', 0.09, 'latvian'),
+	nl: facts('Dutch', 'Nederlands', 1.75, 'dutch'),
+	pl: facts('Polish', 'Polski', 1.89, 'polish'),
+	pt: facts('Portuguese', 'Português', 2.47, 'portuguese'),
+	ro: facts('Romanian', 'Română', 0.58, 'romanian'),
+	ru: facts('Russian', 'Русский', 6.3, 'russian', { scripts: CYRILLIC_SCRIPT }),
+	sk: facts('Slovak', 'Slovenčina', 0.4, 'slovak'),
+	sl: facts('Slovenian', 'Slovenščina', 0.16, 'slovenian'),
+	sv: facts('Swedish', 'Svenska', 0.71, 'swedish'),
+	tr: facts('Turkish', 'Türkçe', 1.14, 'turkish'),
+	uk: facts('Ukrainian', 'Українська', 0.79, 'ukrainian', { scripts: CYRILLIC_SCRIPT }),
+	ur: facts('Urdu', 'اردو', 0.03, 'urdu', { direction: 'rtl', scripts: ARABIC_SCRIPT }),
+	vi: facts('Vietnamese', 'Tiếng Việt', 0.98, 'vietnamese'),
+	zh: facts('Chinese (Simplified)', '简体中文', 4.37, 'chinese', { writing: 'unspaced', scripts: ['Han'] })
+};
+
+/** The Unicode scripts a known language is written in (`\p{Script=…}` names), or undefined for an unknown code. */
+export function writingScriptsOf(languageId: string): readonly string[] | undefined {
+	return LANGUAGE_FACTS[languageId]?.scripts;
+}
+
+/** A known language's ISO 639-1 code from the English name the prompts use ("Persian" → `fa`). */
+export function languageIdByName(name: string): string | undefined {
+	return Object.keys(LANGUAGE_FACTS).find((id) => LANGUAGE_FACTS[id].name === name);
+}
+
+/** The voice a new learner of a language hears: Supertonic's first style where it speaks the language, else the language's first voice. */
+function firstChoiceVoice(code: string): string {
+	const voices = VOICES_BY_LANGUAGE[code] ?? [];
+	const supertonic = voices.find((voice) => voice.engine === 'supertonic' && voice.style === 0);
+	return (supertonic ?? voices[0])?.id ?? '';
+}
+
+/**
+ * A language offered for study with the shared defaults: Whisper small on the
+ * device, its voices from `./voices.ts`, the general prompts and its voice
+ * sample sentence as the Settings preview.
+ */
+function requestedLanguage(code: string): LanguageDefinition {
+	const known = LANGUAGE_FACTS[code];
+	return {
+		id: code,
+		locale: code,
+		writing: known.writing,
+		direction: known.direction,
+		local: { stt: true, tts: true, correction: true },
+		name: known.name,
+		nativeName: known.nativeName,
+		webTextPercent: known.webTextPercent,
+		approval: REQUESTED_LANGUAGE_APPROVAL,
+		stt: { models: WHISPER_SMALL, decoderLanguage: known.whisperLanguage, code, approval: WHISPER_NOT_REVIEWED },
+		defaultVoice: firstChoiceVoice(code),
+		prompts: GENERAL_PROMPTS,
+		preview: VOICE_SAMPLE_SENTENCES[code] ?? ''
+	};
+}
+
+/** French, Japanese and Persian have their own definitions above (reviews, prompts, voices). */
+const DEFINED_LANGUAGES: readonly LanguageDefinition[] = [FRENCH, JAPANESE, PERSIAN];
+
+/**
+ * Every language a learner can study: one per language the on-device voices
+ * speak, plus Persian (cloud recognition), sorted by English name.
+ */
+export const LANGUAGES: readonly LanguageDefinition[] = [
+	...DEFINED_LANGUAGES,
+	...Object.keys(VOICES_BY_LANGUAGE)
+		.filter((code) => LANGUAGE_FACTS[code] && !DEFINED_LANGUAGES.some((language) => language.id === code))
+		.map(requestedLanguage)
+].sort((first, second) => first.name.localeCompare(second.name));
+
+/** True when any processing step must use the cloud for this language. */
+export function isCloudOnly(language: LanguageDefinition): boolean {
+	return !language.local.stt || !language.local.tts || !language.local.correction;
+}
 
 /**
  * A language the app teaches in: the learner reads and hears explanations,
@@ -440,29 +538,10 @@ export interface InstructionLanguage {
 	webTextPercent: number;
 }
 
-export const INSTRUCTION_LANGUAGES: readonly InstructionLanguage[] = [
-	{ id: 'en', name: 'English', nativeName: 'English', webTextPercent: 42.56 },
-	{ id: 'es', name: 'Spanish', nativeName: 'Español', webTextPercent: 4.74 },
-	{ id: 'fr', name: 'French', nativeName: 'Français', webTextPercent: 4.76 },
-	{ id: 'de', name: 'German', nativeName: 'Deutsch', webTextPercent: 5.77 },
-	{ id: 'it', name: 'Italian', nativeName: 'Italiano', webTextPercent: 2.58 },
-	{ id: 'pt', name: 'Portuguese', nativeName: 'Português', webTextPercent: 2.47 },
-	{ id: 'nl', name: 'Dutch', nativeName: 'Nederlands', webTextPercent: 1.75 },
-	{ id: 'pl', name: 'Polish', nativeName: 'Polski', webTextPercent: 1.89 },
-	{ id: 'ru', name: 'Russian', nativeName: 'Русский', webTextPercent: 6.3 },
-	{ id: 'uk', name: 'Ukrainian', nativeName: 'Українська', webTextPercent: 0.79 },
-	{ id: 'tr', name: 'Turkish', nativeName: 'Türkçe', webTextPercent: 1.14 },
-	{ id: 'ar', name: 'Arabic', nativeName: 'العربية', webTextPercent: 0.67 },
-	{ id: 'fa', name: 'Persian', nativeName: 'فارسی', webTextPercent: 0.62 },
-	{ id: 'ur', name: 'Urdu', nativeName: 'اردو', webTextPercent: 0.03 },
-	{ id: 'hi', name: 'Hindi', nativeName: 'हिन्दी', webTextPercent: 0.21 },
-	{ id: 'bn', name: 'Bengali', nativeName: 'বাংলা', webTextPercent: 0.11 },
-	{ id: 'zh', name: 'Chinese (Simplified)', nativeName: '简体中文', webTextPercent: 4.37 },
-	{ id: 'ja', name: 'Japanese', nativeName: '日本語', webTextPercent: 4.89 },
-	{ id: 'ko', name: 'Korean', nativeName: '한국어', webTextPercent: 0.88 },
-	{ id: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia', webTextPercent: 1.06 },
-	{ id: 'vi', name: 'Vietnamese', nativeName: 'Tiếng Việt', webTextPercent: 0.98 }
-];
+/** Every known language can be taught in: the model writes it; explanations are spoken by its voices, or the cloud. */
+export const INSTRUCTION_LANGUAGES: readonly InstructionLanguage[] = Object.entries(LANGUAGE_FACTS)
+	.map(([id, known]) => ({ id, name: known.name, nativeName: known.nativeName, webTextPercent: known.webTextPercent }))
+	.sort((first, second) => (first.id === 'en' ? -1 : second.id === 'en' ? 1 : first.name.localeCompare(second.name)));
 
 export const DEFAULT_INSTRUCTION_LANGUAGE_ID = 'en';
 
@@ -476,51 +555,31 @@ export function instructionLanguagesFor(target: LanguageDefinition): readonly In
 	return INSTRUCTION_LANGUAGES.filter((language) => language.id !== target.id);
 }
 
-/** Recorded for the English candidates until the learner picks one by listening. */
-const ENGLISH_PENDING: LanguageApproval = {
-	status: 'candidate',
-	by: 'Not yet tested — the learner auditions the samples in Settings and picks one',
-	at: '2026-11-01',
-	evidence: 'docs/benchmarks/tts.md (English explanation voice, to be added)'
-};
-
-/** A Piper English voice for explanations, with its hosted sample. */
-function englishVoice(id: string, name: string, folder: string, file: string): LanguageVoice {
-	return {
-		id,
-		name,
-		voicePath: `${folder}/${file}.onnx`,
-		samplePath: `${folder}/samples/speaker_0.mp3`,
-		downloadSize: '~63 MB · 22 kHz',
-		downloadBytes: 63_200_000,
-		espeakVoice: file.startsWith('en_GB') ? 'en-gb' : 'en-us',
-		processing: null,
-		approval: ENGLISH_PENDING
-	};
+/**
+ * The language a learner is taught in until they choose: English, or, for
+ * learners of English, the language with the most text on the web after it
+ * (nobody is taught a language in that same language).
+ *
+ * @param targetId The studied language's id.
+ */
+export function defaultInstructionLanguageFor(targetId: string): string {
+	if (targetId !== DEFAULT_INSTRUCTION_LANGUAGE_ID) return DEFAULT_INSTRUCTION_LANGUAGE_ID;
+	const others = INSTRUCTION_LANGUAGES.filter((language) => language.id !== targetId);
+	return others.reduce((most, language) => (language.webTextPercent > most.webTextPercent ? language : most)).id;
 }
 
 /**
- * On-device voices for each language of instruction, by its id. An on-device
- * voice speaks one language, so an explanation is read by two: its
- * instruction-language text by one of these, its target-language words and
- * phrases by the learner's chosen target voice. A language without voices
- * here gets explanation audio from cloud speech only.
+ * The on-device voices that can read the instruction-language half of an
+ * explanation: every voice that speaks the language, from the shared table
+ * (`./voices.ts`). An explanation is read by two voices, this one and the
+ * learner's target voice for the target-language words in it. A language with
+ * no voices gets explanation audio from cloud speech only.
+ *
+ * @param instructionLanguageId An `INSTRUCTION_LANGUAGES` id.
+ * @returns Its voices; empty when there are none.
  */
-const EXPLANATION_VOICES: Readonly<Record<string, readonly LanguageVoice[]>> = {
-	en: [
-		englishVoice('piper-en-ryan-medium', 'Piper Ryan (M, US)', 'en/en_US/ryan/medium', 'en_US-ryan-medium'),
-		englishVoice('piper-en-lessac-medium', 'Piper Lessac (F, US)', 'en/en_US/lessac/medium', 'en_US-lessac-medium'),
-		englishVoice('piper-en-alan-medium', 'Piper Alan (M, UK)', 'en/en_GB/alan/medium', 'en_GB-alan-medium'),
-		englishVoice('piper-en-alba-medium', 'Piper Alba (F, UK)', 'en/en_GB/alba/medium', 'en_GB-alba-medium')
-	]
-};
-
-/** Every explanation voice, for the voice worker. */
-export const ALL_EXPLANATION_VOICES: readonly LanguageVoice[] = Object.values(EXPLANATION_VOICES).flat();
-
-/** The on-device voices that speak a language of instruction (none yet for most). */
 export function explanationVoicesFor(instructionLanguageId: string): readonly LanguageVoice[] {
-	return EXPLANATION_VOICES[instructionLanguageId] ?? [];
+	return VOICES_BY_LANGUAGE[instructionLanguageId] ?? [];
 }
 
 /** One of an instruction language's voices, by id. */
@@ -558,25 +617,36 @@ export function getLanguage(id: string | null | undefined): LanguageDefinition |
 }
 
 export function requireLanguage(id: string | null | undefined): LanguageDefinition {
-	const language = getLanguage(id) ?? OFFERED_LANGUAGES[0];
+	// The fallback is the default language, not whichever sorts first.
+	const language = getLanguage(id) ?? getLanguage(DEFAULT_LANGUAGE_ID) ?? OFFERED_LANGUAGES[0];
 	if (!language) throw new Error('No languages are configured.');
 	return language;
 }
 
+/**
+ * The on-device voices that read back a target language: the language's
+ * voices in the shared table, when the app offers it and lets it speak on the
+ * device (`local.tts`; Persian's voices only read explanations for now).
+ *
+ * @param languageId A `LANGUAGES` id.
+ * @returns Its voices; empty for an unknown or cloud-only language.
+ */
+export function voicesFor(languageId: string | null | undefined): readonly LanguageVoice[] {
+	const language = getLanguage(languageId);
+	if (!language?.local.tts) return [];
+	return VOICES_BY_LANGUAGE[language.id] ?? [];
+}
+
+/** One of a target language's voices, by id (see `voicesFor`). */
 export function getVoice(
 	languageId: string | null | undefined,
 	voiceId: string | null | undefined
 ): LanguageVoice | undefined {
-	const language = getLanguage(languageId);
-	if (!language) return undefined;
-	return language.voices.find((voice) => voice.id === voiceId);
-}
-
-export function voicesFor(languageId: string | null | undefined): LanguageVoice[] {
-	return getLanguage(languageId)?.voices ?? [];
+	return voicesFor(languageId).find((voice) => voice.id === voiceId);
 }
 
 /** The language's default voice (the listening-test winner), or its first voice. */
 export function defaultVoiceOf(language: LanguageDefinition): LanguageVoice | undefined {
-	return language.voices.find((voice) => voice.id === language.defaultVoice) ?? language.voices[0];
+	const voices = voicesFor(language.id);
+	return voices.find((voice) => voice.id === language.defaultVoice) ?? voices[0];
 }

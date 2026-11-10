@@ -22,6 +22,7 @@ import { resolveLlmEndpoint } from './llm';
 import { firstMissingRequirement, processingReady } from './processing';
 import { playTrack, primeAudioPlayback, setAudioLoading, stopAudio, type AudioKind } from './audio';
 import { languageData, refreshLanguageData } from './languageData';
+import { pronounceableWords, wordSpeechOptions } from './pronunciation';
 import { recordPracticeActivity } from './reminders';
 import { VoiceRecorder, type Recording } from '#lib/utils/recorder.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
@@ -50,13 +51,21 @@ import {
 import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
 import { ensurePromptsSeeded, pickRandomPrompt } from '#lib/practice/prompts.js';
 import {
+	inferSessionSetup,
+	parseSessionSetup,
+	sameSetup,
+	setupFromSettings,
+	usableSetup,
+	type SessionSetup
+} from '#lib/practice/sessionSetup.js';
+import {
 	DEFAULT_INSTRUCTION_LANGUAGE_ID,
+	defaultInstructionLanguageFor,
 	explanationVoicesFor,
 	getExplanationVoice,
 	getInstructionLanguage,
-	getVoice,
-	instructionLanguagesFor,
-	requireLanguage
+	requireLanguage,
+	type LanguageDefinition
 } from '#lib/languages/index.js';
 import { MAX_RECORDING_SEC, capWords, countWords } from '#lib/config.js';
 import { hashText } from '#lib/utils/hash.js';
@@ -256,12 +265,24 @@ async function hydratePractice(): Promise<void> {
 	}
 }
 
-/** Re-read the newest session after startup or an in-app backup restore. */
+/**
+ * Re-reads the newest session after startup or an in-app backup restore, when
+ * it was practised in the languages Settings has now: starting the app never
+ * changes the learner's languages (a session in other languages stays in
+ * History, and opening it from there brings its setup back).
+ */
 export async function hydrateLatestSession(): Promise<boolean> {
 	if (!db) db = await getDatabaseAdapter();
-	const saved = await db.listSessions();
-	if (saved.length === 0) return false;
-	await openSession(saved[0].id);
+	const [newest] = await db.listSessions();
+	if (!newest) return false;
+
+	const settings = get(appSettings);
+	const setup = parseSessionSetup(newest.setup) ?? inferSessionSetup(await db.listAttempts(newest.id), settings);
+	const sameLanguages =
+		setup.targetLanguage === settings.targetLanguage && setup.instructionLanguage === settings.instructionLanguage;
+	if (!sameLanguages) return false;
+
+	await openSession(newest.id, { restoreSetup: false });
 	return true;
 }
 
@@ -286,16 +307,13 @@ function abandonTake(): void {
  */
 export async function setTargetLanguage(languageId: string): Promise<void> {
 	const language = requireLanguage(languageId);
+	// A fresh session starts below: the open one keeps the setup it has.
+	openSessionSetup = null;
 	setSetting('targetLanguage', language.id);
-	// Nobody is taught a language in that same language: back to the default (or the first other).
+	useCloudWhereNotLocal(language);
+	// Nobody is taught a language in that same language.
 	if (get(appSettings).instructionLanguage === language.id) {
-		const fallback = instructionLanguagesFor(language).find((entry) => entry.id === DEFAULT_INSTRUCTION_LANGUAGE_ID);
-		setSetting('instructionLanguage', (fallback ?? instructionLanguagesFor(language)[0]).id);
-	}
-	// A voice saved for another language does not exist here; fall back to the
-	// listening-test default for this language.
-	if (!getVoice(language.id, get(appSettings).ttsVoice)) {
-		setSetting('ttsVoice', language.defaultVoice);
+		setSetting('instructionLanguage', defaultInstructionLanguageFor(language.id));
 	}
 	if (!db) db = await getDatabaseAdapter();
 	prompts = await ensurePromptsSeeded(db, language.id);
@@ -327,6 +345,8 @@ export function setSessionMode(mode: RunMode): void {
 /** Starts a fresh session (draft): clears attempts and unlocks the mode. */
 export function newSession(): void {
 	abandonTake();
+	// The next take starts a session with the setup Settings have then.
+	openSessionSetup = null;
 	update({
 		sessionId: null,
 		attempts: [],
@@ -576,8 +596,10 @@ async function persistAttempt(
 			startedAt: now,
 			endedAt: null,
 			createdAt: now,
-			updatedAt: now
+			updatedAt: now,
+			setup: setupFromSettings(get(appSettings))
 		});
+		openSessionSetup = { sessionId, setup: setupFromSettings(get(appSettings)) };
 		update({ sessionId });
 	}
 
@@ -1093,9 +1115,17 @@ function localExplanationOptions(attempt: AttemptView, settings: AppSettings): E
  * rest of the session, newest first. One clip is made at a time, so a tap
  * never waits behind a queue of them (and joins the clip if it is the one
  * being made). Cloud read-back is never prepared: it costs credits.
+ *
+ * The take being read also gets its words prepared, right after its
+ * explanation: each word of the correct version and of the follow-up
+ * question, so tapping one plays at once instead of waiting seconds for the voice. Only that take:
+ * preparing every word of a whole session would keep the device busy for long.
  */
 const preparationQueue: string[] = [];
 let preparing = false;
+
+/** Takes whose words are prepared too: the ones that went to the front of the queue (new, or being read). */
+const takesWithWords = new Set<string>();
 
 /** Stops the clip being prepared (at its next piece) once preparing is no longer allowed. */
 let preparationStop = new AbortController();
@@ -1124,8 +1154,12 @@ function prepareTakeAudio(attemptId: string, { first = false } = {}): void {
 
 	const queued = preparationQueue.indexOf(attemptId);
 	if (queued >= 0) preparationQueue.splice(queued, 1);
-	if (first) preparationQueue.unshift(attemptId);
-	else preparationQueue.push(attemptId);
+	if (first) {
+		preparationQueue.unshift(attemptId);
+		takesWithWords.add(attemptId);
+	} else {
+		preparationQueue.push(attemptId);
+	}
 
 	if (!preparing) void prepareQueuedAudio();
 }
@@ -1190,6 +1224,17 @@ function takeClips(attemptId: string): Array<(signal: AbortSignal) => Promise<Sp
 	if (attempt.explanation && get(explanationAudioAvailable)) {
 		clips.push((signal) => synthesizeExplanation({ ...localExplanationOptions(attempt, settings), background: true, signal }));
 	}
+
+	// The words a learner taps, right after the explanation (which plays first anyway): a
+	// tap is the one wait a learner feels, and the sentence clips can follow while they read.
+	// Made with the options a tap uses, so a tap finds them stored.
+	if (takesWithWords.has(attemptId)) {
+		const tappableText = `${trackText(attempt, 'corrected')} ${trackText(attempt, 'followUp')}`;
+		for (const word of pronounceableWords(tappableText)) {
+			clips.push((signal) => synthesizeSpeech({ ...wordSpeechOptions(word, settings), background: true, signal }));
+		}
+	}
+
 	for (const kind of ['followUp', 'corrected', 'said'] as const) {
 		const text = trackText(attempt, kind);
 		if (text.trim()) clips.push((signal) => synthesizeSpeech({ ...trackSpeechOptions(attempt, text, settings), background: true, signal }));
@@ -1377,17 +1422,37 @@ export async function deleteSession(id: string): Promise<void> {
 	await database.deleteSession(id);
 	if (get(store).sessionId === id) {
 		abandonTake();
+		openSessionSetup = null;
 		update({ sessionId: null, attempts: [], activeAttemptId: null, phase: 'idle', elapsed: 0, level: 0 });
 	}
 }
 
-/** Loads a session's attempts from the database into the view. */
-export async function openSession(sessionId: string): Promise<void> {
+/**
+ * Loads a session's attempts from the database into the view, and puts the
+ * session's setup (languages, speech mode, voices, pace) back into Settings,
+ * so its takes are read, translated and explained as they were practised.
+ *
+ * @param options.restoreSetup False at startup: Settings stay as they are,
+ *   and the session takes them on (`hydrateLatestSession` only opens a
+ *   session in the same languages).
+ */
+export async function openSession(sessionId: string, { restoreSetup = true } = {}): Promise<void> {
 	if (!db) db = await getDatabaseAdapter();
 	const [session, attempts] = await Promise.all([
 		db.getSession(sessionId),
 		db.listAttempts(sessionId)
 	]);
+
+	// Settings change below: the session being left must not take them on.
+	openSessionSetup = null;
+	const recorded = parseSessionSetup(session?.setup);
+	const setup = restoreSetup
+		? usableSetup(recorded ?? inferSessionSetup(attempts, get(appSettings)))
+		: setupFromSettings(get(appSettings));
+	if (restoreSetup) await adoptSessionSetup(setup);
+	if (session && (!recorded || !sameSetup(recorded, setup))) {
+		await db.putSession({ ...session, setup });
+	}
 
 	const correctionLists = await Promise.all(
 		attempts.map((attempt) => db!.listCorrections(attempt.id))
@@ -1430,9 +1495,82 @@ export async function openSession(sessionId: string): Promise<void> {
 		progress: null,
 		prompt
 	});
+	openSessionSetup = { sessionId, setup };
 	// After the view holds the takes: preparing reads them from it.
 	prepareSessionAudio(views);
 }
+
+// ---------------------------------------------------------- Session setup ---
+
+/** The open session and the setup it was recorded with; null while none is open (or one is being opened). */
+let openSessionSetup: { sessionId: string; setup: SessionSetup } | null = null;
+
+/**
+ * Moves the steps a language cannot run on the device (no approved local
+ * engine) to Cloud.
+ */
+function useCloudWhereNotLocal(language: LanguageDefinition): void {
+	if (!language.local.stt) setSetting('sttMode', 'cloud');
+	if (!language.local.tts) setSetting('ttsMode', 'cloud');
+	if (!language.local.correction) setSetting('correctionMode', 'cloud');
+}
+
+/**
+ * Puts a session's setup into Settings, as choosing its languages and voices
+ * by hand would, and says so when the languages change.
+ */
+async function adoptSessionSetup(setup: SessionSetup): Promise<void> {
+	const before = get(appSettings);
+	const language = requireLanguage(setup.targetLanguage);
+
+	if (before.targetLanguage !== setup.targetLanguage) {
+		setSetting('targetLanguage', setup.targetLanguage);
+		if (!db) db = await getDatabaseAdapter();
+		prompts = await ensurePromptsSeeded(db, language.id);
+	}
+	if (before.instructionLanguage !== setup.instructionLanguage) setSetting('instructionLanguage', setup.instructionLanguage);
+	setSetting('ttsMode', setup.ttsMode);
+	useCloudWhereNotLocal(language);
+	if (setup.ttsVoice) setSetting('ttsVoice', setup.ttsVoice);
+	if (setup.explanationVoice) setSetting('explanationVoice', setup.explanationVoice);
+	setSetting('targetSpeechPace', setup.targetSpeechPace);
+
+	const languagesChanged =
+		before.targetLanguage !== setup.targetLanguage || before.instructionLanguage !== setup.instructionLanguage;
+	if (languagesChanged) {
+		const instruction = getInstructionLanguage(setup.instructionLanguage);
+		toast(`This session is in ${language.name}, taught in ${instruction.name}: Settings now match it.`, 4200);
+	}
+}
+
+/** Waits this long after a change in Settings before saving it to the open session. */
+const SETUP_SAVE_DELAY_MS = 800;
+let setupSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Keeps the open session's setup current: a voice, pace or language of
+ * instruction chosen while it is open becomes its setup. A change of the
+ * studied language starts a new session instead (`setTargetLanguage`).
+ */
+function keepOpenSessionSetupCurrent(settings: AppSettings): void {
+	const open = openSessionSetup;
+	if (!open || settings.targetLanguage !== open.setup.targetLanguage) return;
+
+	const current = setupFromSettings(settings);
+	if (sameSetup(current, open.setup)) return;
+	openSessionSetup = { sessionId: open.sessionId, setup: current };
+
+	if (setupSaveTimer) clearTimeout(setupSaveTimer);
+	setupSaveTimer = setTimeout(() => void saveSessionSetup(open.sessionId, current), SETUP_SAVE_DELAY_MS);
+}
+
+async function saveSessionSetup(sessionId: string, setup: SessionSetup): Promise<void> {
+	if (!db) db = await getDatabaseAdapter();
+	const session = await db.getSession(sessionId);
+	if (session) await db.putSession({ ...session, setup, updatedAt: new Date().toISOString() });
+}
+
+appSettings.subscribe(keepOpenSessionSetupCurrent);
 
 /**
  * The prompt a reopened session was answering. Previously only the title was

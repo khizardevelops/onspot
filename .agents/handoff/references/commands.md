@@ -215,6 +215,26 @@ cp node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.{js,wasm,data}
 
 Without this, every Piper voice fails at synthesis time.
 
+The Supertonic voice runtime (prebuilt sherpa-onnx v2.0.1, 14 MB) is gitignored too:
+
+```sh
+scripts/sherpa-tts-assets.sh                                  # downloads the 85 MB release tarball, verifies, extracts 3 files + LICENSE
+SHERPA_TTS_TARBALL=path/to/tarball scripts/sherpa-tts-assets.sh   # reuse a downloaded tarball (still verified)
+```
+
+Without it, every Supertonic voice fails with "The on-device voice runtime could not be loaded".
+To upgrade sherpa-onnx: change `SHERPA_VERSION` and every SHA-256 in the script together, then run
+the voice check.
+
+## Voice check (every on-device voice loads and speaks)
+Open `/model-lab/voices/` on the dev server and press **Check**: each voice in
+`src/lib/languages/voices.ts` is downloaded, speaks one sentence in its language, and is marked
+pass/fail (not silent, plausible length) with its load time, rtf and a clip to listen to. By
+default one Supertonic style per language (they share the weights); tick "Every Supertonic style"
+for all ten. The full set downloads ~1.2 GB into the TTS cache; use a browser profile on disk,
+not `/tmp` (tmpfs). The app navigates twice while starting, so automation should let the page
+settle before clicking.
+
 ## Clearing model caches
 Models live in the browser's Cache API (`transformers-cache`, `onspot-tts-cache`), per origin.
 Clear via DevTools > Application > Storage, or:

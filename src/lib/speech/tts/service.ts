@@ -3,8 +3,7 @@
 import { ElevenLabsTtsAdapter, PaidPlanVoiceError } from './cloud/ElevenLabsTtsAdapter';
 import { DEFAULT_ELEVENLABS_VOICE_ID } from './cloud/elevenLabsVoices';
 import { OpenAITtsAdapter } from './cloud/OpenAITtsAdapter';
-import { WorkerPiperAdapter, type SpeechPriority } from './piper/WorkerPiperAdapter';
-import { localVoiceChoices } from './voices';
+import { LocalVoiceWorker, type SpeechPriority } from './local/LocalVoiceWorker';
 import { encodeWav } from '#lib/utils/wav.js';
 import { OPUS_MIME_TYPE, OPUS_SAMPLE_RATE, encodeSpeechOpus } from '../audioFormat';
 import { canStreamOpus, canStreamPcm, playOggOpusStream, playPcmStream, type PcmFeed, type PcmSink } from './streamingPlayback';
@@ -15,8 +14,17 @@ import { decodeSpeech, isWav } from './cloud/speechAudio';
 import { hashText } from '#lib/utils/hash.js';
 import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
-import { getExplanationVoice, getInstructionLanguage, getVoice, requireLanguage, type VoiceTuning } from '#lib/languages/index.js';
+import {
+	getExplanationVoice,
+	getInstructionLanguage,
+	getVoice,
+	requireLanguage,
+	voicesFor,
+	type VoiceTuning
+} from '#lib/languages/index.js';
+import { voiceById, voiceRendition } from '#lib/languages/voices.js';
 import { processPcm, tuningSignature } from '#lib/utils/audioEffects.js';
+import { TARGET_LOUDNESS_LUFS } from '#lib/utils/loudness.js';
 import { appSettings, voiceTuning } from '#lib/stores/settings.js';
 import { noteLibraryVoiceRefused, replaceUnusableElevenLabsVoice } from '#lib/stores/elevenLabsVoice.js';
 import { get } from 'svelte/store';
@@ -27,7 +35,7 @@ export interface SynthesizeOptions {
 	mode: 'local' | 'cloud';
 	/** Target language id; selects the voice set and its audio profile. */
 	languageId: string;
-	/** Local Piper voice id, e.g. `piper-tom-medium`. */
+	/** On-device voice id, e.g. `piper-tom-medium` or `supertonic-fr-m1`. */
 	voice?: string;
 	/** API read-back: provider, key, base URL, model and voice. */
 	apiProvider?: 'elevenlabs' | 'openai';
@@ -76,16 +84,21 @@ export interface SpeechResult {
 	cached: boolean;
 }
 
-/** Local Piper voices available for a target language. */
+/**
+ * The on-device voices a target language can be read back with, for the voice pickers.
+ *
+ * @param languageId The target language id.
+ * @returns One choice per voice, its download size as the note.
+ */
 export function listLocalVoices(languageId: string): TtsChoice[] {
-	return localVoiceChoices(languageId);
+	return voicesFor(languageId).map((voice) => ({ id: voice.id, label: voice.name, note: voice.downloadSize }));
 }
 
-let localPiper: WorkerPiperAdapter | null = null;
+let localVoices: LocalVoiceWorker | null = null;
 
-function getLocalPiper(): WorkerPiperAdapter {
-	localPiper ??= new WorkerPiperAdapter();
-	return localPiper;
+function getLocalVoices(): LocalVoiceWorker {
+	localVoices ??= new LocalVoiceWorker();
+	return localVoices;
 }
 
 /**
@@ -96,13 +109,13 @@ export async function preloadLocalVoice(
 	voiceId: string,
 	onProgress?: (progress: ModelProgress) => void
 ): Promise<void> {
-	await getLocalPiper().preload(voiceId, onProgress);
+	await getLocalVoices().preload(voiceId, onProgress);
 }
 
 /** Cancels an in-flight local voice download by tearing the worker down. */
 export function cancelLocalVoiceDownload(): void {
-	localPiper?.dispose();
-	localPiper = null;
+	localVoices?.dispose();
+	localVoices = null;
 }
 
 /** A clip as synthesized, before it is stored. */
@@ -170,7 +183,7 @@ async function synthesizeCached(options: SynthesizeOptions): Promise<SpeechResul
 	return cachedClip(cacheKey, options, async () => {
 		if (options.stream && canStream(options)) return streamCloudSpeech(options);
 
-		const speech = await generate(options, language.id, voice);
+		const speech = await generate(options, voice);
 		return { url: URL.createObjectURL(speech.audio), model: speech.model, whole: Promise.resolve(speech) };
 	});
 }
@@ -261,9 +274,12 @@ export async function synthesizeExplanation(options: ExplanationSpeechOptions): 
 
 	const target = processedVoice(language.id, targetVoice);
 	const textHash = hashText(`${options.markup}\n${options.question}`);
-	const cacheKey = `tts:explanation:${language.id}:${targetVoice}:${tuningSignature(target.tuning)}:${explanationVoice.id}:${textHash}`;
+	const cacheKey = `tts:explanation:${language.id}:${voiceCacheId(targetVoice)}:${paceTag(target.pace)}:${tuningSignature(target.tuning)}:${voiceCacheId(explanationVoice.id)}:${LEVELING_TAG}:${textHash}`;
 	const model = `${targetVoice}+${explanationVoice.id}`;
-	const voices: ExplanationVoices = { target, explanationVoiceId: explanationVoice.id };
+	const voices: ExplanationVoices = {
+		target,
+		explanation: { id: explanationVoice.id, profile: explanationVoice.processing }
+	};
 
 	return synthesizeInPieces(cacheKey, options, model, (sink, run) => {
 		const segments = explanationSegments(options.markup, options.question);
@@ -292,12 +308,17 @@ function synthesizeLongText(
 	);
 }
 
-/** An on-device voice with the processing it is played with: its listening-test profile and the learner's tuning. */
-function processedVoice(languageId: string, voiceId: string): PieceVoice & { tuning: VoiceTuning } {
+/**
+ * A target-language voice as the learner hears it: its listening-test
+ * profile, the learner's tuning and their speaking pace.
+ */
+function processedVoice(languageId: string, voiceId: string): PieceVoice & { tuning: VoiceTuning; pace: number } {
+	const settings = get(appSettings);
 	return {
 		id: voiceId,
 		profile: getVoice(languageId, voiceId)?.processing ?? null,
-		tuning: voiceTuning(get(appSettings), voiceId)
+		tuning: voiceTuning(settings, voiceId),
+		pace: settings.targetSpeechPace
 	};
 }
 
@@ -316,9 +337,9 @@ const CLIP_STOPPED = 'StoppedError';
  * `onProgress` reports a voice that has to be loaded first.
  */
 function synthesizeLocalPcm(run: PieceRun, onProgress?: (progress: ModelProgress) => void): SynthesizePcm {
-	return (voiceId, text) => {
+	return (voiceId, text, pace) => {
 		if (run.stopped()) return Promise.reject(new DOMException('The clip is no longer wanted.', CLIP_STOPPED));
-		return getLocalPiper().synthesize(voiceId, text, onProgress, run.priority);
+		return getLocalVoices().synthesize(voiceId, text, onProgress, run.priority, pace);
 	};
 }
 
@@ -525,7 +546,7 @@ function elevenLabsAdapter(options: SynthesizeOptions): ElevenLabsTtsAdapter {
 /**
  * The cache identity of a clip. Advanced per-voice adjustments are part of it
  * (changing a slider must not replay audio rendered with the old EQ). Cloud
- * audio is neither a Piper voice nor EQ-processed; its key includes the
+ * audio is neither an on-device voice nor EQ-processed; its key includes the
  * endpoint, model and API voice so switching providers cannot replay audio
  * generated by another one.
  */
@@ -537,8 +558,31 @@ function speechCacheKey(options: SynthesizeOptions, languageId: string, voice: s
 		return `tts:cloud:${languageId}:${identity}:${textHash}`;
 	}
 
-	const signature = options.raw ? 'raw' : tuningSignature(voiceTuning(get(appSettings), voice));
-	return `tts:${options.mode}:${languageId}:${voice}:${signature}:${textHash}`;
+	const settings = get(appSettings);
+	const signature = options.raw ? 'raw' : `${tuningSignature(voiceTuning(settings, voice))}:${LEVELING_TAG}`;
+	return `tts:${options.mode}:${languageId}:${voiceCacheId(voice)}:${paceTag(settings.targetSpeechPace)}:${signature}:${textHash}`;
+}
+
+/**
+ * How loud on-device clips are made (`utils/loudness.ts`), as cache keys name
+ * it: clips stored before leveling, or at another loudness, are made again.
+ */
+const LEVELING_TAG = `lufs${TARGET_LOUDNESS_LUFS}`;
+
+/** A speaking pace as cache keys name it: a clip spoken at another pace is another clip. */
+function paceTag(pace: number): string {
+	return `pace${pace}`;
+}
+
+/**
+ * A voice as audio cache keys name it: its id, plus the settings that decide
+ * how it sounds (`voiceRendition`), so a clip made with other settings is
+ * never replayed. Voices without such settings keep their bare id, and with it
+ * their stored clips.
+ */
+function voiceCacheId(voiceId: string): string {
+	const rendition = voiceRendition(voiceId);
+	return rendition ? `${voiceId}@${rendition}` : voiceId;
 }
 
 /** A playable result; every caller gets its own object URL to revoke. */
@@ -574,7 +618,7 @@ async function storeSpeech(key: string, speech: GeneratedSpeech, attemptId?: str
 	}
 }
 
-async function generate(options: SynthesizeOptions, languageId: string, voice: string): Promise<GeneratedSpeech> {
+async function generate(options: SynthesizeOptions, voice: string): Promise<GeneratedSpeech> {
 	if (options.mode === 'cloud') {
 		const adapter =
 			options.apiProvider === 'elevenlabs'
@@ -595,15 +639,36 @@ async function generate(options: SynthesizeOptions, languageId: string, voice: s
 	}
 
 	const priority = (): SpeechPriority => (options.background ? 'background' : 'foreground');
-	const synthesis = await getLocalPiper().synthesize(voice, options.text, options.onProgress, priority);
-	if (synthesis.peak < 0.001) {
+	const pace = get(appSettings).targetSpeechPace;
+	return speakOnDevice(voice, options.text, { raw: options.raw, onProgress: options.onProgress, priority, pace });
+}
+
+/** Below this peak a clip is silence: the voice produced a correctly-sized buffer of nothing. */
+const SILENCE_PEAK = 0.001;
+
+/**
+ * Runs an on-device voice on one text and returns it as a playable WAV with
+ * its samples. The voice's listening-test correction (EQ / loudness) and the
+ * learner's adjustments in Settings → Advanced are applied unless `raw`.
+ */
+async function speakOnDevice(
+	voiceId: string,
+	text: string,
+	options: {
+		raw?: boolean;
+		onProgress?: (progress: ModelProgress) => void;
+		priority: () => SpeechPriority;
+		/** A share of the voice's natural speaking rate. */
+		pace: number;
+	}
+): Promise<GeneratedSpeech> {
+	const synthesis = await getLocalVoices().synthesize(voiceId, text, options.onProgress, options.priority, options.pace);
+	if (synthesis.peak < SILENCE_PEAK) {
 		throw new Error('The voice returned silence.');
 	}
 
-	// The voice's listening-test correction (EQ / loudness) plus the learner's
-	// adjustments in Settings → Advanced are applied to the PCM before playback.
-	const profile = getVoice(languageId, voice)?.processing;
-	const tuning = voiceTuning(get(appSettings), voice);
+	const profile = voiceById(voiceId)?.processing;
+	const tuning = voiceTuning(get(appSettings), voiceId);
 	const samples = options.raw
 		? synthesis.audio
 		: await processPcm(synthesis.audio, synthesis.samplingRate, profile, tuning);
@@ -614,4 +679,30 @@ async function generate(options: SynthesizeOptions, languageId: string, voice: s
 		model: synthesis.modelName,
 		durationSec: synthesis.durationSec
 	};
+}
+
+/**
+ * Speaks a short sample with one on-device voice, so a learner can try it
+ * before choosing it (the voice library in Settings). Processed like a
+ * read-back and cached like any clip, so a second listen is instant.
+ *
+ * @param voiceId Any on-device voice, in either role.
+ * @param text What to say: one sentence in the voice's language.
+ * @param pace How fast it speaks: the learner's pace for a target voice, 1 for an explanation voice.
+ * @param onProgress Reports a voice that has to be loaded first.
+ * @returns The clip.
+ */
+export function synthesizeVoiceSample(
+	voiceId: string,
+	text: string,
+	pace: number,
+	onProgress?: (progress: ModelProgress) => void
+): Promise<SpeechResult> {
+	const tuning = voiceTuning(get(appSettings), voiceId);
+	const cacheKey = `tts:sample:${voiceCacheId(voiceId)}:${paceTag(pace)}:${tuningSignature(tuning)}:${LEVELING_TAG}:${hashText(text)}`;
+
+	return cachedClip(cacheKey, {}, async () => {
+		const speech = await speakOnDevice(voiceId, text, { onProgress, priority: () => 'foreground', pace });
+		return { url: URL.createObjectURL(speech.audio), model: speech.model, whole: Promise.resolve(speech) };
+	});
 }

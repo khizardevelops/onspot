@@ -66,8 +66,14 @@ export const processingRequirements = derived(
 			: undefined;
 
 		const requirements: ProcessingRequirement[] = [];
+		// A cloud-only language never asks for local data, even if an older
+		// settings row still says Local.
+		const localStt = $settings.sttMode === 'local' && language?.local.stt !== false;
+		const localCorrection =
+			$settings.correctionMode === 'local' && language?.local.correction !== false;
+		const localTts = $settings.ttsMode === 'local' && language?.local.tts !== false;
 
-		if ($settings.sttMode === 'local') {
+		if (localStt) {
 			requirements.push({
 				id: 'transcription-download',
 				title: 'Speech-to-text',
@@ -88,7 +94,7 @@ export const processingRequirements = derived(
 			});
 		}
 
-		if ($settings.correctionMode === 'local') {
+		if (localCorrection) {
 			const ready =
 				$settings.localLlmUrl.trim() !== '' && $settings.localLlmModel.trim() !== '';
 			requirements.push({
@@ -128,7 +134,7 @@ export const processingRequirements = derived(
 			});
 		}
 
-		if ($settings.ttsMode === 'local') {
+		if (localTts) {
 			requirements.push({
 				id: 'readback-download',
 				title: 'Text-to-speech',

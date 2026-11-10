@@ -70,7 +70,7 @@ export interface TtsModelConfig {
   id: string;
   name: string;
   description: string;
-  provider: 'Transformers.js' | 'Piper' | 'Browser Native' | 'Remote API';
+  provider: 'Transformers.js' | 'Piper' | 'sherpa-onnx' | 'Browser Native' | 'Remote API';
   /** Runs on someone else's server: no download, but network-dependent. */
   remote?: boolean;
   modelRepoId: string;

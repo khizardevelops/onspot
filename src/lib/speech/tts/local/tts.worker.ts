@@ -3,13 +3,15 @@
 /// <reference lib="webworker" />
 
 /**
- * Local Piper host. Loading, phonemization and ONNX inference all happen here,
- * and requests are serialized because one ONNX session must not be run by two
- * word-clicks at once (the main-thread proxy also sends them one at a time,
- * listened ones first). At most two voices stay resident (an explanation
- * alternates the English voice and the target-language voice, and reloading a
- * voice at every switch would take seconds). Memory goes back to the browser
- * when the proxy ends this worker after an idle period.
+ * On-device voice host for every engine (Piper, piper-plus, Supertonic).
+ * Loading, phonemization and inference all happen here, and requests are
+ * serialized because one model must not be run by two word-clicks at once
+ * (the main-thread proxy also sends them one at a time, listened ones first).
+ * At most two voices stay resident (an explanation alternates the
+ * instruction-language voice and the target-language voice, and reloading a
+ * voice at every switch would take seconds); two Supertonic voices share one
+ * model. Memory goes back to the browser when the proxy ends this worker
+ * after an idle period.
  */
 import type { ITTSAdapter } from '../BaseTtsAdapter';
 import type { ModelProgress, TtsSynthesis } from '#lib/types.js';
@@ -19,6 +21,8 @@ interface SynthesizeRequest {
 	type: 'synthesize';
 	voice: string;
 	text: string;
+	/** A share of the voice's natural speaking rate (1 = natural). */
+	pace: number;
 }
 
 interface LoadRequest {
@@ -76,9 +80,9 @@ const OUT_OF_MEMORY = /bad_alloc|out of memory/i;
 const TEXT_TOO_LONG_MESSAGE = 'This text is too long for the on-device voice.';
 
 /** Runs the voice; a run that ran out of memory is reported in words a learner can act on. */
-async function synthesizeReadably(adapter: ITTSAdapter, text: string): Promise<TtsSynthesis> {
+async function synthesizeReadably(adapter: ITTSAdapter, text: string, pace: number): Promise<TtsSynthesis> {
 	try {
-		return await adapter.synthesize(text);
+		return await adapter.synthesize(text, pace);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		if (!OUT_OF_MEMORY.test(message)) throw error;
@@ -103,7 +107,7 @@ async function handle(request: Request): Promise<void> {
 			return;
 		}
 
-		const result = await synthesizeReadably(adapter, request.text);
+		const result = await synthesizeReadably(adapter, request.text, request.pace);
 		post(
 			{
 				id: request.id,

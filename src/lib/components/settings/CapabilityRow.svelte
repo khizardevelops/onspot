@@ -14,6 +14,8 @@
 		status: string;
 		ready: boolean;
 		open: boolean;
+		/** Cloud-only languages lock this row to Cloud. */
+		localAllowed?: boolean;
 		onToggle: () => void;
 		onModeChange: (value: string) => void;
 		children: Snippet;
@@ -27,6 +29,7 @@
 		status,
 		ready,
 		open,
+		localAllowed = true,
 		onToggle,
 		onModeChange,
 		children
@@ -70,6 +73,8 @@
 				]}
 				ariaLabel={`${title} processing`}
 				size="sm"
+				disabled={!localAllowed}
+				lockedHint="This language is cloud-only for now."
 				onValueChange={onModeChange}
 			/>
 			<button

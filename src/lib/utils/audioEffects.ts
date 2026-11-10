@@ -6,6 +6,23 @@ import {
 	type AudioProcessingProfile,
 	type VoiceTuning
 } from '#lib/languages/index.js';
+import { loudnessNormalizingGain } from './loudness';
+import { limitPeaks } from './peakLimiter';
+
+/**
+ * How an on-device voice's clip is processed before it plays, in order:
+ *
+ * 1. Tone: the voice's approved EQ and compressor (`AudioProcessingProfile`),
+ *    with the learner's adjustments from Settings → Advanced on top.
+ * 2. Level: one gain that brings the clip to the same loudness as every
+ *    other voice's (`loudness.ts`), then the learner's volume.
+ * 3. Peaks: a look-ahead limiter keeps the loudest moments under
+ *    `PEAK_CEILING` (`peakLimiter.ts`).
+ *
+ * Every clip is made whole before it plays, so all of this runs once, when the
+ * clip is made (a few milliseconds, against seconds of speaking), and the
+ * stored clip replays as it is.
+ */
 
 function dbToGain(db: number): number {
 	return Math.pow(10, db / 20);
@@ -14,20 +31,18 @@ function dbToGain(db: number): number {
 /** Fallback when a voice has no approved profile but the learner tunes it. */
 function neutralProfile(): AudioProcessingProfile {
 	return {
-		targetPeak: 0.92,
 		lowShelf: { frequency: 200, gainDb: 0 },
 		body: { frequency: 500, gainDb: 0, q: 1 },
 		presence: { frequency: 1200, gainDb: 0, q: 0.9 },
 		highShelf: { frequency: 3200, gainDb: 0 },
-		dynamics: null,
-		makeupGainDb: 0
+		dynamics: null
 	};
 }
 
 /**
  * Layers the learner's per-voice adjustments on top of the approved profile.
- * Returns `null` when there is nothing to process, so an untouched voice with
- * no approved profile keeps its raw model output.
+ * Returns `null` when the tone has nothing to change: an untouched voice with
+ * no approved profile keeps its own tone (its level is still evened out).
  */
 export function resolveProfile(
 	base: AudioProcessingProfile | null | undefined,
@@ -69,8 +84,18 @@ export function tuningBands(base: AudioProcessingProfile | null | undefined): Tu
 	];
 }
 
+/** The gain, in dB, of each band the learner's faders drive, as a resolved profile sets it. */
+function bandGainsDb(profile: AudioProcessingProfile): Record<TuningBand['key'], number> {
+	return {
+		bassDb: profile.lowShelf.gainDb,
+		bodyDb: profile.body.gainDb,
+		presenceDb: profile.presence.gainDb,
+		trebleDb: profile.highShelf.gainDb
+	};
+}
+
 /**
- * The EQ as Web Audio biquads, low to high. Shared by `processPcm` and the
+ * The EQ as Web Audio biquads, low to high. Shared by the tone stage and the
  * Settings response curve so the plotted curve is exactly what is applied.
  */
 function createEqFilters(
@@ -86,6 +111,34 @@ function createEqFilters(
 		filter.gain.value = gainFor(band);
 		return filter;
 	});
+}
+
+/** The tone stage as Web Audio nodes: the EQ, then the approved compressor when the profile has one. */
+interface ToneStage {
+	input: AudioNode;
+	output: AudioNode;
+	filters: BiquadFilterNode[];
+	bands: TuningBand[];
+}
+
+function createToneStage(context: BaseAudioContext, profile: AudioProcessingProfile): ToneStage {
+	const bands = tuningBands(profile);
+	const gains = bandGainsDb(profile);
+	const filters = createEqFilters(context, bands, (band) => gains[band.key]);
+	for (let index = 1; index < filters.length; index++) filters[index - 1].connect(filters[index]);
+
+	let output: AudioNode = filters[filters.length - 1];
+	if (profile.dynamics) {
+		const compressor = context.createDynamicsCompressor();
+		compressor.threshold.value = profile.dynamics.threshold;
+		compressor.knee.value = profile.dynamics.knee;
+		compressor.ratio.value = profile.dynamics.ratio;
+		compressor.attack.value = profile.dynamics.attack;
+		compressor.release.value = profile.dynamics.release;
+		output.connect(compressor);
+		output = compressor;
+	}
+	return { input: filters[0], output, filters, bands };
 }
 
 let responseContext: OfflineAudioContext | null = null;
@@ -132,155 +185,83 @@ export function tuningSignature(tuning: VoiceTuning): string {
 /** Smoothing time constant for live parameter changes, in seconds. */
 const LIVE_RAMP = 0.015;
 
-/** A voice's processing graph between a source and the destination. */
+/**
+ * The highest a processed clip may peak: -1 dBFS, leaving room for Opus,
+ * whose decoded peaks run a little above the original.
+ */
+const PEAK_CEILING = 0.89;
+
+/** A voice's processing graph between a source and the destination, for live playback. */
 export interface ProcessingChain {
 	input: AudioNode;
 	output: AudioNode;
 	/** Applies new learner adjustments to the running graph, without rebuilding it. */
 	setTuning(tuning: VoiceTuning): void;
+	/** Sets the gain that brings the clip to the target loudness (`levelingGain`). */
+	setLeveling(gain: number): void;
 }
 
 /**
- * Builds the voice's studio profile plus the learner's adjustments as Web Audio
- * nodes: 4-band EQ, the approved compressor, makeup gain, peak normalization,
- * the learner's volume and a final limiter so boosts cannot clip.
- *
- * `processPcm` renders it offline for read-backs; the Settings preview runs the
- * same graph live, so what the learner hears while tuning is what gets rendered.
- * When `resolveProfile` says there is nothing to process, the chain passes the
- * raw model output through untouched, exactly like `processPcm`.
+ * The processing as a live Web Audio graph, for the Settings preview, which
+ * plays the raw voice and applies the learner's faders as they move: the tone
+ * stage, the leveling gain (worked out ahead with `levelingGain`, again after
+ * a tone change), the learner's volume and the browser's limiter. The
+ * browser's limiter is not a hard ceiling, which is fine for listening; a
+ * clip that is kept is processed by `processPcm` instead.
  */
 export function createProcessingChain(
 	context: BaseAudioContext,
 	base: AudioProcessingProfile | null | undefined,
 	tuning: VoiceTuning,
-	inputPeak: number
+	leveling: number
 ): ProcessingChain {
-	const profile = base ?? neutralProfile();
-	const bands = tuningBands(profile);
-	const approved: Record<TuningBand['key'], number> = {
-		bassDb: profile.lowShelf.gainDb,
-		bodyDb: profile.body.gainDb,
-		presenceDb: profile.presence.gainDb,
-		trebleDb: profile.highShelf.gainDb
-	};
+	const tone = createToneStage(context, resolveProfile(base, tuning) ?? neutralProfile());
+	const approved = bandGainsDb(base ?? neutralProfile());
 
-	const input = context.createGain();
-	const output = context.createGain();
-	const wet = context.createGain();
-	const dry = context.createGain();
-
-	const filters = createEqFilters(context, bands, (band) => approved[band.key] + tuning[band.key]);
-	let tail: AudioNode = input;
-	for (const filter of filters) {
-		tail.connect(filter);
-		tail = filter;
-	}
-
-	if (profile.dynamics) {
-		const compressor = context.createDynamicsCompressor();
-		compressor.threshold.value = profile.dynamics.threshold;
-		compressor.knee.value = profile.dynamics.knee;
-		compressor.ratio.value = profile.dynamics.ratio;
-		compressor.attack.value = profile.dynamics.attack;
-		compressor.release.value = profile.dynamics.release;
-		tail.connect(compressor);
-		tail = compressor;
-	}
-
-	const makeup = context.createGain();
-	makeup.gain.value = dbToGain(profile.makeupGainDb);
-	tail.connect(makeup);
-
-	// Normalize against the input peak. EQ/compression can move the peak a
-	// little; the final limiter absorbs any overshoot.
-	const normalize = context.createGain();
-	normalize.gain.value = inputPeak > 1e-6 ? Math.min(profile.targetPeak / inputPeak, 4) : 1;
-	makeup.connect(normalize);
+	const level = context.createGain();
+	level.gain.value = leveling;
+	tone.output.connect(level);
 
 	const volume = context.createGain();
 	volume.gain.value = dbToGain(tuning.volumeDb);
-	normalize.connect(volume);
+	level.connect(volume);
 
 	const limiter = context.createDynamicsCompressor();
-	limiter.threshold.value = -1;
+	limiter.threshold.value = 20 * Math.log10(PEAK_CEILING);
 	limiter.knee.value = 0;
 	limiter.ratio.value = 20;
 	limiter.attack.value = 0.001;
 	limiter.release.value = 0.05;
 	volume.connect(limiter);
-	limiter.connect(wet);
-	wet.connect(output);
-
-	// Untouched voices without an approved profile play raw, as in `processPcm`.
-	input.connect(dry);
-	dry.connect(output);
-
-	const route = (next: VoiceTuning) => (resolveProfile(base, next) ? 1 : 0);
-	wet.gain.value = route(tuning);
-	dry.gain.value = 1 - wet.gain.value;
 
 	return {
-		input,
-		output,
+		input: tone.input,
+		output: limiter,
 		setTuning(next) {
 			const at = context.currentTime;
-			filters.forEach((filter, index) => {
-				const key = bands[index].key;
+			tone.filters.forEach((filter, index) => {
+				const key = tone.bands[index].key;
 				filter.gain.setTargetAtTime(approved[key] + next[key], at, LIVE_RAMP);
 			});
 			volume.gain.setTargetAtTime(dbToGain(next.volumeDb), at, LIVE_RAMP);
-			const processed = route(next);
-			wet.gain.setTargetAtTime(processed, at, LIVE_RAMP);
-			dry.gain.setTargetAtTime(1 - processed, at, LIVE_RAMP);
+		},
+		setLeveling(gain) {
+			level.gain.setTargetAtTime(gain, context.currentTime, LIVE_RAMP);
 		}
 	};
 }
 
 /**
- * The highest a processed clip may peak: -1 dBFS, leaving room for Opus,
- * whose decoded peaks run a little above the original. The chain's limiter
- * is the browser's compressor, which is not a hard ceiling (Chromium also
- * adds automatic make-up gain): stored clips decoded with peaks around 1.2,
- * so loud syllables clipped.
+ * The clip through the tone stage, rendered by the browser's own DSP in an
+ * `OfflineAudioContext`. A clip whose tone has nothing to change, or a browser
+ * that cannot render offline, gets the clip back as it was.
  */
-const PEAK_CEILING = 0.89;
-
-/** Scales a clip down evenly, keeping its dynamics, when it peaks above `PEAK_CEILING`. */
-function keepUnderCeiling(samples: Float32Array): Float32Array {
-	const peak = peakOf(samples);
-	if (peak <= PEAK_CEILING) return samples;
-
-	const gain = PEAK_CEILING / peak;
-	for (let index = 0; index < samples.length; index++) samples[index] *= gain;
-	return samples;
-}
-
-/** Largest absolute sample, used for peak normalization. */
-export function peakOf(audio: Float32Array): number {
-	let peak = 0;
-	for (let i = 0; i < audio.length; i++) {
-		const magnitude = Math.abs(audio[i]);
-		if (magnitude > peak) peak = magnitude;
-	}
-	return peak;
-}
-
-/**
- * Renders the voice's processing chain over raw TTS PCM in an
- * `OfflineAudioContext`, so the browser's own DSP does the work, and keeps
- * the result under `PEAK_CEILING`. Returns the input untouched when there is
- * nothing to apply or the browser cannot render offline audio (the read-back
- * must still play).
- */
-export async function processPcm(
+async function shapedTone(
 	audio: Float32Array,
 	sampleRate: number,
-	profile: AudioProcessingProfile | null | undefined,
-	tuning: VoiceTuning = NEUTRAL_TUNING
+	profile: AudioProcessingProfile | null
 ): Promise<Float32Array> {
-	if (!resolveProfile(profile, tuning) || audio.length === 0) return audio;
-	if (typeof OfflineAudioContext === 'undefined') return audio;
+	if (!profile || typeof OfflineAudioContext === 'undefined') return audio;
 
 	try {
 		const context = new OfflineAudioContext(1, audio.length, sampleRate);
@@ -289,15 +270,72 @@ export async function processPcm(
 
 		const source = context.createBufferSource();
 		source.buffer = buffer;
-		const chain = createProcessingChain(context, profile, tuning, peakOf(audio));
-		source.connect(chain.input);
-		chain.output.connect(context.destination);
+		const tone = createToneStage(context, profile);
+		source.connect(tone.input);
+		tone.output.connect(context.destination);
 
 		source.start();
-		const rendered = await context.startRendering();
-		return keepUnderCeiling(rendered.getChannelData(0));
+		return (await context.startRendering()).getChannelData(0);
 	} catch (error) {
-		console.warn('[tts] audio profile failed; using raw model output', error);
+		console.warn('[tts] the EQ could not be applied; leveling the voice as it is', error);
 		return audio;
 	}
+}
+
+/**
+ * The gain that brings a clip, its tone shaped as `profile` and `tuning` say,
+ * to the target loudness: what the live chain needs (`setLeveling`) to sound
+ * like `processPcm`.
+ */
+export async function levelingGain(
+	audio: Float32Array,
+	sampleRate: number,
+	profile: AudioProcessingProfile | null | undefined,
+	tuning: VoiceTuning
+): Promise<number> {
+	const shaped = await shapedTone(audio, sampleRate, resolveProfile(profile, tuning));
+	return loudnessNormalizingGain(shaped, sampleRate);
+}
+
+/**
+ * Processes a voice's raw PCM for playing and keeping: its tone, the same
+ * loudness as every other voice, the learner's volume, and peaks under the
+ * ceiling. The input is not changed.
+ *
+ * @param audio Mono model output.
+ * @param sampleRate Its rate in Hz.
+ * @param profile The voice's approved EQ and compressor, if it has one.
+ * @param tuning The learner's adjustments for the voice.
+ * @returns The processed clip, the same length.
+ */
+export async function processPcm(
+	audio: Float32Array,
+	sampleRate: number,
+	profile: AudioProcessingProfile | null | undefined,
+	tuning: VoiceTuning = NEUTRAL_TUNING
+): Promise<Float32Array> {
+	if (audio.length === 0) return audio;
+
+	const shaped = await shapedTone(audio, sampleRate, resolveProfile(profile, tuning));
+	return leveled(shaped, sampleRate, tuning.volumeDb);
+}
+
+/**
+ * Brings a clip to the shared loudness plus the learner's volume, with its
+ * peaks under the ceiling. Limiting the spikiest voices takes up to a
+ * decibel off their loudness (measured on 51 voices); that is made up once
+ * and limited again, which leaves every voice within half a decibel.
+ */
+function leveled(samples: Float32Array, sampleRate: number, volumeDb: number): Float32Array {
+	const volume = dbToGain(volumeDb);
+	const gain = loudnessNormalizingGain(samples, sampleRate) * volume;
+	const limited = limitPeaks(scaled(samples, gain), sampleRate, PEAK_CEILING);
+
+	const shortfall = loudnessNormalizingGain(limited, sampleRate) * volume;
+	return shortfall > 1 ? limitPeaks(scaled(limited, shortfall), sampleRate, PEAK_CEILING) : limited;
+}
+
+/** The samples times `gain`, as a new clip. */
+function scaled(samples: Float32Array, gain: number): Float32Array {
+	return samples.map((sample) => sample * gain);
 }

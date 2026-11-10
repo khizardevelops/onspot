@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { AudioProcessingProfile } from '#lib/languages/index.js';
 import { parseExplanation } from '#lib/adapters/llm/explanation.js';
 import { speakPieces, type PieceVoice, type SynthesizePcm } from './speechPieces';
 import type { PcmSink } from './streamingPlayback';
@@ -40,27 +39,15 @@ export function explanationSegments(markup: string, question: string): Explanati
 }
 
 /**
- * The explanation voice runs through the target voice's loudness chain
- * (compression, makeup gain, peak target) without its EQ, which was tuned to
- * that voice's timbre: both voices then sit at the same level in one clip.
+ * The two voices of an explanation, each with its own processing. Every piece
+ * is brought to the same loudness, so the two voices match in level whatever
+ * each one's own is.
  */
-function loudnessOnly(profile: AudioProcessingProfile | null): AudioProcessingProfile | null {
-	if (!profile) return null;
-	return {
-		...profile,
-		lowShelf: { ...profile.lowShelf, gainDb: 0 },
-		body: { ...profile.body, gainDb: 0 },
-		presence: { ...profile.presence, gainDb: 0 },
-		highShelf: { ...profile.highShelf, gainDb: 0 }
-	};
-}
-
-/** The two voices of an explanation. */
 export interface ExplanationVoices {
 	/** The target-language voice, with its profile and the learner's tuning. */
 	target: PieceVoice;
-	/** The voice for the language of instruction; it takes the target voice's loudness (see `loudnessOnly`). */
-	explanationVoiceId: string;
+	/** The voice for the language of instruction, with its profile. */
+	explanation: PieceVoice;
 }
 
 /**
@@ -78,14 +65,9 @@ export function speakExplanation(
 	synthesize: SynthesizePcm,
 	sink?: PcmSink
 ): Promise<Float32Array> {
-	const explanationVoice: PieceVoice = {
-		id: voices.explanationVoiceId,
-		profile: loudnessOnly(voices.target.profile)
-	};
-
 	const pieces = segments.map((segment) => ({
 		text: segment.text,
-		voice: segment.role === 'target' ? voices.target : explanationVoice
+		voice: segment.role === 'target' ? voices.target : voices.explanation
 	}));
 
 	return speakPieces(pieces, synthesize, sink);
