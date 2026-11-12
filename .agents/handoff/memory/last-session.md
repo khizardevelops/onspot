@@ -17,7 +17,7 @@
   persisted attempt. The desktop release under WebKitWebDriver recorded 4.1 s through a PipeWire
   null source, ran native whisper.cpp and a local LLM stub, and persisted the attempt; its transcript
   was an engine artifact (`*Rires*`), so this is pipeline proof, not a speech-quality pass. Remaining:
-  human-quality listening and a physical Android run. No commit.
+  human-quality listening and a physical Android run. Committed as `baa6f5f`.
 
 ## 2026-11-12 (latest): P3 core loop compiled, evented and tested
 
@@ -35,7 +35,7 @@
   `bun run check` (0 errors, 9 pre-existing About warnings), boundaries, SPDX 318, and
   `bun run bridge:types`.
 - **Next:** bridge practice commands and host shims, then the Svelte adapter. The four cancellation
-  race tests and smoke matrix remain. No commit.
+  race tests and smoke matrix remain. Committed as `baa6f5f`.
 
 ## 2026-11-12 (latest): P3 map posted
 
@@ -75,7 +75,7 @@
   plugin-sql 2.6.0, opener 2.7.3, dialog 2.8.4, http 2.9.0, fs 2.7.1); `bunx tauri build
   --no-bundle` then built `target/release/onspot` in 7m57s. check/build stayed green.
 - **Not done:** Android/NDK; the wasm target is absent here, so the local bridge package was not
-  rebuilt (CI installs it fresh). No commit.
+  rebuilt (CI installs it fresh). Committed as `baa6f5f`.
 
 ## 2026-11-12 (latest): P2 completed — web SQL host, screens on the bridge, default flipped
 
@@ -99,7 +99,7 @@
     migration version rows still parse.
 - **Not done:** typed `AppSettings` defaults/merge in Rust, schema-9 fixture through the web shim,
   `tauri build`, Android. Release builds must run `bun run bridge:wasm` first or settings/history fall
-  back to legacy. No commit.
+  back to legacy. Committed as `baa6f5f`.
 
 ## 2026-11-12 (later): Hexagonal migration P2, the storage foundation
 
@@ -125,7 +125,7 @@
   - The bridge `dispatch` match arms must each serialize their own response type; unifying them
     first fails to compile.
 - **Not done:** web SQL shim, typed settings/merge, secrets, the Settings/History store rewire and
-  default flip, the remaining repositories, Android build. No commit.
+  default flip, the remaining repositories, Android build. Committed as `baa6f5f`.
 
 ## 2026-11-12 (later): Hexagonal migration P1, the bridge spine
 

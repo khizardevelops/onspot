@@ -23,7 +23,7 @@
 - **Smoke detail:** the web check stubs Groq STT/chat and persists a real attempt. The desktop
   release recorded 4.1 s through a PipeWire null source, ran native whisper.cpp + a local LLM stub,
   and persisted attempt `attempt-…` with its correction. Not verified: human-quality transcription/
-  TTS listening and a physical Android run. No commit.
+  TTS listening and a physical Android run. Committed as `baa6f5f`.
 
 ## Hexagonal migration: P3 started; P2 complete (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
 
@@ -56,7 +56,7 @@
   boundaries, SPDX 306. `bun run test:storage` passed.
 - **Tauri build:** npm `@tauri-apps/*` aligned to the resolved crates; `bunx tauri build
   --no-bundle` succeeds and produced `target/release/onspot`. Android/NDK and the wasm target are
-  absent here, so the bridge package was not rebuilt locally. No commit.
+  absent here, so the bridge package was not rebuilt locally. Committed as `baa6f5f`.
 
 
 ## Hexagonal migration: P2 completed on both drivers (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)

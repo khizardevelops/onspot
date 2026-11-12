@@ -11,7 +11,7 @@
 - [x] Capture goldens for jsonRepair, capWords, isSilent, sameWords, sentenceChunks (33 cases).
 - [x] Verify cargo check/fmt/clippy/test, bun check/build/SPDX, boundaries, matrix and fixture
       determinism.
-- [ ] Commit P0 on `refactor/hex-arch-p0` and open the PR when the user asks.
+- [x] Commit P0-P3 on `refactor/hex-arch-p0` (`baa6f5f`); open the PR when the user asks.
 
 ## Hexagonal migration P1 (2026-11-12, done)
 - [x] Bridge dispatcher, `core.ping`, `BridgeError`, `bridge.v1` handshake and `UiEvent`
