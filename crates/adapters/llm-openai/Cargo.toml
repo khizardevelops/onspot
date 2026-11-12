@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-adapter-llm-openai"
+description = "OpenAI-compatible LLM adapter: JSON repair, evaluation, explanation, pacing, prompts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+onspot-domain = { path = "../../onspot-domain" }
+onspot-ports = { path = "../../onspot-ports" }
+# reqwest on native / host HTTP on wasm arrives in P4, behind the HttpClient
+# port. The goal fixtures for jsonRepair live in tests/golden/.

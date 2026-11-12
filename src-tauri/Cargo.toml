@@ -9,8 +9,7 @@ edition = "2021"
 rust-version = "1.77.2"
 
 # The app crate plus onspot's own Tauri plugins (one folder each under plugins/).
-[workspace]
-members = ["plugins/speech"]
+# Both are members of the repository workspace declared in ../Cargo.toml (P0).
 
 [lib]
 name = "onspot_lib"
@@ -35,6 +34,12 @@ tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-speech = { path = "plugins/speech" }
+# The core's only door: commands marshal to it, events come back over a channel.
+onspot-bridge = { path = "../bindings/onspot-bridge", features = ["tauri"] }
+# Native SQLite for the core's storage commands (P2). The legacy plugin stays
+# registered until P8, so both paths can write the same database file.
+onspot-adapter-repo-sql = { path = "../crates/adapters/repo-sql" }
+onspot-ports = { path = "../crates/onspot-ports" }
 # Loopback OAuth capture in `src/oauth.rs`.
 tokio = { version = "1", features = ["net", "io-util", "sync", "time"] }
 url = "2"
@@ -44,11 +49,5 @@ url = "2"
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0"
 
-# Release builds (desktop and Android). The app's own Rust is thin, so it is
-# built for size; whisper.cpp's C++ is compiled by CMake with its own -O3.
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
+# Release settings live in the workspace root (../Cargo.toml): Cargo ignores a
+# [profile.*] table inside a workspace member.

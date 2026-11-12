@@ -12,9 +12,11 @@ export {
 	glossSections,
 	glossWords,
 	hasMeaningAt,
+	hasPartOfSpeechAt,
 	phraseContext,
 	translatePhrase,
 	type SectionGlosses
 } from './glossary';
 export * from './explanation';
 export { buildEvaluationMessages } from './prompt';
+export { generatePromptTopic, type GeneratedPrompt, type PromptTopicRequest } from './promptTopic';

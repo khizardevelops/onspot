@@ -4,5 +4,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  onspot_lib::run();
+    onspot_lib::run();
 }

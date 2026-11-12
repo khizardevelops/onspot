@@ -13,7 +13,8 @@
 	import { untrack, type ComponentProps } from 'svelte';
 	import { quickCollapse } from '#lib/neo.js';
 	import { separateFollowUp } from '#lib/adapters/llm/index.js';
-	import { directionForText } from '#lib/utils/words.js';
+	import { directionForText, layoutLength } from '#lib/utils/words.js';
+	import { fitFontSize, type FitTextOptions } from '#lib/utils/fitText.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCollapse } from '@dvcol/neo-svelte/collapse';
 	import { Loader2, Pause, Volume2 } from '@lucide/svelte';
@@ -27,7 +28,10 @@
 	}
 
 	/** Where the question's word meanings come from, as `Transcript` takes them. */
-	type QuestionMeanings = Pick<ComponentProps<typeof Transcript>, 'glosses' | 'requestGlosses' | 'requestPhrase'>;
+	type QuestionMeanings = Pick<
+		ComponentProps<typeof Transcript>,
+		'glosses' | 'requestGlosses' | 'requestPhrase' | 'showPos'
+	>;
 
 	interface Props {
 		/** Explanation markup (see `adapters/llm/explanation.ts`); an older take's `<ask>` question is left out of it. */
@@ -69,6 +73,26 @@
 	const questionDirection = $derived(directionForText(question));
 
 	let showTranslation = $state(untrack(() => translationShown));
+
+	/*
+	 * Dynamic font size for the follow-up question. Short prompts read large
+	 * (up to 1.46× = 22px at the base 15px); long prompts shrink toward the
+	 * floor (0.8× = 12px). A container-width measurement is not available
+	 * without a ref, so we approximate at 480px (a card at desktop widths).
+	 */
+	const FOLLOW_UP_FIT: FitTextOptions = {
+		min: 12,
+		max: 22,
+		targetHeight: 90,
+		advance: 0.5,
+		lineHeight: 1.6
+	} as const;
+	const FOLLOW_UP_CONTAINER_PX = 480;
+	const followUpFontPx = $derived(layoutLength(question) > 0
+		? fitFontSize(layoutLength(question), FOLLOW_UP_CONTAINER_PX, FOLLOW_UP_FIT)
+		: FOLLOW_UP_FIT.max);
+	/** Scale relative to the card's base 15px explanation size. */
+	const followUpFontScale = $derived(followUpFontPx / 15);
 </script>
 
 <div class="min-w-0">
@@ -82,7 +106,8 @@
 
 	{#if question}
 		<!-- Corner marks (⛶) frame the follow-up, setting it apart from the explanation above it. -->
-		<div class="follow-up" class:after-explanation={explanation.parts.length > 0} data-text-section="followUp">
+		<div class="follow-up" class:after-explanation={explanation.parts.length > 0} data-text-section="followUp"
+			style:--follow-up-font-scale={followUpFontScale}>
 			<div class="flex min-h-6 flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
 				<div class="flex items-center gap-1">
 					{#if followUpAudio}
@@ -134,7 +159,9 @@
 	}
 	.follow-up-question,
 	.follow-up-translation {
-		font-size: calc(1em * var(--text-scale-follow-up, 1));
+		/* Combines the learner's text-size preference with the length-based dynamic scale.
+		   --follow-up-font-scale: shorter question → larger; longer → smaller (12–22px range). */
+		font-size: calc(1em * var(--text-scale-follow-up, 1) * var(--follow-up-font-scale, 1));
 	}
 
 	/* Ink stays the foreground colour on every tint, so contrast never depends on the highlight. */

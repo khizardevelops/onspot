@@ -79,8 +79,10 @@ is a reminder, not a replacement.
   unless iOS truly cannot do it, and then say why in the UI.
 - **Never instrument production code for a test or a demo** (`rules/constraints.md`). Measuring
   tools go in a dev-only route or an injected script.
-- **Privacy rules stand.** Text and audio leave the device only through an endpoint the learner
-  configured, and the Settings data-flow line must name it.
+- **Privacy rules stand.** Speech and audio leave the device only through an endpoint the learner
+  configured, and the Settings data-flow line must name it. Generated speaking prompts are the
+  exception: they go to the shared prompt database by default, and the learner can turn sharing off
+  in Settings.
 - **SPDX header** on every new `.ts`, `.js`, `.mjs`, `.svelte`, `.rs` and `.sh` file (`bun run spdx`).
 - **British English** in docs and UI copy (`colour`, `behaviour`, `licence`).
 - **Do not commit or push** unless the author asks. They review changes first.
@@ -320,8 +322,8 @@ every learner's local data.
 
 ### Phase 9: notifications and reminders
 
-- onspot has no server and will not get one, so there is no Web Push. On iOS the system cannot
-  deliver a reminder to a closed app.
+- onspot has no notification server and will not get one, so there is no Web Push. On iOS the
+  system cannot deliver a reminder to a closed app.
 - Keep the in-app reminder banner. On iOS, hide or explain the system-notification part of
   Settings → Reminders, and keep the copy saying the nudge appears when onspot is opened.
 - Apply the same honesty to the download-finished notification: on iOS the toast is the signal.

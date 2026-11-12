@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+mod core_bridge;
 #[cfg(target_os = "linux")]
 mod display_backend;
 #[cfg(target_os = "linux")]
@@ -8,36 +9,58 @@ mod oauth;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  #[cfg(target_os = "linux")]
-  display_backend::prefer_x11_inside_appimage();
+    #[cfg(target_os = "linux")]
+    display_backend::prefer_x11_inside_appimage();
 
-  tauri::Builder::default()
-    .plugin(tauri_plugin_sql::Builder::default().build())
-    // Settings → Storage → Export: a native Save dialog and the file write.
-    .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_fs::init())
-    // Cloud sync: open the system browser for Google sign-in, and make
-    // cross-origin Drive/WebDAV requests without the webview's CORS policy.
-    .plugin(tauri_plugin_http::init())
-    .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_speech::init())
-    .manage(oauth::OAuthState::default())
-    .invoke_handler(tauri::generate_handler![
-      oauth::oauth_loopback_start,
-      oauth::oauth_loopback_wait
-    ])
-    .setup(|app| {
-      #[cfg(target_os = "linux")]
-      microphone::allow_in_main_window(app)?;
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::default().build())
+        // Settings → Storage → Export: a native Save dialog and the file write.
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        // Cloud sync: open the system browser for Google sign-in, and make
+        // cross-origin Drive/WebDAV requests without the webview's CORS policy.
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_speech::init())
+        .manage(oauth::OAuthState::default())
+        .invoke_handler(tauri::generate_handler![
+            oauth::oauth_loopback_start,
+            oauth::oauth_loopback_wait,
+            core_bridge::core_init,
+            core_bridge::core_command
+        ])
+        .setup(|app| {
+            use std::sync::Arc;
+
+            use onspot_adapter_repo_sql::{
+                migrate, RusqliteDriver, SqlHistoryStore, SqlRecordsStore, SqlSettingsStore,
+            };
+            use onspot_ports::SqlDriver;
+            use tauri::Manager;
+
+            #[cfg(target_os = "linux")]
+            microphone::allow_in_main_window(app)?;
+
+            // The core's storage connection. The legacy SQL plugin keeps its
+            // own pooled connection to the same file until P8 (ADR-005); the
+            // migration chain is idempotent and both paths see the same rows.
+            let database_path = app.path().app_config_dir()?.join("onspot.db");
+            let driver: Arc<dyn SqlDriver> = Arc::new(RusqliteDriver::open(&database_path)?);
+            tauri::async_runtime::block_on(migrate(driver.as_ref()))?;
+            app.manage(core_bridge::BridgeState::new(
+                Arc::new(SqlHistoryStore::new(driver.clone())),
+                Arc::new(SqlSettingsStore::new(driver.clone())),
+                Arc::new(SqlRecordsStore::new(driver)),
+            ));
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

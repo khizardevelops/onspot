@@ -121,10 +121,13 @@ export interface EvaluationPart {
 
 export function buildEvaluationMessages(request: EvaluationRequest, part?: EvaluationPart): ChatMessage[] {
 	const { language, translationTarget } = request;
+	const isFreeflow = request.mode === 'freeflow';
 	const toneNote =
 		request.mode === 'exam'
 			? `This is EXAM practice: prioritise formal, correct ${language} suitable for the exam.`
-			: `This is CASUAL practice: prioritise natural, idiomatic spoken ${language}; note formality differences but do not insist on them.`;
+			: isFreeflow
+				? `This is FREE-FLOW practice: the learner is speaking freely about whatever they choose, without a set prompt. Focus on grammar, vocabulary and register. Also assess coherence and substance: was the speech logically connected and meaningful (even if brief), or was it rambling/incoherent/gibberish? Note this honestly but kindly in the explanation. The follow-up should ask an open question about what they actually said.`
+				: `This is CASUAL practice: prioritise natural, idiomatic spoken ${language}; note formality differences but do not insist on them.`;
 
 	const system = [
 		`You are a patient ${language} speaking coach for a ${translationTarget}-speaking learner. The user message gives their level, the kind of practice and the prompt they answered.`,
@@ -134,10 +137,14 @@ export function buildEvaluationMessages(request: EvaluationRequest, part?: Evalu
 		explanationRulesFor(language, translationTarget)
 	].join('\n\n');
 
+	const promptLine = isFreeflow
+		? 'They were speaking freely — no specific prompt was given. Evaluate grammar, vocabulary and coherence/substance.'
+		: `They were given this prompt: "${request.prompt}".`;
+
 	const user = [
 		`The learner is at CEFR level ${request.level}${levelNote(language, request.level)}.`,
 		toneNote,
-		`They were given this prompt: "${request.prompt}".`,
+		promptLine,
 		'',
 		...(part ? ['', partNote(part)] : []),
 		'',

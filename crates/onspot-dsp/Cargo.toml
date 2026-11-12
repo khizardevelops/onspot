@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-dsp"
+description = "Pure signal and text helpers shared by the core (silence, WAV, word caps, word comparison, history search)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+regex = "1"
+thiserror = "2"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

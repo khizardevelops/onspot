@@ -1,5 +1,191 @@
 # Decisions
 
+## P3 host RPC and driver-owned audio (2026-11-12)
+
+- **Host calls are request/response events.** A port in the bridge emits
+  `host_request { id, method, payload }` and awaits `core.host_reply`. This is the only way the same
+  Rust loop can call webview capture/STT/evaluation/prompt code on both wasm and Tauri; the core
+  names no transport. The captured frame is cached by the driver after `capture.stop`, so STT does
+  not send the PCM back.
+- **Playback is intent-driven.** The core emits `speak_track`/`play_segment`/`speak_text`/
+  `play_recording`; the driver uses its existing TTS cache and audio player. This avoids a byte
+  round trip for every clip and keeps the current playback quality.
+- **The driver owns the interval.** `practice.tick` advances the core clock; the core enforces the
+  60 s deadline. Core crates still name no async runtime.
+- **One page, one core.** The dev probe and storage check must never call `init_core_wasm`
+  separately. The fixture check imports the wasm module with a unique query so wasm-bindgen gives it
+  its own thread-local core; ordinary features use `getCoreClient`.
+- **The legacy practice body stays until P8.** `VITE_CORE_BACKEND=legacy` selects it; P3's exit is
+  the core path passing its gates, not deleting the old code under the toggle.
+
+## P3 practice core (2026-11-12)
+
+- **Prompt choice is split.** Catalogue data and LLM generation stay in the driver during P3;
+  `next_prompt(candidates, englishFallback)` owns the between-takes guard and the random choice.
+  A generated prompt reaches the core through `set_prompt` after the driver stores it. P7 moves the
+  catalogue.
+- **Resume is a core use case.** `PracticePorts` gained `HistoryStore` alongside `RecordsStore`;
+  `resume_last_session()` reads the newest session, its takes and each take's corrections. This is
+  why tests construct both stores over one in-memory driver.
+- **The view has its own error type.** `ErrorView { code, message }` keeps `PracticeSnapshot`
+  serializable/TS without pulling `CoreError` or the ports crate into the wire schema.
+- **Events carry a boxed snapshot.** `PracticeStateChanged` boxes `PracticeSnapshot` to keep
+  `UiEvent` small; ts-rs still emits the snapshot type directly. Level and recognizer progress are
+  separate `audio_level` / `transcription_progress` events so the full snapshot is not cloned at
+  audio-frame cadence.
+
+## Browser storage and the toggle flip (P2, 2026-11-12)
+
+- **The web SQL host is a JS object over the existing worker**, passed to `init_core_wasm`; Rust keeps
+  the SQL text, schema and repositories, the page keeps the OPFS connection. `dispatch` became async
+  and the port traits split into native `Send + Sync` and wasm `?Send` flavours (ADR-007).
+- **Secrets stay driver-side** (`core-client/secrets.ts`, same `localStorage` keys) and are not bridge
+  commands: a Rust Tauri command cannot reach the webview's storage synchronously, and a file-backed
+  store would move existing keys and weaken I3. The browser check asserts settings and a whole-db
+  export never contain a key.
+- **Default flipped to `core`** for settings and history after the browser and fixture gates passed;
+  `VITE_CORE_BACKEND=legacy` still selects the old path. The settings store falls back to the legacy
+  adapter (with an error log) if the bridge is unavailable, so a build without the wasm package still
+  opens. Release builds must run `bun run bridge:wasm` before `bun run build` to actually use the core.
+- **Settings defaults/merge remain in TypeScript for now.** P2 moved their rows behind the bridge but
+  the typed document depends on the language/voice registry, which is a P7 concern; porting it now
+  would duplicate that table in Rust. This is the known P2 gap.
+
+## Storage foundation (P2, 2026-11-12)
+
+- **Native SQL is rusqlite 0.32 `bundled`, not 0.37.** `libsqlite3-sys` is `links = "sqlite3"`, so
+  exactly one version may be in the graph. plugin-sql 2.0 (sqlx 0.8) locks the 0.30 generation;
+  rusqlite 0.37 needs 0.35 and made Cargo downgrade sqlx. The pinned pair keeps the legacy path
+  byte-for-byte and is recorded in ADR-005. Revisit when P8 removes plugin-sql.
+- **tauri-plugin-sql stays registered until P8.** The core's rusqlite connection and the plugin's
+  pool open the same `onspot.db`; migrations are idempotent and `schema_migrations` decides, so
+  either path may boot first. No pragma that changes the file layout was added.
+- **`batch` stays optional.** rusqlite commits a real transaction; a driver without
+  connection-scoped transactions reports unsupported and `migrate()` applies statements in order,
+  matching the legacy fallback exactly.
+- **Search parity is pinned, not emulated.** Literal escaping, trimming, empty query and case
+  handling match the page; lookaround/backrefs are Rust compile errors and `\b` differs by Unicode
+  awareness. ADR-006 lists the gaps; fixtures cover the common ground.
+- **Secrets did not move.** Keys are browser-storage values on web and desktop (`localStorage`),
+  and a Rust file store would change where they live and whether they survive an app upgrade.
+  `SettingsService` nevertheless refuses the `onspot.key.` prefix so a restored/hand-edited database
+  cannot leak key material through `settings.list`/`get`. The `SecretStore` port waits for the
+  screen rewire (P4), when the host shim can keep the same storage.
+- **Settings are rows here, typed defaults later.** P2 exposes the key/value rows the legacy store
+  reads (`onspot.setting.*` JSON values); defaults, merge and sanitising stay in
+  `stores/settings.ts` until the settings screen moves, so no behaviour changes in this phase.
+
+### The core is a cargo workspace rooted at the repo, with src-tauri as a member (2026-11-12, P0)
+The master plan's tree was kept; the adjustments are all about coexisting with the existing shell.
+- **One workspace, one lock.** `src-tauri` and `src-tauri/plugins/speech` are members of the root
+  workspace, so the bridge can be a path dependency later without two dependency graphs. The
+  nested `src-tauri/Cargo.lock` was deleted and the release profile moved to the root, because
+  Cargo ignores `[profile.*]` inside a member; its values are unchanged so release output stays
+  the same. `.cargo/config.toml` (host linker pin) moved to the root for the same single-source
+  reason. See `docs/architecture/adr/001-crate-layout.md`.
+- **Adapter packages take a prefix, directories do not.** `crates/adapters/llm-openai` is package
+  `onspot-adapter-llm-openai`; `cargo tree` and error output stay unambiguous.
+- **P0 crates are empty but real.** Smoke test, SPDX header, path dependencies that encode the
+  allowed direction. No pre-declared serde/rusqlite/reqwest: the phase that needs a dependency
+  adds it, and `check-boundaries.mjs` fails if it is a forbidden one.
+
+### Guards start at warn, and the matrix is generated (2026-11-12, P0)
+- **Rust boundaries are hard failures from day one**, because the core crates are empty (I2). The
+  TypeScript layer rules only warn: they report adapter→component imports and `.svelte` imports
+  from outside the view layer, and `--strict` exists for the phase that clears them. There are
+  zero such imports today, so the rule is a tripwire, not a cleanup backlog.
+- **The coupling matrix is a generated artefact** (`node scripts/coupling-audit.mjs --check` in
+  CI). It ranks layer coupling, not fan-out: `stores/practice.ts` is the biggest orchestrator and
+  does not reach the top, which is recorded in the blueprint as a known limitation of the metric
+  rather than papered over by changing weights.
+
+### Golden fixtures run on bun and live beside the ported crate (2026-11-12, P0)
+- **No test framework was added.** `scripts/capture-golden.mjs` imports the `.ts` modules directly
+  and writes one JSON file per source function into `crates/<crate>/tests/golden/`; Rust reads it
+  with `serde_json` (dev-dependency). Format, refresh policy and the `isSilent` source-extraction
+  exception are in `docs/architecture/adr/003-golden-fixtures.md`. Two runs must be byte-identical;
+  CI fails on a diff.
+- **`isSilent` is extracted from `stores/practice.ts`**, because that module cannot load outside a
+  browser. The extraction fails loudly if the function moves; P3 replaces it with a normal import
+  when the function lands in `onspot-dsp`.
+
+### The About page is a sheet of paper, not a wall of raised keys (2026-11-11)
+The prototype's look was right, but its large cards used `--key`, the colour of a raised button.
+On dark that read as a muddy used-key surface, out of step with the app's cards.
+- **Large sheets use `--card` + `--paper-key`.** This keeps them on the app's surface ladder while
+  preserving the fine card-stock fibre. Small taped scope cards and the repo card use `--key`, so
+  they read as separate scraps of paper.
+- **One scroller, one observer root.** The page is `flex h-full flex-col` with the header as a
+  sibling; the page body is the only `overflow-y: auto` element. The reveal observer is rooted to it,
+  and the footer's layout has enough room below the `-2%` margin to enter.
+- **Source Serif 4 carries the reading text.** The app already bundles it; a serif face makes the
+  page read like a printed note rather than another settings screen. Mono stays on numbers, tape
+  tags, eyebrows and the colophon.
+- **Compositor-only motion.** Reveals, tilt, tape lifts and card hovers animate transform/opacity
+  only. The old shadow/colour transitions were removed; changing those repaints the textured sheets.
+
+### Historical word POS is filled lazily, and the parser must keep it (2026-11-11)
+The user wants noun/verb labels on words in previous sessions, not only newly fetched ones.
+- **On hover, not a bulk migration.** Glossing a whole history would make many paid LLM calls the
+  learner did not ask for. The first hover on a section that lacks POS re-requests that section with
+  `withPos` and merges the labels into the saved meanings, so the next hovers are instant.
+- **`posSections` is a separate record from `sections`.** Meanings can exist without labels (they
+  were fetched before the setting existed, or with it off). Remembering a POS request separately
+  lets the store ask once, and lets a blank model answer be remembered instead of re-requested
+  forever.
+- **The DB parser is part of the feature.** `parseWordGlosses` used to keep `words`, `phrases` and
+  `sections` only; POS was written to JSON and dropped on every load. Any new optional field in
+  `TextGlosses` must be added there too.
+- **The setting controls display, not just fetching.** Turning `showWordPos` off hides labels that
+  are already stored; turning it on backfills them on the next hover.
+
+### Prompt contributions are opt-out, queued locally, and sent on reconnect (2026-11-11)
+The user asked for generated prompts on devices to reach the shared database as soon as the device is
+online, then corrected the model: sharing is opt-out, not opt-in.
+- **Opt-out, default on.** Generated topics are shared unless the learner turns sharing off in
+  Settings → Data. Nothing is queued or sent while it is off, and queueing/flushing wait for
+  `settingsReady` so a stored opt-out is applied before any upload. `/about`, README, Settings and
+  the Worker README state this plainly; only prompt fields leave the device.
+- **No retroactive backfill.** Prompts generated while sharing was off stay local; turning it back on
+  drains the existing outbox but does not upload prompts from the off period.
+- **A local outbox, not a fire-and-forget POST.** A phone that closes mid-upload or loses the
+  connection must not lose the prompt. `prompt_submissions` keeps the batch until a 2xx; the server's
+  content hash makes retries harmless. The queue stores prompt fields only.
+- **Force a retry on `online`, keep backoff for server errors.** A failed batch backs off 30 s→1 h, but
+  a fresh connection is evidence the network is back, so it bypasses the wait. Without this, the
+  first reconnect could still wait half a minute.
+- **The Worker stores review rows, never serves prompts.** Approved contributions are copied into
+  `promptCatalogue.ts` by a maintainer; serving user-generated text to learners unreviewed would put
+  arbitrary content in the practice bar. Content dedupe keeps the queue small.
+- **Russian is bundled, not generated-only.** The complaint that Russian prompts "weren't generated"
+  was really a missing catalogue + no model. Eight hand-written `ru` entries make the common case work
+  offline; generation remains the way to expand coverage.
+- **Six words, not a sentence.** The practice bar shows a task, not a paragraph. Generation asks for
+  5–6 words and the validator rejects more than 6; the character cap still catches one runaway
+  token in a language with long words.
+
+### Prompts are stored by language of instruction and generated before translated (2026-11-10)
+The user rejected the English-seed model: a prompt translated at session start made English the
+source every language depended on, and put the curated text in the wrong place.
+- **One catalogue keyed by `instructionLanguage`** (`practice/promptCatalogue.ts`). English is an
+  ordinary `en` entry. Target-only topics carry `targetLanguages` instead of duplicating lists on
+  `LanguageDefinition`. `promptCatalogue` is the place to add a reviewed prompt in any language.
+- **Generation is primary when an LLM is configured, the catalogue is the fallback.** One small call
+  per explicit New prompt / session start, never on load; the result is stored so it can be reused.
+  A catalogue-first order was rejected because it would never exercise generation in English, and
+  because the user asked for the hybrid model explicitly.
+- **Fallbacks are ordered stored prompts for the pair → English catalogue**, and the English one is
+  announced in the bar ("Shown in English: …"). Silently passing English off as the instruction
+  language was the thing the redesign was meant to stop; a silent fallback would reintroduce it.
+- **Prompt changes wait for `idle`/`error`.** Generation takes seconds; switching the prompt under a
+  recording would evaluate the take against a topic the learner never saw. `openSession` also bumps
+  the request counter so a generation for the previous view cannot land on the session being opened.
+- **Instruction-language changes affect drafts only.** A session with takes keeps the prompt it was
+  recorded with (the take's `promptText` must stay truthful); the next prompt and next session use
+  the new language.
+- **`Prompt.language` stays the studied language; `instructionLanguage` is separate.** Migration 11
+  defaults every legacy row to `en`, which is what those rows really are.
+
 ### Tooltips wait for the pointer to settle, and hand over between neighbours (2026-11-08)
 The user, after their position was fixed: "the tooltips animation is still fucked". Frames: 60 ms rest
 (a passing pointer set them off), opacity 0 → 0.55 in one frame (90 ms, quart), a cut on the way out
@@ -1525,3 +1711,12 @@ only when the user answers the prompt).
   Feedback panel slides by transform with its column changing in one step, instead of animating the
   column width (which re-laid out every word of every card each frame). Prefer transforms/opacity for
   motion; never read layout while a page is mounting.
+
+
+## P2 typed settings (2026-11-12)
+
+`AppSettings` defaults/merge and normalisation stay in
+`src/lib/stores/settings.ts` until P7, because they depend on the language,
+provider and voice catalogs that move then. P2 owns the persisted rows and the
+`settings.*` commands. This reconciles the phase prompt with the earlier
+deferral; see `docs/architecture/adr/008-p2-typed-settings-deferred.md`.

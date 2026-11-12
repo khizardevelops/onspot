@@ -21,8 +21,9 @@ function storedTheme(): Theme {
 	return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-let current = $state<Theme>(storedTheme());
-document.documentElement.setAttribute('data-theme', current);
+const initialTheme = storedTheme();
+let current = $state<Theme>(initialTheme);
+document.documentElement.setAttribute('data-theme', initialTheme);
 
 /**
  * The installed iOS app's status bar has dark text on a light page and light
@@ -36,7 +37,7 @@ function syncStatusBar(next: Theme): void {
 	if (meta) meta.content = next === 'dark' ? 'black-translucent' : 'default';
 }
 
-syncStatusBar(current);
+syncStatusBar(initialTheme);
 
 /** The current appearance, readable reactively as `theme.current`. */
 export const theme = {

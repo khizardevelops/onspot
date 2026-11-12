@@ -7,8 +7,16 @@
 	import { goto } from '$app/navigation';
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
+	import { useCore } from '#lib/core-client/backend.js';
+	import { getCoreClient } from '#lib/core-client/client.js';
+	import type {
+		AttemptPreviewView,
+		HistoryResponse,
+		SessionView
+	} from '#lib/core-client/types.gen.js';
 	import { exportSessionTranscript } from '#lib/utils/sessionTranscript.js';
 	import { importLegacyJsonBackup } from '#lib/utils/export.js';
+	import { compileMatcher } from '#lib/utils/historySearch.js';
 	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
 	import {
 		deleteSession,
@@ -87,22 +95,87 @@
 		}
 	}
 
+	/** Groups takes by session and keeps each session's takes in the order they were made. */
+	function groupAttempts(attemptRows: Attempt[]): Record<string, Attempt[]> {
+		const grouped: Record<string, Attempt[]> = {};
+		for (const attempt of attemptRows) (grouped[attempt.sessionId] ??= []).push(attempt);
+		for (const list of Object.values(grouped)) {
+			list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+		}
+		return grouped;
+	}
+
+	/**
+	 * A bridge session has every column the screen reads. Its takes are previews:
+	 * history only needs the transcript, duration and audio key, so the other
+	 * attempt fields are left empty rather than inventing values.
+	 */
+	function coreSession(view: SessionView): Session {
+		return {
+			id: view.id,
+			title: view.title,
+			mode: view.mode as Session['mode'],
+			startedAt: view.startedAt,
+			endedAt: view.endedAt,
+			createdAt: view.createdAt,
+			updatedAt: view.updatedAt,
+			setup: view.setup
+				? {
+						targetLanguage: view.setup.targetLanguage,
+						instructionLanguage: view.setup.instructionLanguage,
+						ttsMode: view.setup.ttsMode as 'local' | 'cloud',
+						ttsVoice: view.setup.ttsVoice,
+						explanationVoice: view.setup.explanationVoice,
+						targetSpeechPace: view.setup.targetSpeechPace
+					}
+				: null
+		};
+	}
+
+	function coreAttempt(view: AttemptPreviewView, sessionId: string): Attempt {
+		return {
+			id: view.id,
+			sessionId,
+			promptId: null,
+			promptText: '',
+			transcript: view.transcript,
+			correctedText: null,
+			translation: null,
+			translations: null,
+			ttsVoice: null,
+			explanation: null,
+			followUp: null,
+			wordGlosses: null,
+			durationSec: view.durationSec,
+			wordCount: 0,
+			audioKey: view.audioKey,
+			createdAt: view.createdAt,
+			updatedAt: view.createdAt
+		};
+	}
+
 	async function load() {
 		loading = true;
 		loadError = '';
 		try {
-			const db = await getDatabaseAdapter();
-			const [sessionRows, attemptRows] = await Promise.all([
-				db.listSessions(),
-				db.listAllAttempts()
-			]);
-			sessions = sessionRows;
-			const grouped: Record<string, Attempt[]> = {};
-			for (const attempt of attemptRows) (grouped[attempt.sessionId] ??= []).push(attempt);
-			for (const list of Object.values(grouped)) {
-				list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+			if (useCore('history')) {
+				const client = await getCoreClient();
+				const response = await client.command<HistoryResponse>('history.list');
+				sessions = response.sessions.map((entry) => coreSession(entry.session));
+				attemptsBySession = groupAttempts(
+					response.sessions.flatMap((entry) =>
+						entry.attempts.map((attempt) => coreAttempt(attempt, entry.session.id))
+					)
+				);
+			} else {
+				const db = await getDatabaseAdapter();
+				const [sessionRows, attemptRows] = await Promise.all([
+					db.listSessions(),
+					db.listAllAttempts()
+				]);
+				sessions = sessionRows;
+				attemptsBySession = groupAttempts(attemptRows);
 			}
-			attemptsBySession = grouped;
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'The local database could not be opened.';
 		} finally {
@@ -131,16 +204,7 @@
 	onMount(load);
 
 	/** The query as one non-global RegExp (literal text is escaped), or an error. */
-	const matcher = $derived.by((): { re: RegExp | null; error: string } => {
-		const raw = query.trim();
-		if (!raw) return { re: null, error: '' };
-		const source = regex ? raw : raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-		try {
-			return { re: new RegExp(source, caseSensitive ? '' : 'i'), error: '' };
-		} catch (error) {
-			return { re: null, error: error instanceof Error ? error.message : 'Invalid regular expression' };
-		}
-	});
+	const matcher = $derived(compileMatcher(query, { regex, caseSensitive }));
 
 	const result = $derived.by((): { sessions: Session[]; error: string } => {
 		const { re, error } = matcher;
@@ -288,7 +352,12 @@
 		// Cancel, an empty name or an unchanged one leaves the session as it is.
 		if (!title || title === session.title) return;
 		try {
-			await renameSession(session.id, title);
+			if (useCore('history')) {
+				const client = await getCoreClient();
+				await client.command('history.rename', { sessionId: session.id, title });
+			} else {
+				await renameSession(session.id, title);
+			}
 			await load();
 			toast('Session renamed');
 		} catch (error) {
@@ -302,7 +371,12 @@
 		);
 		if (!ok) return;
 		try {
-			await deleteSession(session.id);
+			if (useCore('history')) {
+				const client = await getCoreClient();
+				await client.command('history.delete', { sessionId: session.id });
+			} else {
+				await deleteSession(session.id);
+			}
 			toast('Session deleted');
 		} catch (error) {
 			failed('Delete', error);
@@ -462,7 +536,7 @@
 													tinted
 													color={session.mode === 'exam' ? 'error' : 'primary'}
 												>
-													{session.mode === 'exam' ? 'Exam' : 'Casual'}
+													{session.mode === 'exam' ? 'Exam' : session.mode === 'freeflow' ? 'Free Flow' : 'Casual'}
 												</NeoPill>
 											</p>
 											{#if snippet}

@@ -8,7 +8,7 @@
  * append-only: bump `SCHEMA_VERSION` and add a new entry to `MIGRATIONS`.
  */
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 12;
 
 export const MIGRATIONS: Record<number, string> = {
 	1: `
@@ -149,5 +149,30 @@ export const MIGRATIONS: Record<number, string> = {
 	// are opened and theirs is worked out from their takes.
 	10: `
 		ALTER TABLE sessions ADD COLUMN setup TEXT;
+	`,
+
+	// Prompts are written in the learner's language of instruction, not seeded
+	// in English and translated. Rows from before this migration really are
+	// English, which the column default backfills.
+	11: `
+		ALTER TABLE prompts ADD COLUMN instruction_language TEXT NOT NULL DEFAULT 'en';
+	`,
+
+	// Generated prompts waiting to reach the shared database. Local-only until
+	// the learner opts in; a row is deleted once the server accepts it.
+	12: `
+		CREATE TABLE IF NOT EXISTS prompt_submissions (
+			id                    TEXT PRIMARY KEY,
+			title                 TEXT NOT NULL,
+			text                  TEXT NOT NULL,
+			instruction_language  TEXT NOT NULL,
+			target_language       TEXT NOT NULL,
+			level                 TEXT NOT NULL,
+			mode                  TEXT NOT NULL,
+			created_at            TEXT NOT NULL,
+			attempts              INTEGER NOT NULL DEFAULT 0,
+			last_attempt_at       TEXT,
+			last_error            TEXT
+		);
 	`
 };

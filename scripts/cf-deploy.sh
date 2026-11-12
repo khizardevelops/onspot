@@ -34,6 +34,10 @@ if ! command -v cf >/dev/null 2>&1; then
 fi
 
 cd "$ROOT"
+if [[ ! -f static/core-bridge/onspot_bridge.js ]]; then
+  echo "Building the core bridge (the deployed app defaults to the core backend)." >&2
+  bun run bridge:wasm
+fi
 bun run build
 
 OUTPUT="$STAGE/.cloudflare/output/v0"

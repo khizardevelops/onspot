@@ -39,8 +39,9 @@ function applyZoom(value: number): void {
 	document.documentElement.style.setProperty(ROOT_PROPERTY, String(value));
 }
 
-let current = $state(storedZoom());
-applyZoom(current);
+const initialZoom = storedZoom();
+let current = $state(initialZoom);
+applyZoom(initialZoom);
 
 /** The interface scale now. Reactive inside components and `$derived`. */
 export function uiZoom(): number {

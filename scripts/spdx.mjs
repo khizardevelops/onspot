@@ -27,6 +27,7 @@ const EXTENSIONS = new Map([
 ]);
 
 const SKIP_DIRECTORIES = new Set([
+	'.cloudflare',
 	'.commandcode',
 	'.git',
 	'.svelte-kit',
@@ -39,6 +40,10 @@ const SKIP_DIRECTORIES = new Set([
 ]);
 
 const SKIP_PATHS = [
+	// Generated files: ts-rs output for the bridge, and its wasm package.
+	'src/lib/core-client/bindings',
+	'crates/onspot-app/bindings',
+	'static/core-bridge',
 	'src/lib/speech/tts/piper/vendor',
 	'src/routes/model-lab/vendor',
 	'static/piper-wasm',

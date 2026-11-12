@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The onspot Rust workspace: the hexagonal core under crates/, the driver
+# bridge under bindings/, and the existing Tauri shell in src-tauri/.
+# Layout, dependency direction and the phase that fills each crate are in
+# docs/architecture/hexagonal-blueprint.md (decision: ADR-001).
+
+[workspace]
+resolver = "2"
+members = [
+	"crates/onspot-domain",
+	"crates/onspot-ports",
+	"crates/onspot-app",
+	"crates/onspot-dsp",
+	"crates/adapters/llm-openai",
+	"crates/adapters/repo-sql",
+	"crates/adapters/sync-drive",
+	"crates/adapters/sync-webdav",
+	"crates/adapters/native-stt",
+	"bindings/onspot-bridge",
+	"src-tauri",
+	"src-tauri/plugins/speech",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# The Tauri shell's declared minimum, kept for every member.
+rust-version = "1.77.2"
+license = "AGPL-3.0-or-later"
+
+# Release builds for desktop and Android. This table lives at the workspace
+# root because Cargo ignores a [profile.*] table declared inside a workspace
+# member; the values are src-tauri's, moved here unchanged so release output
+# (size, LTO, stripping) stays identical.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

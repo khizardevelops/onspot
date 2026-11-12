@@ -3,6 +3,8 @@
 import { writable } from 'svelte/store';
 import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import type { RunMode } from '#lib/adapters/db/index.js';
+import { useCore } from '#lib/core-client/backend.js';
+import { getCoreClient } from '#lib/core-client/client.js';
 import type { LlmModelId, LlmProviderId } from '#lib/adapters/llm/index.js';
 import { AUTOMATIC_MODEL, getProvider, isChatModel } from '#lib/adapters/llm/index.js';
 import {
@@ -103,6 +105,17 @@ export interface AppSettings {
 	practiceReminders: boolean;
 	/** How often reminders may appear: about daily, or every few days. */
 	reminderFrequency: 'frequent' | 'infrequent';
+	/**
+	 * When true, word-hover tooltips show the word's part of speech (noun, verb,
+	 * adjective, etc.) on a second line below the translation.
+	 */
+	showWordPos: boolean;
+	/**
+	 * Share generated speaking prompts (title, task, languages, level, mode)
+	 * with the shared prompt database. On by default; turning it off stops all
+	 * queueing and sending, and prompts generated while it is off stay local.
+	 */
+	promptContributions: boolean;
 }
 
 /**
@@ -148,7 +161,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	webdavPath: '/onspot/onspot.sqlite',
 	voiceTunings: {},
 	practiceReminders: false,
-	reminderFrequency: 'frequent'
+	reminderFrequency: 'frequent',
+	showWordPos: false,
+	promptContributions: true
 };
 
 const FIELD_PREFIX = 'onspot.setting.';
@@ -166,7 +181,7 @@ export const LEVELS = ['A2', 'B1', 'B2', 'C1'] as const;
 /** Allowed values of the settings rendered as fixed-choice selects. */
 const CHOICES = {
 	level: LEVELS,
-	mode: ['exam', 'casual'],
+	mode: ['exam', 'casual', 'freeflow'],
 	sttMode: ['local', 'cloud'],
 	ttsMode: ['local', 'cloud'],
 	ttsCloudProvider: ['elevenlabs', 'openai'],
@@ -206,6 +221,42 @@ const written = new Map<string, string>();
 let queued: AppSettings | null = null;
 let writing = false;
 
+/** Set after a bridge storage failure so the rest of the session uses the legacy path. */
+let coreStorageBroken = false;
+
+type SettingRow = { key: string; value: string };
+
+/** Reads the raw rows through the core when this feature is on it. */
+async function readSettingRows(): Promise<SettingRow[]> {
+	if (useCore('settings') && !coreStorageBroken) {
+		try {
+			const client = await getCoreClient();
+			const result = await client.command<{ settings: SettingRow[] }>('settings.list');
+			return result.settings;
+		} catch (error) {
+			// A release built without the wasm package must still open Settings.
+			coreStorageBroken = true;
+			console.error('[settings] core read failed; using the legacy adapter', error);
+		}
+	}
+	return (await getDatabaseAdapter()).listSettings();
+}
+
+/** Writes one row through the same path that read it. */
+async function writeSetting(key: string, value: string): Promise<void> {
+	if (useCore('settings') && !coreStorageBroken) {
+		try {
+			const client = await getCoreClient();
+			await client.command('settings.set', { key, value });
+			return;
+		} catch (error) {
+			coreStorageBroken = true;
+			console.error('[settings] core write failed; using the legacy adapter', error);
+		}
+	}
+	await (await getDatabaseAdapter()).setSetting(key, value);
+}
+
 /**
  * Writes are serialized and coalesced: typing in a field produces many store
  * updates, and overlapping full-snapshot writes could land out of order and
@@ -220,11 +271,10 @@ async function persist(value: AppSettings): Promise<void> {
 			const next = queued;
 			queued = null;
 			try {
-				const db = await getDatabaseAdapter();
 				for (const [field, fieldValue] of Object.entries(next)) {
 					const json = JSON.stringify(fieldValue);
 					if (written.get(field) === json) continue;
-					await db.setSetting(`${FIELD_PREFIX}${field}`, json);
+					await writeSetting(`${FIELD_PREFIX}${field}`, json);
 					written.set(field, json);
 				}
 			} catch (error) {
@@ -244,11 +294,10 @@ async function persist(value: AppSettings): Promise<void> {
  */
 async function persistChosenWhileLoading(value: AppSettings, fields: (keyof AppSettings)[]): Promise<void> {
 	try {
-		const db = await getDatabaseAdapter();
 		for (const field of fields) {
 			const json = JSON.stringify(value[field]);
 			if (written.get(field) === json) continue;
-			await db.setSetting(`${FIELD_PREFIX}${field}`, json);
+			await writeSetting(`${FIELD_PREFIX}${field}`, json);
 			written.set(field, json);
 		}
 	} catch (error) {
@@ -264,8 +313,7 @@ export async function initSettings(): Promise<void> {
 	// into the database (and bump the sync revision) during rehydration.
 	hydrated = false;
 
-	const db = await getDatabaseAdapter();
-	const rows = await db.listSettings();
+	const rows = await readSettingRows();
 	const loaded: AppSettings = { ...DEFAULT_SETTINGS };
 	// Also runs after a database restore: what is on disk is now the restored file.
 	written.clear();
@@ -360,7 +408,7 @@ export async function initSettings(): Promise<void> {
 	if (fieldsToWrite.length > 0) await persistChosenWhileLoading(loaded, fieldsToWrite);
 	if (!migratedToAutomatic) {
 		// Unrecorded, the move only repeats on the next start; it must not fail the start.
-		await db.setSetting(AUTOMATIC_MODEL_MIGRATION_KEY, 'done').catch((error: unknown) => {
+		await writeSetting(AUTOMATIC_MODEL_MIGRATION_KEY, 'done').catch((error: unknown) => {
 			console.error('[settings] could not record the move to Automatic', error);
 		});
 	}

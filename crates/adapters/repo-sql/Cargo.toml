@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-adapter-repo-sql"
+description = "SQLite repositories over the SqlDriver port, schema and migrations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = ["native"]
+# The rusqlite driver, only for native targets. The repositories and the
+# migration runner are engine-agnostic, so the wasm bridge depends on this
+# crate with default features off and supplies its own host driver.
+native = ["dep:rusqlite"]
+
+[dependencies]
+onspot-domain = { path = "../../onspot-domain" }
+onspot-ports = { path = "../../onspot-ports" }
+# Native driver (desktop and Android). `bundled` compiles SQLite instead of
+# linking the host's, so behaviour matches the schema. 0.32 is deliberate:
+# libsqlite3-sys has `links = "sqlite3"`, and tauri-plugin-sql (kept until P8)
+# already locks the 0.30 generation; one version must satisfy both (ADR-005).
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+
+[dev-dependencies]
+# Drains the async port in tests without pulling a runtime into the adapter.
+futures = "0.3"

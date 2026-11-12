@@ -298,6 +298,7 @@ export function sampleSession(instructionLanguage: string, targetLanguageId = 'f
 	const state = writable<PracticeState>({
 		phase: 'idle',
 		prompt: SAMPLE_PROMPT,
+		promptEnglishFallback: false,
 		mode: 'casual',
 		elapsed: 0,
 		level: 0,

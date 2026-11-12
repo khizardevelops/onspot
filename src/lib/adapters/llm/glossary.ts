@@ -128,6 +128,25 @@ export function hasMeaningAt(glosses: TextGlosses | null, wordIndex: number): bo
 }
 
 /**
+ * True when the word's part of speech was already asked for: it has a label,
+ * or its section's POS request completed (the model may have left it blank).
+ * Meanings fetched before POS existed, or with the setting off, are absent
+ * here and are fetched again when the learner hovers with POS on.
+ *
+ * @param glosses The text's saved meanings, or null.
+ * @param wordIndex The word (`glossWords` index).
+ */
+export function hasPartOfSpeechAt(glosses: TextGlosses | null, wordIndex: number): boolean {
+	if (!glosses) return false;
+	if (glosses.pos?.[wordIndex]?.trim()) return true;
+	return (
+		glosses.posSections?.some(
+			(section) => section.start <= wordIndex && wordIndex <= section.end
+		) ?? false
+	);
+}
+
+/**
  * The sentences around words `start`..`end`, as context for translating
  * them: their own sentence(s) and `PHRASE_CONTEXT_SENTENCES` either side.
  *
@@ -150,8 +169,13 @@ export function phraseContext(text: string, start: number, end: number): string 
 	return text.slice(sentences[from].start, sentences[to].end);
 }
 
-function glossMessages(sectionText: string, words: string[], language: TranslationLanguage): ChatMessage[] {
+function glossMessages(sectionText: string, words: string[], language: TranslationLanguage, withPos: boolean): ChatMessage[] {
 	const { language: source, translationTarget: target } = language;
+
+	const posInstruction = withPos
+		? `Also return a "pos" object: for every word number, a short English part-of-speech label: "noun", "verb", "adj", "adv", "prep", "pron", "conj", "det", "num", or "other". Proper nouns get "noun".
+Return only JSON: { "glosses": { "1": string, ... }, "pos": { "1": string, ... }, "expressions": [ ... ] }, all word numbers covered.`
+		: `Return only JSON: { "glosses": { "1": string, "2": string, ... }, "expressions": [ { "from": number, "to": number, "meaning": string } ] }, with a gloss for every word number, keyed by that number.`;
 
 	const system = `You give ${source}-to-${target} word meanings for a language learner who hovers over words.
 For every numbered word, give its meaning in ${target} as it is used in that sentence:
@@ -159,7 +183,7 @@ For every numbered word, give its meaning in ${target} as it is used in that sen
 - A name stays as it is. A misspoken or non-existent word gets its most likely intended meaning in brackets with a question mark, e.g. "[late?]".
 Also list the expressions: runs of 2 to ${MAX_EXPRESSION_WORDS} consecutive words that must be read together because translating them word by word gives a wrong or misleading meaning, such as compound nouns ("pomme de terre" → "potato"), fixed expressions ("tout à fait" → "absolutely", "il y a" → "there is", "en retard" → "late", "tout à coup" → "suddenly") and verb phrases ("avoir besoin de" → "to need").
 If the word-by-word meanings already read correctly together, it is NOT an expression: ordinary phrases such as "avec ma sœur", "nous avons acheté", "dans un petit café", "c'était très bon" or "au marché" are not, and neither is any verb in a compound tense (an auxiliary plus a past participle, such as "j'ai préféré" or "nous sommes allés"). Most sentences have none or one. Give each expression as its first and last word number and its meaning in context, translating all of its words, subject included ("il y a" → "there is", never just "is").
-Return only JSON: { "glosses": { "1": string, "2": string, ... }, "expressions": [ { "from": number, "to": number, "meaning": string } ] }, with a gloss for every word number, keyed by that number.`;
+${posInstruction}`;
 
 	const numberedWords = words.map((word, wordIndex) => `${wordIndex + 1}. ${word}`);
 	const user = [`Text: """${sectionText.trim()}"""`, 'Words:', ...numberedWords].join('\n');
@@ -231,6 +255,8 @@ function validExpressions(raw: unknown, wordCount: number): PhraseGloss[] {
 export interface SectionGlosses {
 	section: GlossedRange;
 	words: string[];
+	/** Part-of-speech labels, parallel to `words`; present only when `withPos` was true. */
+	pos?: string[];
 	phrases: PhraseGloss[];
 }
 
@@ -252,22 +278,23 @@ export async function generateSectionGlosses(
 	section: GlossedRange,
 	endpoint: LlmEndpoint,
 	language: TranslationLanguage,
-	signal?: AbortSignal
+	options?: { withPos?: boolean; signal?: AbortSignal }
 ): Promise<SectionGlosses> {
+	const { withPos = false, signal } = options ?? {};
 	const tokens = wordTokens(text).slice(section.start, section.end + 1);
 	if (tokens.length === 0) return { section, words: [], phrases: [] };
 
 	const sectionText = text.slice(tokens[0].start, tokens.at(-1)!.end);
 	const words = tokens.map((token) => token.text);
 	const maxTokens = Math.max(MIN_GLOSS_TOKENS, words.length * TOKENS_PER_GLOSS + REASONING_HEADROOM);
-	const raw = await chatCompletion(endpoint, glossMessages(sectionText, words, language), {
+	const raw = await chatCompletion(endpoint, glossMessages(sectionText, words, language, withPos), {
 		json: true,
 		temperature: 0.1,
 		maxTokens,
 		signal
 	});
 
-	const parsed = extractJson(raw) as { glosses?: unknown; expressions?: unknown } | null;
+	const parsed = extractJson(raw) as { glosses?: unknown; pos?: unknown; expressions?: unknown } | null;
 	const glosses = alignedGlosses(parsed?.glosses, words.length);
 	if (glosses.every((gloss) => !gloss)) throw new Error('The model returned no word meanings. Please try again.');
 
@@ -276,7 +303,11 @@ export async function generateSectionGlosses(
 		start: phrase.start + section.start,
 		end: phrase.end + section.start
 	}));
-	return { section, words: glosses, phrases };
+
+	// Extract POS if requested; use same alignment logic as glosses.
+	const pos = withPos ? alignedGlosses(parsed?.pos, words.length) : undefined;
+
+	return { section, words: glosses, pos, phrases };
 }
 
 /** A phrase's meaning is a few words; the rest is room for GPT-OSS's reasoning. */

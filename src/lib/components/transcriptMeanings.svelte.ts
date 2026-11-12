@@ -2,7 +2,7 @@
 
 import type { ReferenceElement, VirtualElement } from '@floating-ui/dom';
 import type { PhraseGloss, TextGlosses } from '#lib/adapters/db/index.js';
-import { hasMeaningAt } from '#lib/adapters/llm/glossary.js';
+import { hasMeaningAt, hasPartOfSpeechAt } from '#lib/adapters/llm/glossary.js';
 import { rangeOfWords, selectedWordRange, snapSelectionToWords } from './wordSelection';
 
 /**
@@ -78,6 +78,12 @@ export interface TranscriptMeaningsOptions {
 	phraseText: (start: number, end: number) => string;
 	/** True while a mouse drag is still choosing words; its in-between selections are not read. */
 	isSelecting: () => boolean;
+	/**
+	 * True when the learner wants part-of-speech labels. Saved meanings that
+	 * predate the setting then fetch their labels on the next hover, without
+	 * asking again for their translations.
+	 */
+	wantsPos: () => boolean;
 }
 
 export class TranscriptMeanings {
@@ -127,6 +133,8 @@ export class TranscriptMeanings {
 		const glosses = this.#options.glosses();
 
 		const meaning = glosses?.words[wordIndex];
+		// Only when asked for: turning the setting off hides labels already saved.
+		const posLabel = this.#options.wantsPos() ? glosses?.pos?.[wordIndex]?.trim() : '';
 
 		// The expression is what the words mean together; the word's own meaning
 		// stays on a second line when it says something else, so grouping never
@@ -135,11 +143,16 @@ export class TranscriptMeanings {
 		const expression = this.#expressionAt(wordIndex);
 		if (expression) {
 			const sameMeaning = meaning?.trim().toLowerCase() === expression.meaning.trim().toLowerCase();
-			const detail = meaning && !sameMeaning ? meaning : undefined;
+			const wordDetail = meaning && !sameMeaning ? meaning : undefined;
+			// When POS is available and there is no word-meaning conflict, show POS as the detail.
+			const detail = wordDetail ?? (posLabel || undefined);
 			return { anchor, text: expression.meaning, detail, isStatus: false, placement };
 		}
 
-		if (meaning) return { anchor, text: meaning, isStatus: false, placement };
+		if (meaning) {
+			// POS goes on the detail line so the main meaning stays prominent.
+			return { anchor, text: meaning, detail: posLabel || undefined, isStatus: false, placement };
+		}
 
 		const status = this.#statusText(this.#glossStatus, hasMeaningAt(glosses, wordIndex) ? 'No translation for this word' : '');
 		return status ? { anchor, text: status, isStatus: true, placement } : null;
@@ -328,7 +341,11 @@ export class TranscriptMeanings {
 
 	/** Fetches the meanings around a word once; a failure is retried on the next hover. */
 	async #loadGlosses(wordIndex: number): Promise<void> {
-		if (hasMeaningAt(this.#options.glosses(), wordIndex)) return;
+		const glosses = this.#options.glosses();
+		const complete =
+			hasMeaningAt(glosses, wordIndex) &&
+			(!this.#options.wantsPos() || hasPartOfSpeechAt(glosses, wordIndex));
+		if (complete) return;
 
 		this.#glossStatus = 'loading';
 		try {

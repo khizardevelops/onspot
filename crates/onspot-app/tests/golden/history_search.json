@@ -1,0 +1,165 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/utils/historySearch.ts",
+	"function": "compileMatcher",
+	"context": {
+		"sessions": [
+			{
+				"title": "Bonjour à Paris",
+				"transcripts": [
+					"Bonjour, je m'appelle Ana.",
+					"Je vais au marché."
+				]
+			},
+			{
+				"title": "Le marché du samedi",
+				"transcripts": [
+					"Hier j'ai lu un livre."
+				]
+			},
+			{
+				"title": "Café et croissants",
+				"transcripts": [
+					"Un café, s'il vous plaît.",
+					"Merci beaucoup !"
+				]
+			}
+		]
+	},
+	"cases": [
+		{
+			"name": "empty query matches everything",
+			"input": {
+				"query": "   ",
+				"regex": false,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": []
+			}
+		},
+		{
+			"name": "literal text matches a title and a transcript case-insensitively",
+			"input": {
+				"query": "bonjour",
+				"regex": false,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": [
+					"Bonjour à Paris"
+				]
+			}
+		},
+		{
+			"name": "case-sensitive literal text misses the other case",
+			"input": {
+				"query": "bonjour",
+				"regex": false,
+				"caseSensitive": true
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": []
+			}
+		},
+		{
+			"name": "a dot is literal, not a wildcard",
+			"input": {
+				"query": "m.",
+				"regex": false,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": []
+			}
+		},
+		{
+			"name": "a regex alternation applies to titles and transcripts",
+			"input": {
+				"query": "marché|café",
+				"regex": true,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": [
+					"Bonjour à Paris",
+					"Le marché du samedi",
+					"Café et croissants"
+				]
+			}
+		},
+		{
+			"name": "a regex character class is honoured",
+			"input": {
+				"query": "caf[ée]",
+				"regex": true,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": [
+					"Café et croissants"
+				]
+			}
+		},
+		{
+			"name": "an anchored regex only matches the start",
+			"input": {
+				"query": "^le ",
+				"regex": true,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": [
+					"Le marché du samedi"
+				]
+			}
+		},
+		{
+			"name": "a word boundary matches whole words",
+			"input": {
+				"query": "\\bmerci\\b",
+				"regex": true,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": [
+					"Café et croissants"
+				]
+			}
+		},
+		{
+			"name": "an invalid regex reports an error",
+			"input": {
+				"query": "[",
+				"regex": true,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": true,
+				"matchedTitles": []
+			}
+		},
+		{
+			"name": "unicode text matches without folding",
+			"input": {
+				"query": "café",
+				"regex": false,
+				"caseSensitive": false
+			},
+			"expected": {
+				"error": false,
+				"matchedTitles": [
+					"Café et croissants"
+				]
+			}
+		}
+	]
+}

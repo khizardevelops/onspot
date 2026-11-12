@@ -1,3 +1,9 @@
+## Practice browser check (P3)
+`bun run test:practice` starts its own dev server (port 4320) with the core backend, boots the wasm
+bridge in real Chrome with a fake microphone and a silent WAV, and checks prompt selection, start,
+cancel and the silent-take rejection. Set `CHROME_PATH` if Chrome is not in a standard location.
+Run `bun run bridge:wasm` first.
+
 # Commands
 
 **Package manager: bun** (`bun.lock`, `"packageManager": "bun@1.3.5"`). bun installs packages and
@@ -59,6 +65,24 @@ installed. After switching to a branch with different dependencies, run
   (`ffmpeg -i in.mp3 -ac 1 -ar 16000 -f f32le out.f32`).
 - `scripts/android.sh build --apk --debug --target aarch64` — debug APK for a phone; installs as
   `app.onspot.desktop.debug` beside the release app (`adb install -r …/universal/debug/…apk`).
+
+## Core bridge (P1)
+- `bun run bridge:types` — regenerate `src/lib/core-client/types.gen.ts` and its per-type
+  `bindings/` files from the Rust types (`cargo test -p onspot-app -p onspot-bridge export_bindings`
+  then `scripts/bridge-types.mjs`). Commit the result; CI fails on a diff.
+- `bun run bridge:wasm` — build the web transport into the gitignored `static/core-bridge/`.
+  Needs the `wasm32-unknown-unknown` target and `wasm-bindgen` at the version in `Cargo.lock`
+  (0.2.130 at P1). The web build defaults to `core`, so run this before `bun run build` for a
+  deploy; the Pages/Cloudflare workflows and `scripts/cf-deploy.sh` now do it themselves.
+  `VITE_CORE_BACKEND=legacy` remains the fallback selector.
+- `bun run test:storage` — real Chrome + dev server: the wasm bridge, the Rust migration (including
+  the checked-in schema-9 fixture through an in-memory sqlite-wasm host), settings persistence,
+  history read/write and the secret-leak regression. Needs `bun run bridge:wasm` first and
+  `CHROME_PATH` when Chrome is not in a standard location.
+- The dev probe (bottom-left, `data-testid="core-bridge-probe"`) runs `core.ping` and shows the last
+  three events. It exists only in dev builds. `VITE_CORE_BACKEND=core` (or
+  `localStorage['onspot.core-backend.v1']`) flips the backend; features still need to be on the
+  allowlist in `src/lib/core-client/backend.ts`.
 
 ## Desktop app (Tauri)
 - **Development, with hot reload: `bun run tauri dev`.** One command: it starts onspot's Vite dev

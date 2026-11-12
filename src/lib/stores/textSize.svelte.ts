@@ -252,9 +252,10 @@ function applyScales(next: TextScales): void {
 	}
 }
 
-let scales = $state<TextScales>(storedScales());
+const initialScales = storedScales();
+let scales = $state<TextScales>(initialScales);
 installScaleStylesheet();
-applyScales(scales);
+applyScales(initialScales);
 
 function saveScales(next: TextScales): void {
 	scales = next;

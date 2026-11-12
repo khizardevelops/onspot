@@ -34,6 +34,12 @@
 		requestGlosses?: (wordIndex: number) => Promise<void>;
 		/** Translates a selected range of words (`start`..`end` word indexes). */
 		requestPhrase?: (start: number, end: number, phrase: string) => Promise<string>;
+		/**
+		 * Ask for part-of-speech labels on hover. Saved meanings from before the
+		 * setting existed are re-requested with labels and merged, so old sessions
+		 * gain them without losing their translations.
+		 */
+		showPos?: boolean;
 		/** Reads words of this text aloud in its language; given, a selection's meaning gets a speaker button. */
 		speak?: (words: string) => void;
 		/** Text direction; by default it follows the script (RTL for Persian/Arabic/Hebrew). */
@@ -55,6 +61,7 @@
 		glosses = null,
 		requestGlosses,
 		requestPhrase,
+		showPos = false,
 		speak,
 		direction,
 		locale,
@@ -88,7 +95,8 @@
 			const words = tokens.filter((token) => token.word);
 			return words[start] && words[end] ? text.slice(words[start].start, words[end].end) : '';
 		},
-		isSelecting: () => wordDrag.dragging
+		isSelecting: () => wordDrag.dragging,
+		wantsPos: () => showPos
 	});
 
 	/**

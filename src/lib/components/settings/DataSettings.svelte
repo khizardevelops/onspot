@@ -1,9 +1,17 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { pageHref } from '#lib/pages.js';
 	import { goto } from '$app/navigation';
 	import { hydrateLatestSession } from '#lib/stores/practice.js';
+	import { appSettings, setSetting } from '#lib/stores/settings.js';
+	import {
+		flushPromptSubmissions,
+		pendingPromptSubmissions,
+		promptSubmissionsAvailable,
+		refreshPendingPromptSubmissions
+	} from '#lib/practice/promptSubmissions.js';
 	import { toast } from '#lib/stores/toast.js';
 	import { exportDatabaseFile, importLegacyJsonBackup } from '#lib/utils/export.js';
 	import SettingsSection from '#lib/components/settings/SettingsSection.svelte';
@@ -12,11 +20,29 @@
 	import SyncSection from '#lib/components/SyncSection.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
-	import { Download, ExternalLink, HardDrive, Upload } from '@lucide/svelte';
+	import { CloudUpload, Download, ExternalLink, HardDrive, Upload } from '@lucide/svelte';
+
+	const contributionsEnabled = $derived($appSettings.promptContributions);
+	const contributionsHint = $derived(
+		`On by default. Generated speaking prompts are sent to the shared prompt database so more can be reviewed for everyone. Only the prompt, its languages, level and mode are sent — never recordings, transcripts, corrections, keys or a device id. Turn this off to stop sharing; prompts generated while it is off stay on this device. ${contributionsEnabled ? `${$pendingPromptSubmissions} waiting.` : 'Nothing is being sent.'}`
+	);
 
 	let exporting = $state(false);
 	let restoring = $state(false);
 	let restoreInput = $state<HTMLInputElement | null>(null);
+
+	onMount(() => {
+		// Read the queue when Settings opens, so the hint shows what will be sent.
+		void refreshPendingPromptSubmissions();
+	});
+
+	function toggleContributions(): void {
+		const next = !$appSettings.promptContributions;
+		setSetting('promptContributions', next);
+		// Re-enabling drains the outbox, but does not backfill prompts generated
+		// while sharing was off: those were deliberately kept local.
+		if (next) void flushPromptSubmissions();
+	}
 
 	async function exportData(): Promise<void> {
 		exporting = true;
@@ -59,6 +85,24 @@
 			On this device (SQLite)
 		</NeoPill>
 	</SettingRow>
+	{#if promptSubmissionsAvailable}
+		<SettingRow
+			label="Share generated prompts"
+			hint={contributionsHint}
+		>
+			<NeoButton
+				toggle
+				checked={contributionsEnabled}
+				aria-pressed={contributionsEnabled}
+				rounded
+				class="reminder-toggle {contributionsEnabled ? 'is-selected' : ''}"
+				onclick={toggleContributions}
+			>
+				{#snippet icon()}<CloudUpload size={15} />{/snippet}
+				{contributionsEnabled ? 'On' : 'Off'}
+			</NeoButton>
+		</SettingRow>
+	{/if}
 	<SettingRow
 		label="Export database"
 		hint="One .sqlite file with everything: sessions, attempts, corrections, translations, prompts, settings, your recordings and every cached voice clip. API keys and downloaded models are not included."

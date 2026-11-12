@@ -28,7 +28,7 @@
 		processingReady,
 		processingRequirements
 	} from '#lib/stores/processing.js';
-	import { getLanguage } from '#lib/languages/index.js';
+	import { getInstructionLanguage, getLanguage } from '#lib/languages/index.js';
 	import { exportSessionTranscript } from '#lib/utils/sessionTranscript.js';
 	import { usageWarnings } from '#lib/usage/monitor.js';
 	import { pacingWait } from '#lib/adapters/llm/index.js';
@@ -92,9 +92,11 @@
 	const BAR_COUNT = 36;
 	const MODE_OPTIONS = [
 		{ value: 'exam', label: 'Exam', tone: 'error' as const },
-		{ value: 'casual', label: 'Casual', tone: 'brand' as const }
+		{ value: 'casual', label: 'Casual', tone: 'brand' as const },
+		{ value: 'freeflow', label: 'Free Flow', tone: 'brand' as const }
 	];
 	const language = $derived(getLanguage($appSettings.targetLanguage));
+	const instructionLanguage = $derived(getInstructionLanguage($appSettings.instructionLanguage));
 	const checkingData = $derived($languageData.status === 'checking');
 	/* A sample session is ready by definition: its bar shows the key a ready session has. */
 	const sessionReady = $derived(!live || $processingReady);
@@ -307,7 +309,7 @@
 						section: true,
 						items: MODE_OPTIONS.map((option) => ({
 							value: `mode:${option.value}`,
-							label: option.value === 'exam' ? 'Exam focus' : 'Conversation',
+							label: option.value === 'exam' ? 'Exam focus' : option.value === 'freeflow' ? 'Free Flow' : 'Conversation',
 							after: modeCheck
 						}))
 					}
@@ -321,7 +323,7 @@
 		if (key === 'export') void exportCurrentTranscript();
 		else if (key === 'rename') beginRename();
 		else if (key === 'delete') deleteOpen = true;
-		else if (key.startsWith('mode:')) setSessionMode(key.slice(5) as 'exam' | 'casual');
+		else if (key.startsWith('mode:')) setSessionMode(key.slice(5) as 'exam' | 'casual' | 'freeflow');
 	}
 
 	async function exportCurrentTranscript(): Promise<void> {
@@ -357,7 +359,7 @@
 	<span class="shrink-0">{language?.name ?? 'Language'}</span><span class="text-faint">·</span>
 	<span class="shrink-0">{$appSettings.level}</span><span class="text-faint">·</span>
 	<span class="shrink-0 {$practice.mode === 'exam' ? 'text-[var(--error)]' : 'text-[var(--brand)]'}">
-		{$practice.mode === 'exam' ? 'Exam focus' : 'Conversation'}
+		{$practice.mode === 'exam' ? 'Exam focus' : $practice.mode === 'freeflow' ? 'Free Flow' : 'Conversation'}
 	</span>
 {/snippet}
 
@@ -476,7 +478,7 @@
 			ariaLabel="Practice mode"
 			disabled={locked}
 			lockedHint="The mode is fixed once a session has takes. Start a new session to switch."
-			onValueChange={(value) => setSessionMode(value as 'exam' | 'casual')}
+			onValueChange={(value) => setSessionMode(value as 'exam' | 'casual' | 'freeflow')}
 			size="sm"
 			class="practice-mode-control"
 		/>
@@ -567,7 +569,18 @@
 				{:else}
 					<!-- The prompt is the page's heading in every phase (it is what the learner talks about); the session is the line under it. -->
 					<div class="bar-prompt" in:fade={{ duration: 200 }}>
-						<h1 class="prompt-text" data-text-section="prompt" dir="auto" title={$practice.prompt.text}>{$practice.prompt.text}</h1>
+						{#if $practice.mode === 'freeflow'}
+							<h1 class="prompt-text freeflow-prompt" data-text-section="prompt" dir="auto">
+								Speak freely — say anything you like
+							</h1>
+						{:else}
+							<h1 class="prompt-text" data-text-section="prompt" dir="auto" title={$practice.prompt.text}>{$practice.prompt.text}</h1>
+							{#if $practice.promptEnglishFallback}
+								<p class="prompt-language-note" role="status">
+									Shown in English: no prompt could be written in {instructionLanguage.name} yet.
+								</p>
+							{/if}
+						{/if}
 						{#if !phone}<p class="session-line">{@render sessionLine()}</p>{/if}
 					</div>
 				{/if}
@@ -794,6 +807,20 @@
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
+	}
+	.freeflow-prompt {
+		color: var(--muted-foreground);
+		font-style: italic;
+		font-weight: 500;
+	}
+	/* Says why the prompt is in English, in one quiet line that never takes a third line on phones. */
+	.prompt-language-note {
+		overflow: hidden;
+		color: var(--faint);
+		font-size: 11px;
+		line-height: 1.35;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.session-line {
 		display: flex;

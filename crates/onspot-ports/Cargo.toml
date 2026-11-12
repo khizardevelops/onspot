@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-ports"
+description = "The traits through which onspot's core reaches outward capabilities"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+onspot-domain = { path = "../onspot-domain" }
+# Async object-safe traits; the attribute expands to boxed futures so a use
+# case can hold `dyn SqlDriver`.
+async-trait = "0.1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+ts-rs = "12"
+
+[dev-dependencies]
+futures = "0.3"

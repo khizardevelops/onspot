@@ -1,0 +1,120 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/utils/textChunks.ts",
+	"function": "sentenceChunks",
+	"cases": [
+		{
+			"name": "empty text has no chunk",
+			"input": {
+				"text": "",
+				"maxWords": 40
+			},
+			"expected": []
+		},
+		{
+			"name": "a text that fits is one chunk",
+			"input": {
+				"text": "Bonjour. Je vais bien.",
+				"maxWords": 40
+			},
+			"expected": [
+				{
+					"start": 0,
+					"end": 22
+				}
+			]
+		},
+		{
+			"name": "sentences are packed evenly into the requested number of parts",
+			"input": {
+				"text": "Un deux trois. Quatre cinq six. Sept huit neuf.",
+				"maxWords": 3
+			},
+			"expected": [
+				{
+					"start": 0,
+					"end": 14
+				},
+				{
+					"start": 15,
+					"end": 31
+				},
+				{
+					"start": 32,
+					"end": 47
+				}
+			]
+		},
+		{
+			"name": "a sentence over the limit is cut at its clauses",
+			"input": {
+				"text": "Un deux trois, quatre cinq six, sept huit neuf. Fin.",
+				"maxWords": 3
+			},
+			"expected": [
+				{
+					"start": 0,
+					"end": 14
+				},
+				{
+					"start": 15,
+					"end": 31
+				},
+				{
+					"start": 32,
+					"end": 47
+				},
+				{
+					"start": 48,
+					"end": 52
+				}
+			]
+		},
+		{
+			"name": "a clause still over the limit is cut into word runs",
+			"input": {
+				"text": "Un deux trois quatre cinq six sept huit. Fin.",
+				"maxWords": 3
+			},
+			"expected": [
+				{
+					"start": 0,
+					"end": 13
+				},
+				{
+					"start": 14,
+					"end": 29
+				},
+				{
+					"start": 30,
+					"end": 45
+				}
+			]
+		},
+		{
+			"name": "a long unpunctuated transcript is cut into word runs",
+			"input": {
+				"text": "mot1 mot2 mot3 mot4 mot5 mot6 mot7 mot8 mot9 mot10 mot11 mot12 mot13 mot14 mot15 mot16 mot17 mot18 mot19 mot20",
+				"maxWords": 6
+			},
+			"expected": [
+				{
+					"start": 0,
+					"end": 29
+				},
+				{
+					"start": 30,
+					"end": 62
+				},
+				{
+					"start": 63,
+					"end": 98
+				},
+				{
+					"start": 99,
+					"end": 110
+				}
+			]
+		}
+	]
+}

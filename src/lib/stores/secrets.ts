@@ -1,40 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { writable, type Writable } from 'svelte/store';
+import { readSecret, writeSecret, type SecretName } from '#lib/core-client/secrets.js';
 
 /**
- * BYOK secrets, stored in `localStorage` and deliberately **not** in the
- * database. The database is what gets backed up and synced to Google
- * Drive/WebDAV, and API keys must never leave the device that way.
+ * BYOK secrets, stored by the host's `SecretStore` (browser storage on both
+ * runtimes) and deliberately **not** in the database. The database is what gets
+ * backed up and synced to Google Drive/WebDAV, and API keys must never leave
+ * the device that way.
  *
- * Access is guarded so a stray server-side import cannot throw on `localStorage`.
+ * The store API stays the same for components; only the storage implementation
+ * moved.
  */
-const PREFIX = 'onspot.key.';
-
-const hasStorage = typeof localStorage !== 'undefined';
-
-function read(name: string): string {
-	if (!hasStorage) return '';
-	try {
-		return localStorage.getItem(PREFIX + name) ?? '';
-	} catch {
-		return '';
-	}
-}
-
-function persist(name: string, value: string): void {
-	if (!hasStorage) return;
-	try {
-		if (value) localStorage.setItem(PREFIX + name, value);
-		else localStorage.removeItem(PREFIX + name);
-	} catch {
-		// Private mode / storage full: keep the in-memory value for this session.
-	}
-}
-
-function secret(name: string): Writable<string> {
-	const store = writable<string>(read(name));
-	store.subscribe((value) => persist(name, value));
+function secret(name: SecretName): Writable<string> {
+	const store = writable<string>(readSecret(name));
+	store.subscribe((value) => writeSecret(name, value));
 	return store;
 }
 

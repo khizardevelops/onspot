@@ -15,11 +15,11 @@
 /// (an X server, which Wayland desktops provide through XWayland).
 /// Must run before GTK starts and before any other thread exists.
 pub fn prefer_x11_inside_appimage() {
-  let is_appimage = std::env::var_os("APPIMAGE").is_some();
-  let backend_chosen = std::env::var_os("GDK_BACKEND").is_some();
-  let has_x_server = std::env::var_os("DISPLAY").is_some();
+    let is_appimage = std::env::var_os("APPIMAGE").is_some();
+    let backend_chosen = std::env::var_os("GDK_BACKEND").is_some();
+    let has_x_server = std::env::var_os("DISPLAY").is_some();
 
-  if is_appimage && !backend_chosen && has_x_server {
-    std::env::set_var("GDK_BACKEND", "x11");
-  }
+    if is_appimage && !backend_chosen && has_x_server {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
 }

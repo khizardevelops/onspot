@@ -41,6 +41,27 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      # The deployed web app defaults to the core backend, so the wasm package
+      # must exist before Vite copies static/. The CLI version follows Cargo.lock.
+      - name: Cache wasm-bindgen CLI
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install the matching wasm-bindgen CLI
+        run: |
+          if command -v wasm-bindgen >/dev/null 2>&1; then exit 0; fi
+          VERSION="$(awk '/^name = "wasm-bindgen"$/{found=1; next} found && /^version = /{gsub(/[version = \"]/, ""); print; exit}' Cargo.lock)"
+          cargo install wasm-bindgen-cli --version "$VERSION" --locked
+
+      - name: Build the core bridge
+        run: bun run bridge:wasm
+
       # The French G2P assets are gitignored and needed for on-device read-back.
       - name: Copy the eSpeak phonemizer into static/
         run: |

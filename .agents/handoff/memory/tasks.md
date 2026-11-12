@@ -1,5 +1,161 @@
 # Tasks
 
+## Hexagonal migration P0 (2026-11-12, done)
+- [x] Re-verify the audit (LOC, file roles, schema version, coupling) and record corrections in the
+      blueprint.
+- [x] Write the coupling audit script and generate `docs/architecture/coupling-matrix.md`.
+- [x] Publish blueprint, PORTS.md, BRIDGE.md, DRIVER-GUIDE.md and ADR-001..003.
+- [x] Scaffold the cargo workspace, join `src-tauri`, move the release profile and linker pin.
+- [x] Add `scripts/check-boundaries.mjs`, `scripts/coupling-audit.mjs`, `scripts/capture-golden.mjs`
+      and the npm scripts; add the `architecture.yml` CI job.
+- [x] Capture goldens for jsonRepair, capWords, isSilent, sameWords, sentenceChunks (33 cases).
+- [x] Verify cargo check/fmt/clippy/test, bun check/build/SPDX, boundaries, matrix and fixture
+      determinism.
+- [ ] Commit P0 on `refactor/hex-arch-p0` and open the PR when the user asks.
+
+## Hexagonal migration P1 (2026-11-12, done)
+- [x] Bridge dispatcher, `core.ping`, `BridgeError`, `bridge.v1` handshake and `UiEvent`
+      (`pong`, `error`); event catalog in `onspot-app` with ADR-004.
+- [x] Web transport (wasm-bindgen, JSON-compatible objects) and Tauri transport (`Channel`,
+      pass-through `core_init`/`core_command`).
+- [x] `CoreClient` with both transports selected by `isTauri()`, ADR-002 toggle (`VITE_CORE_BACKEND`,
+      localStorage override, frozen allowlist) and a dev-only probe.
+- [x] ts-rs type generation with a deterministic assembler; `bun run bridge:types` and the CI
+      `bridge` job fail on a stale `types.gen.ts`.
+- [x] Verified on the web (headless Chrome) and desktop (Xvfb + WebKitWebDriver): same init/ping
+      values, both `pong` events, no probe in the production build.
+- [ ] Android build of the shell with the bridge feature (no toolchain pass in this session).
+
+## Hexagonal migration P2 (2026-11-12, done apart from build smoke tests)
+- [x] Port schema 1–12 and the migration runner verbatim; `schema_migrations`, one transaction per
+      version, quote-aware statement splitter.
+- [x] `SqlDriver`, `HistoryStore`, `SettingsStore` ports; native `RusqliteDriver` (bundled SQLite,
+      ADR-005); settings/history stores; cascade delete and JSON setup parsing.
+- [x] Synthetic v0.2.4 (schema 9) fixture plus tests: fresh schema, v9 → 12 with rows preserved,
+      `integrity_check`, `foreign_key_check`, repository round trips.
+- [x] `history.list/search/rename/delete` and `settings.list/get/set` bridge commands,
+      `settings_changed`/`history_changed` events, ts-rs types, Tauri boot wiring; secret-prefixed
+      settings never returned.
+- [x] Extract `historySearch.ts`, capture 10 cases, and prove Rust `regex` parity; ADR-006 records
+      the engine differences.
+- [x] Web host SQL shim over `sqlite.worker.ts`: async dispatch, per-target `Send` split, host
+      object at `init_core_wasm`; browser harness `bun run test:storage` (Chrome + dev server).
+- [x] `SecretStore` as a driver-side host store over the same browser storage on both runtimes;
+      secrets regression asserted in the browser (settings + whole-db export contain no key).
+- [x] Settings and History rewired through `core-client` (rows/load/search/list/rename/delete) and
+      the default flipped to `core`; legacy remains selectable and is the fallback when the wasm
+      package is absent.
+- [x] Typed `AppSettings` defaults/merge resolved: deferred to P7 with the language/provider/voice
+      catalogs; ADR-008 reconciles the phase prompt with `decisions.md`. P2 owns the rows only.
+- [x] Migrate the checked-in schema-9 fixture through the **web** path: `CoreStorageCheck` opens it in
+      an in-memory sqlite-wasm host and the Rust runner reaches schema 12 with rows intact; the same
+      browser check still covers persistence, history writes and the secret regression.
+- [x] Port the remaining repositories: `RecordsStore` (prompts, sessions, attempts, glosses,
+      translations, corrections, audio, prompt submissions, sync) with round-trip + fixture tests.
+      Usage is device-local `localStorage`, not a SQL table; its port is P6.
+- [x] Provision the gitignored wasm package for deployed builds: Pages and Cloudflare now install the
+      matching wasm-bindgen CLI and run `bun run bridge:wasm`; `scripts/cf-deploy.sh` builds it when
+      missing.
+- [x] Align the Tauri JS packages with the resolved crates (`api` 2.12.4, `plugin-sql` 2.6.0,
+      `plugin-opener` 2.7.3, `plugin-dialog` 2.8.4, `plugin-http` 2.9.0, `plugin-fs` 2.7.1).
+- [x] `bunx tauri build --no-bundle` succeeds; `target/release/onspot` (39 MB) built with the new
+      storage path.
+- [ ] Android build of the new storage path (needs the NDK toolchain).
+
+## Hexagonal migration P3 (started 2026-11-12)
+- [x] Map the practice God store: `docs/architecture/practice-loop-map.md` (all exports, callers,
+      state, companion modules, ports/use cases/events, four race cases). Posted for the phase
+      re-approval; proceeding unless the owner objects.
+- [x] Reconcile `practice.ts` vs `practiceSession.ts`: the latter is the sample/live view context,
+      not a second store; it stays.
+- [x] `onspot-dsp`: `speech::is_silent` and `speech::cap_words` with all `isSilent`/`capWords` golden cases passing; `MAX_ATTEMPT_WORDS = 240`.
+- [x] Ports: `AudioCapture`, `SttEngine`, `TtsEngine`, `AudioPlayback`, `Clock`, `PromptSource`,
+      `EvaluationPort`, `IdSource`, cancellation and the stable error shape (ADR-009). Contract
+      tests pass. `PracticeEnvironment` is represented by the snapshot's
+      `explanation_audio_available` flag.
+- [x] `onspot-app::practice`: `RunPracticeSession` with start/cancel/stop/tick/timer, prompt choice,
+      resume, persistence and the event snapshot; 15 scenario tests including the double-stop claim
+      and timer. The remaining four cancellation races are not written yet.
+- [x] Native STT adapter (`onspot-adapter-native-stt` wraps the plugin's whisper.cpp engine);
+      host RPC shims for capture/STT/evaluation/prompt on both transports; playback intents.
+- [x] Bridge `practice.*` commands and `core.host_reply`, generated types, `practice` on the core
+      allowlist, `stores/practice.ts` branching on `useCore('practice')`. The legacy path stays
+      selectable and remains until P8 (ADR-002).
+- [x] Four cancellation race tests (stop during transcribe/evaluate, new take during evaluation,
+      timer vs click) plus a full phase-event stream test.
+- [x] Smoke: `bun run test:practice` in real Chrome (prompt, start, cancel, silent take, and a
+      full stubbed STT → evaluation → persisted attempt loop); P2 `test:storage` still passes.
+      Desktop release under Xvfb + WebKitWebDriver recorded 4.1 s through a null PipeWire source,
+      ran native whisper.cpp + the local LLM stub, and persisted an attempt. Android `cargo check
+      --target aarch64-linux-android` passes.
+- [ ] Human-quality transcription/TTS listening pass and a physical Android run (the desktop smoke
+      used a null sink; its transcript was an engine artifact, not scored speech).
+
+## About page (2026-11-11, built)
+- [x] Replace `/about` with the corrected stationery prototype and delete `/about-preview`.
+- [x] Fix the single-scroller layout, phone header placement, reveal root and footer reveal.
+- [x] Correct the privacy/audio/prompt-sharing wording and the AGPL version.
+- [x] Apply card-stock paper, tape textures, Source Serif 4 and a dark surface ladder.
+- [x] Restrict motion to transform/opacity and verify both themes at 1280 and 390 px.
+- [ ] Frontend redeploy (the live site does not have this page yet).
+
+## Historical word POS (2026-11-11, built)
+- [x] Preserve `pos`/`posSections` when parsing saved glosses (previously dropped on reload).
+- [x] Re-request a section with POS on hover when historical glosses have no labels; merge without
+      losing words/phrases/selections; remember blank answers in `posSections`.
+- [x] Show POS only while `showWordPos` is on; remove the `llmConfigured` gate.
+- [x] Verified with a stored attempt: `Je mange une pomme.` gained `verb`, tooltip `eat / verb`, and
+      both survived reload. check/build/SPDX clean.
+
+## Instruction-language prompt catalogue + client generation (2026-11-10, built)
+- [x] Single prompt catalogue keyed by instruction language (`practice/promptCatalogue.ts`); English
+      entries are ordinary `en` rows, Japanese/Persian topics use `targetLanguages`. Removed
+      `LanguageDefinition.prompts`/`LanguagePrompt`.
+- [x] Migration 11: `prompts.instruction_language` (backfill `en`); `Prompt`, SQL adapter and legacy
+      JSON import updated; seeding per target + instruction language with catalogue ids as row ids.
+- [x] `adapters/llm/promptTopic.ts`: one prompt in the instruction language with target language,
+      level, mode and recent topics; length, script and repeat validation.
+- [x] Async prompt selection with in-flight/late-response guards; generation on session start and New
+      prompt; fallback stored → English catalogue with a visible note; prompts only change between takes.
+- [x] Removed the translation path (`promptDisplayText`, `translateCurrentPrompt`,
+      `translatePromptText`, sample-session field).
+- [x] Instruction-language change: a draft gets a new prompt at once; a session with takes keeps its
+      prompt and uses the new language from the next prompt.
+- [x] Verify: check 0/0, build, SPDX 254, migration on a pre-11 DB, catalogue counts, real adapter
+      generation against a local OpenAI-compatible stub, app fallback chain and reload persistence.
+      **Not verified:** a live Groq/DeepSeek call (no key configured here).
+- [x] Docs: `docs/architecture/languages.md`, `supported-languages.md`.
+- [x] `/about`, README and Settings privacy copy updated for opt-out prompt sharing.
+
+## Prompt contribution phase (2026-11-11, built; Worker deployed)
+- [x] Opt-out outbox of generated prompts (`prompt_submissions`, migration 12); sharing is on by
+      default and the Settings → Data toggle stops queueing and sending; retries with backoff and
+      on `online`; prompt only (title, text, languages, level, mode), no transcripts/keys/device id.
+      Prompts generated while off stay local and are not backfilled.
+- [x] Cloudflare Worker + D1 ingest (`server/prompt-submissions/`): validation, CORS, SHA-256
+      content dedupe, no IP storage, `pending` review rows.
+- [x] Russian catalogue entries (8) and short generation (5–6 words, hard cap 6) so a non-English
+      instruction language does not depend on a model call.
+- [x] **Deployed:** Worker `onspot-prompt-submissions` at
+      https://onspot-prompt-submissions.khizardevelops.workers.dev, D1 `onspot-prompts`
+      (`0f2fd610-3719-4fb6-bdc7-9db4191a1a65`), schema applied, `cf deploy` used. Live health, ingest
+      and dedupe checked; test row removed. The app defaults to this URL.
+- [ ] **Frontend redeploy:** the live SPA does not yet contain this session's code. The next normal
+      frontend deploy (or `scripts/cf-deploy.sh`) will enable the Settings toggle for users.
+- [ ] Maintainer review script exports approved rows into the repo catalogue via a PR; never auto-merge.
+
+
+## Planning-ideas batch defects (2026-11-10)
+- [x] `/about` imports that Lucide v1 no longer exports (`Github`, `Twitter`) → inline brand SVGs.
+- [x] Four `state_referenced_locally` warnings in the theme, zoom and text-size stores.
+- [x] Prompt translation across session open/startup and instruction-language changes; stale
+      answers ignored.
+- [x] JSON backup restore keeps `freeflow` sessions; Settings About link follows the base path.
+- [x] Live check of prompt translation with a real Groq key (2026-11-10): switching instruction
+      language to Spanish translated the prompt in 1.5–3 s, switching back to English restored the
+      source at once, and a reload with Spanish stored translated the new prompt on startup.
+- [ ] Backup round trip of a free-flow session.
+
 ## Sessions, voices per language, zoom (2026-11-08)
 - [x] Sessions record and restore their setup (migration 10); older ones inferred once.
 - [x] Voices remembered per language for read-back and explanations.

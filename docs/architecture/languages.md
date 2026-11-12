@@ -9,7 +9,9 @@ approved; the machine-readable source of truth is
 
 | Concern | Location |
 |---|---|
-| Approval status, STT descriptors, prompts | `src/lib/languages/index.ts` (`LanguageDefinition`) |
+| Approval status, STT descriptors | `src/lib/languages/index.ts` (`LanguageDefinition`) |
+| Speaking prompts, keyed by language of instruction | `src/lib/practice/promptCatalogue.ts` |
+| Prompt generation in the learner's language of instruction | `src/lib/adapters/llm/promptTopic.ts` |
 | On-device voices by language code (both roles), their approvals and audio profiles | `src/lib/languages/voices.ts` (`VOICES_BY_LANGUAGE`) |
 | How the voice worker builds one adapter per voice | `src/lib/speech/tts/local/registry.ts` |
 | STT model + language hint | `LanguageDefinition.stt` |
@@ -37,17 +39,25 @@ in the browser voice check (`/model-lab/voices/`).
 A language an on-device voice already speaks needs only a row in `LANGUAGE_FACTS`
 (`src/lib/languages/index.ts`): English and native name, Common Crawl web share, Whisper's name
 for it, writing system and direction. It then appears as a study language and a language of
-instruction, with the general prompts and its voice sample sentence. A language with no
+instruction, with its voice sample sentence as the Settings preview. A language with no
 on-device voice would be a language of instruction only. For a reviewed language with
-its own prompts or rules:
+its own rules:
 
 1. Evaluate candidate STT models and voices with a human quality pass (listen to the voice, read
    the transcripts). Record the evidence under `docs/benchmarks/`.
 2. Add the STT descriptor and voice list to a new `LanguageDefinition` in
    `src/lib/languages/index.ts`, including each entry's `approval` record, its `direction`, and
    its `local` flags (all `false` for a cloud-only language).
-3. Add the language's speaking prompts and its `preview` sentence (used by the Settings voice
-   preview; keep it short because the first synthesis is the slow part).
+3. Add its `preview` sentence (used by the Settings voice preview; keep it short because the
+   first synthesis is the slow part). Speaking prompts live in
+   `src/lib/practice/promptCatalogue.ts`, keyed by the language they are written in. A new study
+   language needs no prompt entry: the English general prompts fit every target, and language-
+   specific topics are tagged with `targetLanguages`. To ship a prompt in another language of
+   instruction, add entries with that `instructionLanguage`; English and Russian are bundled so
+   far. Other languages are written by the learner's own LLM, and English is the visible last
+   resort. Prompt sharing is on by default and can be turned off in Settings; while it is on,
+   generated prompts are queued on the device and sent to `server/prompt-submissions/` when online.
+   Those rows are reviewed before they join the catalogue and are never served directly.
 4. If the voice needs a tone correction, give it a `processing` profile (4-band EQ, compressor).
    Its level needs none: every on-device clip is brought to the same loudness (−20 LUFS) and kept
    under −1 dBFS by `processPcm` (`src/lib/utils/audioEffects.ts`). The DSP code is generic; only
@@ -103,7 +113,7 @@ right-to-left after switching languages, while Latin sample text stays LTR:
 - `languageGuidance.ts` adds Persian evaluation and translation rules (script/ZWNJ, formal vs
   colloquial Tehrani register, را/ezafe, a Persian contrastive example).
 
-The full per-language stack (engines, G2P, voices, prompts) is in
+The full per-language stack (engines, G2P, voices) is in
 [`supported-languages.md`](supported-languages.md).
 
 Candidate entries are committed with `approval.status = 'candidate'`. Production builds offer

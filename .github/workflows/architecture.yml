@@ -1,0 +1,135 @@
+# Architecture guards (P0).
+#
+# Every phase of the hexagonal migration must leave this job green: the core
+# crates stay framework-free, the generated coupling matrix and golden fixtures
+# still match what the script produces, and the workspace formats, lints and
+# tests. Release and Android builds stay in their own workflows.
+name: Architecture
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: architecture-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Warnings are allowed until a later phase clears them; a Rust core
+      # violation already fails here.
+      - name: Rust core and TypeScript layer boundaries
+        run: bun run lint:boundaries
+
+      - name: Coupling matrix is current
+        run: node scripts/coupling-audit.mjs --check
+
+      - name: Golden fixtures regenerate without changes
+        run: |
+          bun run golden:capture
+          if [ -n "$(git status --porcelain -- crates)" ]; then
+            echo "::error::golden fixtures changed; commit the regenerated files or revert the behaviour change"
+            git --no-pager diff --stat -- crates
+            exit 1
+          fi
+
+      - name: TypeScript check
+        run: bun run check
+
+      - name: Production build
+        run: bun run build
+
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: The bridge compiles for the web
+        run: cargo build -p onspot-bridge --target wasm32-unknown-unknown --features wasm
+
+      - name: Install the matching wasm-bindgen CLI
+        run: |
+          VERSION="$(awk '/^name = "wasm-bindgen"$/{found=1; next} found && /^version = /{gsub(/[version = \"]/, ""); print; exit}' Cargo.lock)"
+          cargo install wasm-bindgen-cli --version "$VERSION" --locked
+
+      # Real Chrome, the wasm package and the dev server: Rust migrations and the
+      # storage commands over the existing sqlite-wasm worker (P2).
+      - name: Browser storage contract
+        run: bun run test:storage
+
+      - name: Generated TypeScript types are current
+        run: |
+          bun run bridge:types
+          if [ -n "$(git status --porcelain -- src/lib/core-client)" ]; then
+            echo "::error::bridge types changed; run `bun run bridge:types` and commit the result"
+            git --no-pager diff -- src/lib/core-client
+            exit 1
+          fi
+
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # The Tauri shell is a workspace member, so a workspace-wide check needs
+      # its Linux system libraries.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace

@@ -1,5 +1,312 @@
 # State
 
+# State
+
+## Hexagonal migration: P3 complete in code; media smoke needs models (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **Core loop:** `RunPracticeSession` owns the full state machine, prompt choice/generation,
+  persistence, resume/open, session writes, playback intents and the event snapshot. Ports are in
+  `onspot-ports`; DSP is in `onspot-dsp`; ADR-009 records the decisions.
+- **Bridge:** `practice.*` commands, `core.host_reply`, and a request/response host channel let the
+  same Rust ports call capture/STT/evaluation/prompt code on wasm and Tauri. The driver owns the
+  250 ms interval and calls `practice.tick`; the core owns the 60 s deadline.
+- **Adapters:** `onspot-adapter-native-stt` wraps the plugin's whisper.cpp engine. The Tauri host
+  shim still uses the existing plugin path, so one model cache is kept.
+- **Svelte:** `stores/practice.ts` branches on `useCore('practice')`, maps snapshots into the existing
+  view shape, and keeps P5 translation/gloss fields while they remain driver-side.
+- **Fixed:** dev probe/storage check each booted a second wasm core and replaced the event sink;
+  both now share `getCoreClient` (the fixture check uses a separate module instance).
+- **Verified:** cargo fmt/clippy/test workspace (28 app tests including four races + event stream);
+  `bun run check` 0 errors (9 pre-existing About warnings), production build, boundaries, SPDX 324,
+  `bridge:types`, `bun run test:practice` in Chrome, `bun run test:storage`, `tauri build
+  --no-bundle`, 15 s Xvfb launch, Android `cargo check --target aarch64-linux-android`.
+- **Smoke detail:** the web check stubs Groq STT/chat and persists a real attempt. The desktop
+  release recorded 4.1 s through a PipeWire null source, ran native whisper.cpp + a local LLM stub,
+  and persisted attempt `attempt-…` with its correction. Not verified: human-quality transcription/
+  TTS listening and a physical Android run. No commit.
+
+## Hexagonal migration: P3 started; P2 complete (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **P3 map:** `docs/architecture/practice-loop-map.md` maps every `practice.ts` export/caller/state
+  write to a P3 use case, port, view adapter, P5 or P7 destination; proposes
+  `RunPracticeSession`, the event snapshot, stable error codes and the four race tests. Posted for
+  phase re-approval; proceeding unless the owner objects. `practiceSession.ts` stays as the
+  sample/live view context.
+- **P3 DSP done:** `onspot-dsp::speech` now owns `is_silent`, `cap_words` and
+  `MAX_ATTEMPT_WORDS`; `crates/onspot-dsp/tests/golden.rs` passes every P0 silence/cap fixture.
+- **Records:** `RecordsStore` in `onspot-ports` and `SqlRecordsStore` in repo-sql cover the rest of
+  `SqlDatabaseAdapter`: prompt filtering/CRUD, full sessions and attempts (JSON translations,
+  follow-up and word glosses with the legacy tolerant parse), corrections replacement, audio,
+  prompt submissions and sync metadata. Domain records live in `onspot-domain/src/records.rs`.
+  Round-trip and v9-fixture reads are in `crates/adapters/repo-sql/tests/repositories.rs`.
+- **Hosts:** `HostAdapters.records` is populated by both the wasm bridge and Tauri setup, ready for
+  P3; this adds no bridge commands, which stay in the phases that own those use cases.
+- **Web fixture gate:** `CoreStorageCheck` reads `onspot-v0.2.4.sqlite` through Vite's `?url`, opens
+  it in an in-memory sqlite-wasm DB, passes a JS SQL host to `init_core_wasm`, and asserts the Rust
+  migration reaches schema 12 with 2 sessions / 3 attempts / 1 correction. Then it re-inits over OPFS
+  for the existing browser contract. `bun run test:storage` passes and still checks reload
+  persistence, history writes and the secret-leak regression.
+- **Typed settings:** deferred to P7 by ADR-008 because defaults/merge depend on the language,
+  provider and voice catalogs. P2 owns the persisted rows; the store calls `settings.*`.
+- **Deploy provisioning:** `.github/workflows/pages.yml` and `cloudflare.yml` install the locked
+  wasm-bindgen CLI and run `bun run bridge:wasm` before Vite; `scripts/cf-deploy.sh` does the same
+  when the package is missing. Desktop/Android keep using the Tauri transport.
+- **Verified:** cargo fmt/clippy/test (including the new repositories tests), `bun run check` 0
+  errors (9 pre-existing About warnings), `bun run build` with no fixture/probe in `build/`,
+  boundaries, SPDX 306. `bun run test:storage` passed.
+- **Tauri build:** npm `@tauri-apps/*` aligned to the resolved crates; `bunx tauri build
+  --no-bundle` succeeds and produced `target/release/onspot`. Android/NDK and the wasm target are
+  absent here, so the bridge package was not rebuilt locally. No commit.
+
+
+## Hexagonal migration: P2 completed on both drivers (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **Web SQL host:** `init_core_wasm` takes an optional `{ execute, select, batch, close }` host built by
+  `core-client/sqlHost.ts` over `getDatabaseAdapter().driver()`; `WasmSqlDriver` awaits the JS promises
+  and runs the same Rust migration/stores. `dispatch` is async; Tauri's `core_command` and both wasm
+  exports return promises. Ports and stores have native `Send + Sync` and wasm `?Send` flavours
+  (ADR-007); repo-sql's rusqlite driver is behind the default `native` feature.
+- **Browser proof:** `bun run test:storage` starts the dev server with `VITE_CORE_BACKEND=core`, drives
+  real Chrome with `playwright-core`, and waits for the dev-only `CoreStorageCheck`: Rust migration,
+  `settings.set/get/list`, `history.list/search`, a rename+delete cycle, a secret that must not appear
+  in `settings.get` or a whole-db export, then a reload where the setting is still present. Passes.
+- **Screens:** Settings reads/writes its rows through `settings.*` (with a logged legacy fallback if
+  the bridge is unavailable); History loads, searches, renames and deletes through `history.*`.
+  `FEATURES_WITH_CORE` now includes `settings`/`history`, and an unset `VITE_CORE_BACKEND` defaults to
+  `core`; `legacy` is still selectable. Secrets moved behind `core-client/secrets.ts`
+  (`localStorage`, same key names) with the store API unchanged.
+- **Not ported:** the typed `AppSettings` defaults/merge document still lives in `stores/settings.ts`
+  (it now calls the bridge for rows); language/voice normalisation stays with the language registry.
+  The schema-9 fixture is migrated on rusqlite but not separately through the web shim; the browser
+  check uses a fresh OPFS database. `tauri build` and Android were not run.
+
+## Hexagonal migration: P2 storage foundation (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **Schema:** `crates/adapters/repo-sql/src/schema.rs` holds migrations 1–12 verbatim (`SCHEMA_VERSION`
+  12); `migrate.rs` creates `schema_migrations`, applies each missing version with its row in one
+  `batch` transaction (sequential fallback when a driver has none) and reuses the legacy quote-aware
+  splitter.
+- **Driver:** `RusqliteDriver` (rusqlite 0.32 `bundled`, one mutexed connection, 5 s busy timeout,
+  `foreign_keys = ON`, transactional `batch`). ADR-005 records why 0.32: `libsqlite3-sys` is
+  `links`-pinned and plugin-sql locks 0.30; 0.37 would have downgraded sqlx. The plugin stays
+  registered until P8 and both paths open the same file.
+- **Ports/stores:** `SqlDriver`, `HistoryStore`, `SettingsStore` in `onspot-ports`;
+  `SqlHistoryStore`/`SqlSettingsStore` in repo-sql; session setup JSON parsed with the legacy
+  completeness rule; delete cascades through the FK. BYOK keys are filtered from
+  `settings.list`/`get` even if a restored file contains the prefix.
+- **Commands/events:** `history.{list,search,rename,delete}`, `settings.{list,get,set}` with ts-rs
+  types, `settings_changed`/`history_changed` events, and `BridgeState` booted with the native
+  stores in `src-tauri` setup (host `onspot.db`). The dispatcher stays sync and drains the async
+  services with `futures::executor::block_on`.
+- **Fixture/tests:** `crates/adapters/repo-sql/tests/fixtures/onspot-v0.2.4.sqlite` (synthetic
+  schema 9: 2 sessions, 3 takes, prompt, correction, audio, settings, sync row; source `v9.sql`).
+  Tests cover fresh install, v9 → 12 with row counts and pre-10 `setup NULL`, `integrity_check`,
+  `foreign_key_check`, settings/history round trips and cascade. Search: 10 captured cases from the
+  extracted `src/lib/utils/historySearch.ts`, replayed in Rust; ADR-006 lists the JS-vs-Rust regex
+  gaps (lookaround/backrefs, Unicode `\b`).
+- **Verified:** cargo fmt/clippy/test (repo-sql 4 integration + 5 unit, app search golden + settings
+  filter), `bun run check` 0 errors (9 pre-existing About warnings), build, boundaries, SPDX 298,
+  golden + typegen byte-identical over two runs.
+- **Not done (honest gaps):** the web host SQL shim and a browser test harness; typed
+  `AppSettings` defaults/merge; `SecretStore`; the Settings/History Svelte stores still use the
+  legacy adapter (default unchanged); prompt/gloss/translation/usage repositories; Android build;
+  no commits.
+
+## Hexagonal migration: P1 bridge spine complete (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **Core:** `onspot-app` owns `Core` (config, sinks, sequence), `UiEvent` (`pong`, `error`) and the
+  `EventSink` trait; `onspot-bridge` re-exports them (ADR-004) and owns the dispatcher, `BridgeError`
+  (`bridge.unknown_command`, `bridge.invalid_payload`, `bridge.serialize_failed`) and the
+  `bridge.v1` handshake (`InitResponse`). `core.ping` echoes `note` and emits `Pong`.
+- **Transports:** wasm-bindgen exports (`init_core_wasm`, `dispatch_wasm`) with JSON-compatible
+  serialization, and a Tauri `Channel<Value>` sink; `src-tauri` registers pass-through
+  `core_init`/`core_command` and manages `BridgeState`. Same response shapes on both sides.
+- **Driver:** `src/lib/core-client/{backend,transport}.ts`, generated `types.gen.ts` +
+  `bindings/` (ts-rs), and `CoreBridgeProbe.svelte` mounted only when `import.meta.env.DEV`.
+  `bun run bridge:types` regenerates (byte-identical); `bun run bridge:wasm` builds the gitignored
+  `static/core-bridge/` package (wasm32 + wasm-bindgen 0.2.130).
+- **Verified:** web probe in headless Chrome (`init bridge.v1 · app 0.2.4 · seq 1`; `ping … seq 2 ·
+  note dev probe`; `events pong → pong`); desktop probe through Xvfb + WebKitWebDriver
+  (`core bridge · tauri`, same values); the probe is absent from `build/`; bridge type exports are
+  byte-identical over two runs; cargo fmt/clippy/test, bun check 0 errors (9 pre-existing About
+  warnings), build, SPDX 284, boundaries, coupling matrix 232 files.
+- **Not verified:** an Android build (no target/NDK pass here; the bridge's Tauri feature uses only
+  `Channel`, which is cross-platform); a clean clone's dev probe reports the wasm package missing
+  until `bun run bridge:wasm`. No commit yet.
+
+## Hexagonal migration: P0 complete (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **Workspace:** the root `Cargo.toml` (resolver 2) joins `crates/onspot-{domain,ports,app,dsp}`,
+  `crates/adapters/{llm-openai,repo-sql,sync-drive,sync-webdav,native-stt}` (packages
+  `onspot-adapter-*`), `bindings/onspot-bridge`, `src-tauri` and `src-tauri/plugins/speech`. The
+  release profile moved to the root (Cargo ignores a member's), the host linker pin moved to
+  `.cargo/config.toml`, the nested `src-tauri/Cargo.lock` was deleted, and `src-tauri` was
+  rustfmt-normalised once (10 files, wrapping/indentation only). Every crate has SPDX, a smoke test
+  (verified: 1 passed each) and path dependencies that encode the allowed direction.
+- **Docs:** `docs/architecture/{hexagonal-blueprint,PORTS,BRIDGE,DRIVER-GUIDE,coupling-matrix}.md`
+  and `adr/001-crate-layout.md`, `adr/002-core-backend-toggle.md`, `adr/003-golden-fixtures.md`.
+- **Guards:** `scripts/check-boundaries.mjs` (cargo tree for the four core crates + TypeScript layer
+  warnings, `--strict` ready), `scripts/coupling-audit.mjs` (222 files; top offenders
+  `sync/google/oauth.ts` 18, `platform/pwa.ts` 17, `FeedbackPanel.svelte` 13; 0 adapter→component
+  imports), `scripts/capture-golden.mjs` (5 modules, 33 cases under `crates/**/tests/golden/`).
+- **Scripts:** `bun run lint:boundaries`, `bun run audit:coupling`, `bun run golden:capture`; new CI
+  job `.github/workflows/architecture.yml` (boundaries, stale matrix, fixture diff, fmt, clippy, test).
+- **Audit corrections:** `stores/practice.ts` is 1,757 lines (not ~1,453); `practiceSession.ts` is a
+  39-line Svelte context helper, not orchestration; `prompt.ts` owns the schema/messages and
+  `languageGuidance.ts` only language rule text; `processing.ts` is the shared requirement source for
+  Settings and the Practice gate; the schema is at 12 while v0.2.4 ships 9 (the fixture must cover
+  both); `src/` is ~49,400 lines across 222 files; Rust is 783. Details: blueprint "P0 audit corrections".
+- **Verified:** `cargo check --workspace`, `cargo fmt --all -- --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace`; `bun run check` 0 errors (9 pre-existing
+  warnings in the uncommitted `routes/about/+page.svelte`), `bun run build`, `bun run spdx:check`
+  (271), boundaries, coupling `--check`, fixtures byte-identical over two runs. `bun run tauri dev`
+  was not launched (no display here); `cargo check -p onspot` covers the shell.
+- **Not done:** no commit yet on the new branch; `VITE_CORE_BACKEND` is documented and typed only
+  (no runtime reader until P1); the SQLite fixture databases at schema 9 and 12 are P2 work.
+
+## About page replacement (2026-11-11, uncommitted)
+
+- `/about` now uses the paper/stationery prototype; the separate `/about-preview` route was deleted.
+  The page has one internal scroll container under `AppHeader`, with the phone bar at the bottom.
+  The reveal observer is rooted to that scroller and marks the initial viewport before hiding
+  anything; the footer uses a `-2%` bottom margin so it can still reveal.
+- **Copy corrected:** audio is transcribed on-device **or** by the cloud speech provider the learner
+  chooses; the transcript goes to the chosen LLM, not the recording. The page says generated prompts
+  are shared by default and can be turned off in Settings → Data, and names AGPL-3.0-or-later.
+- **Paper and dark mode:** large sheets use `--card` plus the published `--paper-key` texture (not
+  the lighter raised-key brown); small taped cards and the repo card use `--key`. Tapes use the
+  existing `tape-crepe.webp` / `tape-grain.webp` textures. Dark mode follows the app's surface ladder.
+- **Type:** Source Serif 4 for the hero, headings, body, steps, scope lists and notes; mono for
+  labels, numbers, tape tags and the colophon.
+- **Motion:** all transitions are transform/opacity only. Box-shadow, background, border and colour
+  transitions were removed; the hero tilt is compositor-promoted. Steady headless scroll at 60 Hz
+  measured ~58 fps with no long frames after the reveal; 120 Hz hardware was not available here.
+- **Verified:** `bun run check` 0/0, build, SPDX 257, `git diff --check`; Chromium at 1280×900 and
+  390×844 in light/dark: one scroller, no horizontal overflow, header above/below correctly, all six
+  reveals reached, no console errors. The light/dark hero and lower dark card sections were inspected
+  in screenshots.
+
+## Prompt contributions, Russian fallback, short prompts (2026-11-11, uncommitted)
+
+- **Russian prompts without a model:** `promptCatalogue.ts` now carries 8 `ru` entries beside the
+  English ones, so choosing Russian shows a real Russian prompt even when no LLM is configured.
+  Verified in the app: `ru-morning-routine` appeared with no English-fallback note. Other
+  instruction languages still depend on generation (or show English).
+- **Short generation:** `promptTopic.ts` asks for a 5–6 word task, rejects more than 6 words, caps
+  the task at 140 characters (title 50), and still rejects wrong-script/repeat answers. Existing
+  stored prompts are untouched.
+- **Visible failures:** when a model is configured but prompt generation fails, `requestPrompt()`
+  shows a toast with the reason before falling back. Without a model the English note remains.
+- **Outbox + opt-out sharing:** migration 12 adds `prompt_submissions` (prompt-only payload: title,
+  text, both language codes, level, mode, createdAt, attempts/error). `practice/promptSubmissions.ts`
+  queues every generated prompt unless the learner turns **Settings → Data → Share generated
+  prompts** off (it is on by default), uploads up to 20 at a time, retries with backoff, and forces
+  a retry on `online`. Prompts generated while it is off stay local; re-enabling drains the outbox
+  but does not backfill them. Queueing and flushing also wait for `settingsReady`, so a stored
+  opt-out is applied before any upload. No transcripts, recordings, corrections, keys or device ids
+  leave.
+- **Server: deployed.** `server/prompt-submissions/` is a Cloudflare Worker + D1 ingest service
+  (`POST /`, `GET /health`) with validation, CORS and SHA-256 content dedupe, storing no IP. Live at
+  **https://onspot-prompt-submissions.khizardevelops.workers.dev**; D1 `onspot-prompts`
+  (`0f2fd610-3719-4fb6-bdc7-9db4191a1a65`, APAC). The folder was migrated from `wrangler.toml` to
+  `cloudflare.config.ts` (`cf`, Wrangler bundler); `cf deploy` works. The app defaults to that URL and
+  `VITE_PROMPT_SUBMISSIONS_URL` overrides it. Rows are `pending` for review and never served.
+- **Retrospective POS:** historical glosses now gain part-of-speech labels without losing their
+  translations. The DB parser preserves `pos`/`posSections` (it used to drop both on reload); when
+  `showWordPos` is on and a section has no labels, `ensureWordGlosses` re-requests only the hovered
+  section with POS and merges it. It never gloses a whole session or the history. `posSections`
+  remembers a blank answer so it is not paid for again. The tooltip only shows POS while the setting
+  is on, and `AttemptCard` no longer gates it on `llmConfigured`.
+- **Verified:** check 0/0, build, SPDX clean; migration 12 on a pre-12 DB and a fresh DB; Russian
+  catalogue count 8; no-model Russian prompt; generated-Spanish/English behaviour unchanged;
+  Worker handler (valid, duplicate, no-consent, overlong, bad level, health, preflight); live Worker
+  health, ingest and duplicate against production D1 (test row deleted); app outbox (off = 0 queued,
+  blocked ingest left 1 pending, online event flushed it) and the Settings toggle persisted;
+  historical gloss `Je mange...` gained `verb`, tooltip read `eat / verb`, and both survived reload.
+  Payloads contained only the listed fields. After the opt-out default and 6-word cap: check 0/0,
+  build and SPDX clean; no browser run.
+
+## Instruction-language prompt catalogue + generation (2026-11-10, uncommitted)
+
+Prompts are no longer English text translated at session start. They are written in the language of
+instruction from the start, by one of two sources:
+
+- **Catalogue:** `src/lib/practice/promptCatalogue.ts` holds the bundled English and Russian
+  prompts keyed by `instructionLanguage`; the Japanese- and Persian-specific topics are tagged with
+  `targetLanguages`. `LanguageDefinition.prompts` and `LanguagePrompt` are gone.
+- **Generation:** `adapters/llm/promptTopic.ts` asks the learner's LLM for `{ title, text }` in the
+  instruction language, with the target language, level, mode and recent titles to avoid. It
+  validates length, rejects a wrong-script answer (`couldBeWrittenIn`) and exact repeats.
+- **Selection:** `stores/practice.ts` `requestPrompt()` (async, guarded by a request counter) tries
+  generation first when an LLM is configured, stores the result with `category: 'generated'`, then
+  falls back to stored prompts for the pair, then English catalogue entries with
+  `promptEnglishFallback: true` (the bar says "Shown in English: …"). Prompts only change between
+  takes. `nextPrompt()` and `newSession()` start a request; a late answer cannot replace a newer
+  prompt or one from a session opened meanwhile.
+- **Storage:** migration 11 adds `prompts.instruction_language TEXT NOT NULL DEFAULT 'en'` (backfills
+  legacy English rows). `Prompt.instructionLanguage`, `listPrompts(language?, instructionLanguage?)`,
+  the SQL selects/upserts and the legacy JSON import are updated. Seeding is per target **and**
+  instruction language; catalogue ids are the row ids, so seeding is idempotent.
+- **Instruction-language change:** a draft asks for a new prompt in the new language; a session with
+  takes keeps its recorded prompt and uses the new language from the next prompt on.
+- **Removed:** `promptDisplayText`, `translateCurrentPrompt`, `translatePromptText`, the sample
+  session field.
+- **Verified:** check 0/0, build, SPDX 254; migration 11 on a pre-11 SQLite DB; catalogue seeding
+  (at the time: es 0, en 8, ja 11, fa 11; Russian added later); generation through the real adapter against a local
+  OpenAI-compatible stub; in the app: generated Spanish prompt, stored-Spanish reuse with no model,
+  English fallback with its note, and the generated row still present after reload. No live Groq
+  call (no key configured).
+
+## Current State
+
+**Six planning ideas build again, with the batch's defects fixed (2026-11-10, uncommitted):**
+`@lucide/svelte` v1 no longer exports brand icons, so `/about` now draws the GitHub and X marks
+as inline SVG snippets; the optimizer failure that broke `/about` preloading and `/welcome/` HMR is
+gone. The `theme`, `zoom` and `textSize` stores read their initial value through a plain const, so
+the four `state_referenced_locally` warnings are gone. Prompt translation resets to the source
+language when no translation is needed, also runs when a session is opened or the app starts, and
+ignores a late answer; JSON backup restore keeps `freeflow` sessions; Settings' About link follows
+the app's base path. `check` 0/0, build, SPDX 252. Prompt translation verified live against
+Groq: English→Spanish on instruction-language change, reset to English, and startup translation
+after reload all work.
+
+**Six planning ideas implemented (2026-11-10, uncommitted):** all ideas requested by the user
+from `docs/planning/ideas.md` are now shipped and archived in `docs/planning/archive/ideas.md`
+under the 2026-11-10 heading.
+
+1. **About page (`/about`):** dedicated route at `src/routes/about/+page.svelte` with the
+   app's aims, what it can/cannot do, an AGPL-3.0 note, GitHub repo link and
+   `x.com/khizardevelops` link. Added to the top-nav (Info icon) and hamburger menu. The old
+   `WhatOnspotDoes` block was removed from Settings and replaced with a link row to `/about`.
+   `+page.ts` marks the route as `prerender = true`. `pageHref('/about')` builds the href from
+   `resolve('/')` without calling `resolve('/about')` to avoid SvelteKit typed-route constraint.
+
+2. **Language-aware prompts:** (superseded 2026-11-10 by the catalogue + generation work above)
+   `PracticeState` carried `promptDisplayText` (the prompt text
+   translated into the instruction language). `nextPrompt()` calls `translateCurrentPrompt()`
+   in the background; a new `setInstructionLanguage()` export (used by Settings instead of raw
+   `setSetting`) re-translates when the language changes. `PracticeScreen` shows
+   `promptDisplayText || prompt.text`. English is the seed language (no-op). Falls back silently.
+   `translatePromptText()` is a new export from `adapters/llm/glossary.ts`.
+
+3. **Dynamic follow-up font size:** `ExplanationText.svelte` uses `fitFontSize` to compute a
+   length-based scale clamped between 12 px and 22 px and stored as `--follow-up-font-scale`.
+
+4. **Part-of-speech in word tooltips:** `showWordPos` boolean setting (default `false`). When on,
+   `generateSectionGlosses` requests a `pos` object from the LLM alongside glosses. POS is stored
+   in a new optional `pos` array in `TextGlosses` and shown as the detail line in the hover label
+   (`transcriptMeanings.svelte.ts` `#wordLabel`). The toggle sits in Settings → Language →
+   Show part of speech in word tooltips. `CHOICES.mode` and the Settings mode selector now include
+   `'freeflow'`.
+
+5. **Free-flow speaking mode:** `RunMode` gains `'freeflow'`. The mode selector bar and Settings
+   Default mode dropdown include the new option. In free-flow: the prompt area shows "Speak freely
+   — say anything you like" (muted italic); the evaluation LLM prompt omits the topic line and
+   instead asks the model to assess coherence and substance; the follow-up is an open question
+   about what they said. History shows "Free Flow" for such sessions.
+
+6. **TypeScript:** `tsc --noEmit` is clean (0 errors) after all changes.
+
 ## Current State
 
 **Native Supertonic is measured and planned, not built (2026-11-10):** on identical sentences at

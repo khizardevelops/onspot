@@ -25,7 +25,9 @@ pub struct DownloadProgress {
 #[tauri::command]
 pub async fn model_status<R: Runtime>(app: AppHandle<R>, file: String) -> Result<ModelStatus> {
     let path = models::model_path(&app, &file)?;
-    Ok(ModelStatus { installed: tokio::fs::try_exists(&path).await? })
+    Ok(ModelStatus {
+        installed: tokio::fs::try_exists(&path).await?,
+    })
 }
 
 #[tauri::command]
@@ -41,7 +43,12 @@ pub async fn download_model<R: Runtime>(
     let mut last_percent = u64::MAX;
     models::download(&url, &path, &sha256, &cancel, |received, total| {
         // One message per percent keeps the IPC quiet during a 190 MB download.
-        let percent = if total > 0 { received * 100 / total } else { 0 };
+        // `checked_div` states the zero-total case as the lint expects; a size
+        // large enough to overflow the multiply also falls back to 0.
+        let percent = received
+            .checked_mul(100)
+            .and_then(|scaled| scaled.checked_div(total))
+            .unwrap_or(0);
         if percent != last_percent {
             last_percent = percent;
             let _ = on_progress.send(DownloadProgress { received, total });
@@ -95,8 +102,12 @@ pub async fn transcribe<R: Runtime>(app: AppHandle<R>, request: Request<'_>) -> 
         .collect();
 
     let engine_app = app.clone();
-    let text =
-        blocking(move || engine_app.state::<Engine>().transcribe(&path, &pcm, &language)).await?;
+    let text = blocking(move || {
+        engine_app
+            .state::<Engine>()
+            .transcribe(&path, &pcm, &language)
+    })
+    .await?;
     schedule_idle_release(&app);
     Ok(text)
 }
@@ -121,7 +132,9 @@ fn body_bytes(body: &InvokeBody) -> Result<Vec<u8>> {
 }
 
 /// whisper.cpp blocks for seconds; keep it off the async runtime's threads.
-async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
     tauri::async_runtime::spawn_blocking(work)
         .await
         .map_err(|error| Error::Invalid(error.to_string()))?

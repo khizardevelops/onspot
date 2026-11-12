@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-bridge"
+description = "The single bridge between onspot's core and its drivers: command catalog, events, generated types"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# cdylib for the wasm package; rlib so Tauri and the CLI link it normally.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+onspot-app = { path = "../../crates/onspot-app" }
+onspot-domain = { path = "../../crates/onspot-domain" }
+onspot-ports = { path = "../../crates/onspot-ports" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = "12"
+async-trait = "0.1"
+# The command bodies are async use cases, while the dispatcher stays sync for
+# both transports. The native driver completes without yielding, so a plain
+# executor is enough; the wasm SQL shim will make dispatch async.
+futures = "0.3"
+futures-timer = "3"
+web-time = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+# The web SQL host runs the same stores and migration chain over the existing
+# sqlite-wasm worker; only the native rusqlite driver is left out.
+onspot-adapter-repo-sql = { path = "../../crates/adapters/repo-sql", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tauri = { version = "2", optional = true }
+
+[features]
+default = []
+# wasm-bindgen exports for the web driver (see src/wasm.rs).
+wasm = []
+# Tauri IPC helpers; enabled by src-tauri only. Never a desktop-only dependency,
+# so the Android build compiles the same code.
+tauri = ["dep:tauri"]
+
+[dev-dependencies]
+onspot-adapter-repo-sql = { path = "../../crates/adapters/repo-sql" }

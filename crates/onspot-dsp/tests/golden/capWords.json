@@ -1,0 +1,55 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/config.ts",
+	"function": "capWords",
+	"cases": [
+		{
+			"name": "text below the cap is unchanged",
+			"input": {
+				"text": "Bonjour, je vais bien.",
+				"maxWords": 240
+			},
+			"expected": "Bonjour, je vais bien."
+		},
+		{
+			"name": "exactly at the cap is unchanged",
+			"input": {
+				"text": "mot1 mot2 mot3 mot4 mot5 mot6 mot7 mot8 mot9 mot10 mot11 mot12 mot13 mot14 mot15 mot16 mot17 mot18 mot19 mot20 mot21 mot22 mot23 mot24 mot25 mot26 mot27 mot28 mot29 mot30 mot31 mot32 mot33 mot34 mot35 mot36 mot37 mot38 mot39 mot40 mot41 mot42 mot43 mot44 mot45 mot46 mot47 mot48 mot49 mot50 mot51 mot52 mot53 mot54 mot55 mot56 mot57 mot58 mot59 mot60 mot61 mot62 mot63 mot64 mot65 mot66 mot67 mot68 mot69 mot70 mot71 mot72 mot73 mot74 mot75 mot76 mot77 mot78 mot79 mot80 mot81 mot82 mot83 mot84 mot85 mot86 mot87 mot88 mot89 mot90 mot91 mot92 mot93 mot94 mot95 mot96 mot97 mot98 mot99 mot100 mot101 mot102 mot103 mot104 mot105 mot106 mot107 mot108 mot109 mot110 mot111 mot112 mot113 mot114 mot115 mot116 mot117 mot118 mot119 mot120 mot121 mot122 mot123 mot124 mot125 mot126 mot127 mot128 mot129 mot130 mot131 mot132 mot133 mot134 mot135 mot136 mot137 mot138 mot139 mot140 mot141 mot142 mot143 mot144 mot145 mot146 mot147 mot148 mot149 mot150 mot151 mot152 mot153 mot154 mot155 mot156 mot157 mot158 mot159 mot160 mot161 mot162 mot163 mot164 mot165 mot166 mot167 mot168 mot169 mot170 mot171 mot172 mot173 mot174 mot175 mot176 mot177 mot178 mot179 mot180 mot181 mot182 mot183 mot184 mot185 mot186 mot187 mot188 mot189 mot190 mot191 mot192 mot193 mot194 mot195 mot196 mot197 mot198 mot199 mot200 mot201 mot202 mot203 mot204 mot205 mot206 mot207 mot208 mot209 mot210 mot211 mot212 mot213 mot214 mot215 mot216 mot217 mot218 mot219 mot220 mot221 mot222 mot223 mot224 mot225 mot226 mot227 mot228 mot229 mot230 mot231 mot232 mot233 mot234 mot235 mot236 mot237 mot238 mot239 mot240",
+				"maxWords": 240
+			},
+			"expected": "mot1 mot2 mot3 mot4 mot5 mot6 mot7 mot8 mot9 mot10 mot11 mot12 mot13 mot14 mot15 mot16 mot17 mot18 mot19 mot20 mot21 mot22 mot23 mot24 mot25 mot26 mot27 mot28 mot29 mot30 mot31 mot32 mot33 mot34 mot35 mot36 mot37 mot38 mot39 mot40 mot41 mot42 mot43 mot44 mot45 mot46 mot47 mot48 mot49 mot50 mot51 mot52 mot53 mot54 mot55 mot56 mot57 mot58 mot59 mot60 mot61 mot62 mot63 mot64 mot65 mot66 mot67 mot68 mot69 mot70 mot71 mot72 mot73 mot74 mot75 mot76 mot77 mot78 mot79 mot80 mot81 mot82 mot83 mot84 mot85 mot86 mot87 mot88 mot89 mot90 mot91 mot92 mot93 mot94 mot95 mot96 mot97 mot98 mot99 mot100 mot101 mot102 mot103 mot104 mot105 mot106 mot107 mot108 mot109 mot110 mot111 mot112 mot113 mot114 mot115 mot116 mot117 mot118 mot119 mot120 mot121 mot122 mot123 mot124 mot125 mot126 mot127 mot128 mot129 mot130 mot131 mot132 mot133 mot134 mot135 mot136 mot137 mot138 mot139 mot140 mot141 mot142 mot143 mot144 mot145 mot146 mot147 mot148 mot149 mot150 mot151 mot152 mot153 mot154 mot155 mot156 mot157 mot158 mot159 mot160 mot161 mot162 mot163 mot164 mot165 mot166 mot167 mot168 mot169 mot170 mot171 mot172 mot173 mot174 mot175 mot176 mot177 mot178 mot179 mot180 mot181 mot182 mot183 mot184 mot185 mot186 mot187 mot188 mot189 mot190 mot191 mot192 mot193 mot194 mot195 mot196 mot197 mot198 mot199 mot200 mot201 mot202 mot203 mot204 mot205 mot206 mot207 mot208 mot209 mot210 mot211 mot212 mot213 mot214 mot215 mot216 mot217 mot218 mot219 mot220 mot221 mot222 mot223 mot224 mot225 mot226 mot227 mot228 mot229 mot230 mot231 mot232 mot233 mot234 mot235 mot236 mot237 mot238 mot239 mot240"
+		},
+		{
+			"name": "above the cap is cut",
+			"input": {
+				"text": "mot1 mot2 mot3 mot4 mot5 mot6 mot7 mot8 mot9 mot10 mot11 mot12 mot13 mot14 mot15 mot16 mot17 mot18 mot19 mot20 mot21 mot22 mot23 mot24 mot25 mot26 mot27 mot28 mot29 mot30 mot31 mot32 mot33 mot34 mot35 mot36 mot37 mot38 mot39 mot40 mot41 mot42 mot43 mot44 mot45 mot46 mot47 mot48 mot49 mot50 mot51 mot52 mot53 mot54 mot55 mot56 mot57 mot58 mot59 mot60 mot61 mot62 mot63 mot64 mot65 mot66 mot67 mot68 mot69 mot70 mot71 mot72 mot73 mot74 mot75 mot76 mot77 mot78 mot79 mot80 mot81 mot82 mot83 mot84 mot85 mot86 mot87 mot88 mot89 mot90 mot91 mot92 mot93 mot94 mot95 mot96 mot97 mot98 mot99 mot100 mot101 mot102 mot103 mot104 mot105 mot106 mot107 mot108 mot109 mot110 mot111 mot112 mot113 mot114 mot115 mot116 mot117 mot118 mot119 mot120 mot121 mot122 mot123 mot124 mot125 mot126 mot127 mot128 mot129 mot130 mot131 mot132 mot133 mot134 mot135 mot136 mot137 mot138 mot139 mot140 mot141 mot142 mot143 mot144 mot145 mot146 mot147 mot148 mot149 mot150 mot151 mot152 mot153 mot154 mot155 mot156 mot157 mot158 mot159 mot160 mot161 mot162 mot163 mot164 mot165 mot166 mot167 mot168 mot169 mot170 mot171 mot172 mot173 mot174 mot175 mot176 mot177 mot178 mot179 mot180 mot181 mot182 mot183 mot184 mot185 mot186 mot187 mot188 mot189 mot190 mot191 mot192 mot193 mot194 mot195 mot196 mot197 mot198 mot199 mot200 mot201 mot202 mot203 mot204 mot205 mot206 mot207 mot208 mot209 mot210 mot211 mot212 mot213 mot214 mot215 mot216 mot217 mot218 mot219 mot220 mot221 mot222 mot223 mot224 mot225 mot226 mot227 mot228 mot229 mot230 mot231 mot232 mot233 mot234 mot235 mot236 mot237 mot238 mot239 mot240 mot241 mot242 mot243 mot244 mot245",
+				"maxWords": 240
+			},
+			"expected": "mot1 mot2 mot3 mot4 mot5 mot6 mot7 mot8 mot9 mot10 mot11 mot12 mot13 mot14 mot15 mot16 mot17 mot18 mot19 mot20 mot21 mot22 mot23 mot24 mot25 mot26 mot27 mot28 mot29 mot30 mot31 mot32 mot33 mot34 mot35 mot36 mot37 mot38 mot39 mot40 mot41 mot42 mot43 mot44 mot45 mot46 mot47 mot48 mot49 mot50 mot51 mot52 mot53 mot54 mot55 mot56 mot57 mot58 mot59 mot60 mot61 mot62 mot63 mot64 mot65 mot66 mot67 mot68 mot69 mot70 mot71 mot72 mot73 mot74 mot75 mot76 mot77 mot78 mot79 mot80 mot81 mot82 mot83 mot84 mot85 mot86 mot87 mot88 mot89 mot90 mot91 mot92 mot93 mot94 mot95 mot96 mot97 mot98 mot99 mot100 mot101 mot102 mot103 mot104 mot105 mot106 mot107 mot108 mot109 mot110 mot111 mot112 mot113 mot114 mot115 mot116 mot117 mot118 mot119 mot120 mot121 mot122 mot123 mot124 mot125 mot126 mot127 mot128 mot129 mot130 mot131 mot132 mot133 mot134 mot135 mot136 mot137 mot138 mot139 mot140 mot141 mot142 mot143 mot144 mot145 mot146 mot147 mot148 mot149 mot150 mot151 mot152 mot153 mot154 mot155 mot156 mot157 mot158 mot159 mot160 mot161 mot162 mot163 mot164 mot165 mot166 mot167 mot168 mot169 mot170 mot171 mot172 mot173 mot174 mot175 mot176 mot177 mot178 mot179 mot180 mot181 mot182 mot183 mot184 mot185 mot186 mot187 mot188 mot189 mot190 mot191 mot192 mot193 mot194 mot195 mot196 mot197 mot198 mot199 mot200 mot201 mot202 mot203 mot204 mot205 mot206 mot207 mot208 mot209 mot210 mot211 mot212 mot213 mot214 mot215 mot216 mot217 mot218 mot219 mot220 mot221 mot222 mot223 mot224 mot225 mot226 mot227 mot228 mot229 mot230 mot231 mot232 mot233 mot234 mot235 mot236 mot237 mot238 mot239 mot240"
+		},
+		{
+			"name": "a custom cap cuts with a single space",
+			"input": {
+				"text": "un deux trois quatre cinq six",
+				"maxWords": 4
+			},
+			"expected": "un deux trois quatre"
+		},
+		{
+			"name": "line breaks and repeated spaces collapse when cutting",
+			"input": {
+				"text": "un  deux\ntrois\tquatre cinq",
+				"maxWords": 2
+			},
+			"expected": "un deux"
+		},
+		{
+			"name": "empty text stays empty",
+			"input": {
+				"text": "",
+				"maxWords": 5
+			},
+			"expected": ""
+		}
+	]
+}

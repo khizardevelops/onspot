@@ -306,7 +306,7 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 		const session: Session = {
 			id,
 			title,
-			mode: row.mode === 'casual' ? 'casual' : 'exam',
+			mode: row.mode === 'casual' || row.mode === 'freeflow' ? row.mode : 'exam',
 			startedAt: string(row.startedAt, now()),
 			endedAt: nullableString(row.endedAt),
 			createdAt: string(row.createdAt, now()),
@@ -330,6 +330,8 @@ export async function importLegacyJsonBackup(file: File): Promise<LegacyRestoreR
 			text,
 			category: nullableString(row.category),
 			language: string(row.language, 'fr'),
+			// Format-1 backups predate the language of instruction; their text is English.
+			instructionLanguage: string(row.instructionLanguage, 'en'),
 			createdAt: string(row.createdAt, now())
 		};
 		await db.putPrompt(prompt);

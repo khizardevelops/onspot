@@ -29,6 +29,8 @@
 		glosses?: TextGlosses | null;
 		requestGlosses?: (wordIndex: number) => Promise<void>;
 		requestPhrase?: (start: number, end: number, phrase: string) => Promise<string>;
+		/** Asks for POS labels on hover, as `Transcript` takes it. */
+		showPos?: boolean;
 		/** Reads selected words aloud, as `Transcript` takes it. */
 		speak?: (words: string) => void;
 		class?: string;
@@ -43,6 +45,7 @@
 		glosses,
 		requestGlosses,
 		requestPhrase,
+		showPos = false,
 		speak,
 		class: className = ''
 	}: Props = $props();
@@ -60,6 +63,7 @@
 				{glosses}
 				{requestGlosses}
 				{requestPhrase}
+				{showPos}
 				{speak}
 				class={className}
 			/>

@@ -37,7 +37,7 @@
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import type { NeoMenuItem, NeoMenuProps } from '@dvcol/neo-svelte/floating/menu';
 	import { NeoTooltip } from '@dvcol/neo-svelte/floating/tooltips';
-	import { ArrowLeft, BarChart3, History, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
+	import { ArrowLeft, BarChart3, History, Info, Menu, Mic, Moon, Plus, Settings2, Sun } from '@lucide/svelte';
 
 	interface Props {
 		/** The page's name, shown as its heading. */
@@ -64,7 +64,8 @@
 		{ href: pageHref('/'), label: 'Practice', icon: Mic },
 		{ href: pageHref('/history'), label: 'History', icon: History },
 		{ href: pageHref('/insights'), label: 'Insights', icon: BarChart3 },
-		{ href: pageHref('/settings'), label: 'Settings', icon: Settings2 }
+		{ href: pageHref('/settings'), label: 'Settings', icon: Settings2 },
+		{ href: pageHref('/about'), label: 'About', icon: Info }
 	];
 
 	const themeLabel = $derived(theme.current === 'dark' ? 'Light appearance' : 'Dark appearance');

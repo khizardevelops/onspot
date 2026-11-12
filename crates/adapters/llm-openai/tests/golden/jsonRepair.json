@@ -1,0 +1,47 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/adapters/llm/jsonRepair.ts",
+	"function": "repairJson",
+	"cases": [
+		{
+			"name": "valid JSON is returned unchanged",
+			"input": "{\"a\":1,\"b\":[2,3]}",
+			"expected": "{\"a\":1,\"b\":[2,3]}"
+		},
+		{
+			"name": "stray quote between two closing brackets",
+			"input": "{\"items\":[{\"source\":\"a\",\"target\":\"b\"}]\"}",
+			"expected": "{\"items\":[{\"source\":\"a\",\"target\":\"b\"}]}"
+		},
+		{
+			"name": "trailing comma before two closers",
+			"input": "{\"items\":[1,2,],\"done\":true,}",
+			"expected": "{\"items\":[1,2],\"done\":true}"
+		},
+		{
+			"name": "colon inside a key",
+			"input": "{\"wordBreakdown\":[{\"source:\".\",\"target\":\".\"}]}",
+			"expected": "{\"wordBreakdown\":[{\"source\":\".\",\"target\":\".\"}]}"
+		},
+		{
+			"name": "punctuation value missing its closing quote",
+			"input": "{\"wordBreakdown\":[{\"source\":\".\",\"target\":\".}]}",
+			"expected": "{\"wordBreakdown\":[{\"source\":\".\",\"target\":\".\"}]}"
+		},
+		{
+			"name": "closing brace and stray quote inside a string",
+			"input": "{\"text\":\"a } \\\" b\"}",
+			"expected": "{\"text\":\"a } \\\" b\"}"
+		},
+		{
+			"name": "truncated reply cannot be repaired",
+			"input": "{\"a\":[1,2",
+			"expected": null
+		},
+		{
+			"name": "prose instead of JSON cannot be repaired",
+			"input": "I cannot help with that.",
+			"expected": null
+		}
+	]
+}

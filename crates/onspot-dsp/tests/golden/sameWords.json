@@ -1,0 +1,63 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/utils/words.ts",
+	"function": "sameWords",
+	"cases": [
+		{
+			"name": "punctuation and case do not matter",
+			"input": {
+				"first": "Je vais bien merci",
+				"second": "je vais bien, merci."
+			},
+			"expected": true
+		},
+		{
+			"name": "curly and straight apostrophes are equal",
+			"input": {
+				"first": "j'ai préféré",
+				"second": "J’ai préféré."
+			},
+			"expected": true
+		},
+		{
+			"name": "hyphenated words stay one word",
+			"input": {
+				"first": "un rendez-vous",
+				"second": "Un rendez-vous !"
+			},
+			"expected": true
+		},
+		{
+			"name": "an extra word is a difference",
+			"input": {
+				"first": "je vais bien",
+				"second": "je vais très bien"
+			},
+			"expected": false
+		},
+		{
+			"name": "two empty texts are equal",
+			"input": {
+				"first": "",
+				"second": "   "
+			},
+			"expected": true
+		},
+		{
+			"name": "Japanese punctuation does not matter",
+			"input": {
+				"first": "元気です",
+				"second": "元気です。"
+			},
+			"expected": true
+		},
+		{
+			"name": "different kanji are different words",
+			"input": {
+				"first": "元気です",
+				"second": "天気です"
+			},
+			"expected": false
+		}
+	]
+}

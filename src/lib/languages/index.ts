@@ -168,11 +168,6 @@ export interface SupertonicVoice extends VoiceCommon {
 /** An on-device voice; `engine` says which fields it has. */
 export type LanguageVoice = PiperVoice | PiperPlusVoice | SupertonicVoice;
 
-export interface LanguagePrompt {
-	title: string;
-	text: string;
-}
-
 /**
  * How much of a language language models have read, judged by its share of
  * the web: `high` from 1 % of Common Crawl's pages, `medium` from 0.1 %, `low`
@@ -240,25 +235,11 @@ export interface LanguageDefinition {
 	stt: LanguageStt;
 	/** The voice a new learner hears (its voices are listed in `./voices.ts`); empty when it has none. */
 	defaultVoice: string;
-	/** Speaking prompts shown to the learner for this language. */
-	prompts: LanguagePrompt[];
 	/** Short sentence in the target language used by the Settings voice preview. */
 	preview: string;
 	/** The local engines offered for this language (cloud-only languages disable all three). */
 	local: LanguageLocalEngines;
 }
-
-/** Speaking prompts that suit any language; a language can add its own (see Japanese, Persian). */
-const GENERAL_PROMPTS: LanguagePrompt[] = [
-	{ title: 'Morning routine', text: 'Describe your morning routine.' },
-	{ title: 'Favorite city', text: 'Talk about your favorite city.' },
-	{ title: 'Last weekend', text: 'What did you do last weekend?' },
-	{ title: 'Influential person', text: 'Describe a person who influenced you.' },
-	{ title: 'A book that changed me', text: 'Talk about a book that changed your perspective.' },
-	{ title: 'A free year', text: 'What would you do with a free year?' },
-	{ title: 'A memorable meal', text: "Describe a meal you'll never forget." },
-	{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
-];
 
 /**
  * Recorded for the languages offered because the user asked for every
@@ -307,8 +288,7 @@ const FRENCH: LanguageDefinition = {
 	},
 	defaultVoice: 'piper-tom-medium',
 	preview:
-		"Bonjour ! Voici un aperçu de la voix qui vous accompagnera pendant vos séances d'oral, avec la prononciation et le rythme corrigés après chaque prise.",
-	prompts: GENERAL_PROMPTS
+		"Bonjour ! Voici un aperçu de la voix qui vous accompagnera pendant vos séances d'oral, avec la prononciation et le rythme corrigés après chaque prise."
 };
 
 const JAPANESE: LanguageDefinition = {
@@ -329,17 +309,7 @@ const JAPANESE: LanguageDefinition = {
 	},
 	defaultVoice: 'piper-plus-css10-ja',
 	preview:
-		'こんにちは。これから一緒に話す練習をする声です。毎回の録音のあとで、発音とリズムを直した文を読み上げます。',
-	prompts: [
-		{ title: 'Morning routine', text: 'Describe your morning routine.' },
-		{ title: 'Favorite city', text: 'Talk about your favorite city.' },
-		{ title: 'Last weekend', text: 'What did you do last weekend?' },
-		{ title: 'Your hobby', text: 'Talk about a hobby you enjoy and why.' },
-		{ title: 'A memorable meal', text: "Describe a meal you'll never forget." },
-		{ title: 'Your hometown', text: 'Describe the town where you grew up.' },
-		{ title: 'A trip to Japan', text: 'Plan a short trip in Japan: where would you go and why?' },
-		{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
-	]
+		'こんにちは。これから一緒に話す練習をする声です。毎回の録音のあとで、発音とリズムを直した文を読み上げます。'
 };
 
 /**
@@ -382,16 +352,6 @@ const PERSIAN: LanguageDefinition = {
 	defaultVoice: 'piper-fa-amir-medium',
 	preview:
 		'سلام! این نمونهٔ صدای همراه شماست. بعد از هر تمرین، جملهٔ اصلاحشده را با لحن طبیعی برایتان میخوانم.',
-	prompts: [
-		{ title: 'Morning routine', text: 'Describe your morning routine.' },
-		{ title: 'A Persian dish', text: 'Talk about a Persian dish you enjoy and how it is made.' },
-		{ title: 'Last weekend', text: 'What did you do last weekend?' },
-		{ title: 'A place in Iran', text: 'Describe a place in Iran you would like to visit.' },
-		{ title: 'Influential person', text: 'Describe a person who influenced you.' },
-		{ title: 'A book or film', text: 'Talk about a book or film that stayed with you.' },
-		{ title: 'A free year', text: 'What would you do with a free year?' },
-		{ title: 'A recent change', text: 'Talk about a recent change in your life.' }
-	]
 };
 
 /** What onspot needs to know about a language, whatever role it plays. */
@@ -480,8 +440,8 @@ function firstChoiceVoice(code: string): string {
 
 /**
  * A language offered for study with the shared defaults: Whisper small on the
- * device, its voices from `./voices.ts`, the general prompts and its voice
- * sample sentence as the Settings preview.
+ * device, its voices from `./voices.ts`, and its voice sample sentence as the
+ * Settings preview (speaking prompts live in `practice/promptCatalogue.ts`).
  */
 function requestedLanguage(code: string): LanguageDefinition {
 	const known = LANGUAGE_FACTS[code];
@@ -497,12 +457,11 @@ function requestedLanguage(code: string): LanguageDefinition {
 		approval: REQUESTED_LANGUAGE_APPROVAL,
 		stt: { models: WHISPER_SMALL, decoderLanguage: known.whisperLanguage, code, approval: WHISPER_NOT_REVIEWED },
 		defaultVoice: firstChoiceVoice(code),
-		prompts: GENERAL_PROMPTS,
 		preview: VOICE_SAMPLE_SENTENCES[code] ?? ''
 	};
 }
 
-/** French, Japanese and Persian have their own definitions above (reviews, prompts, voices). */
+/** French, Japanese and Persian have their own definitions above (reviews, voices). */
 const DEFINED_LANGUAGES: readonly LanguageDefinition[] = [FRENCH, JAPANESE, PERSIAN];
 
 /**

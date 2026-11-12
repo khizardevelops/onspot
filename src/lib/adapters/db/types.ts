@@ -36,7 +36,7 @@ export interface SqlStatement {
 	params?: SqlValue[];
 }
 
-export type RunMode = 'exam' | 'casual';
+export type RunMode = 'exam' | 'casual' | 'freeflow';
 export type CorrectionCategory = 'grammar' | 'register' | 'filler' | 'style';
 export type CorrectionSeverity = 'error' | 'warning' | 'suggestion';
 export type ExamStatus = 'strictly-avoid' | 'avoid' | 'use-sparingly' | 'allowed';
@@ -105,6 +105,20 @@ export interface TextGlosses {
 	words: string[];
 	phrases: PhraseGloss[];
 	/**
+	 * Optional part-of-speech label for each word token (parallel to `words`),
+	 * e.g. "noun", "verb", "adj", "adv", "prep", "pron", "conj", "det", "num".
+	 * Absent when `showWordPos` was off when the section was fetched, or on
+	 * older stored data.
+	 */
+	pos?: string[];
+	/**
+	 * The sections whose part-of-speech labels have been fetched. Separate from
+	 * `sections` because meanings fetched before the POS setting existed (or
+	 * with it off) have none, and must be asked for again on the next hover.
+	 * Absent on older saved meanings.
+	 */
+	posSections?: GlossedRange[];
+	/**
 	 * The sections (`glossSections`) whose meanings have been fetched; `words`
 	 * is blank outside them. Absent on meanings fetched whole, before
 	 * sections: those cover every word.
@@ -119,7 +133,7 @@ export interface TextGlosses {
  */
 export type WordGlosses = Record<string, TextGlosses>;
 
-/** A speaking prompt. Populated from a seed list and/or generated per session. */
+/** A speaking prompt: a bundled catalogue entry or one generated for a learner. */
 export interface Prompt {
 	id: string;
 	title: string;
@@ -127,7 +141,35 @@ export interface Prompt {
 	category: string | null;
 	/** Target language id this prompt belongs to (ISO 639-1). */
 	language: string | null;
+	/** Instruction language id the title and text are written in (ISO 639-1). */
+	instructionLanguage: string;
 	createdAt: string;
+}
+
+/**
+ * A generated prompt waiting to be sent to the shared prompt database.
+ *
+ * The row is deleted once the server accepts it; failed attempts stay, with
+ * their error and count, so the next connection can retry. It holds the
+ * prompt text only: no transcript, recording, correction, provider key or
+ * device identifier.
+ */
+export interface PromptSubmission {
+	/** The prompt's own id, so queueing the same prompt twice does nothing. */
+	id: string;
+	title: string;
+	text: string;
+	/** ISO 639-1 code the title and text are written in. */
+	instructionLanguage: string;
+	/** ISO 639-1 code of the language being studied. */
+	targetLanguage: string;
+	level: string;
+	mode: RunMode;
+	createdAt: string;
+	/** Failed sends so far; 0 until the first failure. */
+	attempts: number;
+	lastAttemptAt: string | null;
+	lastError: string | null;
 }
 
 /** One practice session: a topic the learner keeps speaking about. */
@@ -257,11 +299,19 @@ export interface IDatabaseAdapter {
 
 	/** Open the connection and run migrations. Idempotent. */
 	init(): Promise<void>;
+	/**
+	 * The raw driver, used by the Rust core's host shim. The adapter keeps
+	 * ownership: callers must not close it.
+	 */
+	driver(): Promise<SqlDriver>;
 	close(): Promise<void>;
 
 	// Prompts
-	/** All prompts, or only those for one language id when provided. */
-	listPrompts(language?: string): Promise<Prompt[]>;
+	/**
+	 * All prompts, or only those for one target language, one language of
+	 * instruction, or both, when provided.
+	 */
+	listPrompts(language?: string, instructionLanguage?: string): Promise<Prompt[]>;
 	getPrompt(id: string): Promise<Prompt | null>;
 	putPrompt(prompt: Prompt): Promise<void>;
 	deletePrompt(id: string): Promise<void>;
@@ -291,6 +341,14 @@ export interface IDatabaseAdapter {
 	deleteAudio(key: string): Promise<void>;
 	/** Drop every cached clip last saved for this attempt (recording or read-back). */
 	deleteAttemptAudio(attemptId: string): Promise<void>;
+
+	// Prompt submissions (outbox until the shared database accepts them)
+	/** Pending generated prompts, oldest first. */
+	listPromptSubmissions(): Promise<PromptSubmission[]>;
+	/** Queue a prompt; an already queued prompt keeps its attempt history. */
+	putPromptSubmission(submission: PromptSubmission): Promise<void>;
+	markPromptSubmissionFailed(id: string, error: string, attemptedAt: string): Promise<void>;
+	deletePromptSubmission(id: string): Promise<void>;
 
 	// Settings
 	getSetting(key: string): Promise<string | null>;

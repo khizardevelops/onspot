@@ -207,6 +207,8 @@
 			glosses: wordGlossesFor(attempt, text, $appSettings.instructionLanguage),
 			requestGlosses: (wordIndex: number) => ensureWordGlosses(attempt.id, text, wordIndex),
 			requestPhrase: (start: number, end: number, phrase: string) => ensurePhraseMeaning(attempt.id, text, start, end, phrase),
+			// With POS on, old saved meanings get their labels on the next hover.
+			showPos: $appSettings.showWordPos,
 			speak: (words: string) => void speakText(words)
 		};
 	}

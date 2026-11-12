@@ -12,12 +12,8 @@ from this file.
 ## Product
 
 - [ ] **Add a streak system.**
-- [ ] Add a link to the github repo in the app. add a github icon, add a section in the app called "about" or about onspot or smth, it should lay out the aims of this app, what this app can and cannot do (delete the preexsiting section from settings). add a link to the repo of this app and a link to my dev twitter (x.com/khizardevelops)
-- [ ] after changing the language of instructiom, the prompts should also change so that they are in the language of instruction
-- [ ] the font size of the text in the follow up should be dynamic. less text, bigger font size. a lot of text, smaller font size. there should be a floor and a ceiling set
 - [ ] add localisation 
-- [ ] add a free flowing speaking mode, unprompted where the user can just speak about anything without any prompt. the speaker will be graded on how coherant they were if they were saying anything of substanc rather than speaking mindlessly utter gibberish
-- [ ] the hover over words for translation should also incldude info like if the word is a noun, verb, adjective etc. this detailed hover over needs to be enabled by the user tho in the settings
+
 ## Models and performance
 
 - [ ] **Bring Persian (and other cloud-only languages) onto the device.** Persian ships today as a

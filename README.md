@@ -224,7 +224,8 @@ device without asking**. There is no onspot server in the middle.
 
 ## Private by design
 
-onspot has **no server, no account and no tracking**. It was built privacy-first from day one:
+onspot has **no account and no tracking**. Your practice stays on your device; the one shared
+service receives generated speaking prompts unless you turn sharing off in Settings:
 
 | | Where it happens |
 |---|---|
@@ -232,6 +233,7 @@ onspot has **no server, no account and no tracking**. It was built privacy-first
 | Text-to-speech (spoken replies) | **On your device** (Piper neural TTS in a Web Worker), or ElevenLabs / an OpenAI-compatible voice if you choose cloud text-to-speech |
 | Your sessions, recordings and history | **On your device** (SQLite, in the browser or on the desktop) |
 | Feedback and translation | The LLM provider **you** choose, in the cloud or on your own local server |
+| Generated speaking prompts | **Shared prompt database by default** (prompt, languages, level and mode only); turn it off in Settings |
 | Cloud backup (optional) | The Google Drive account or WebDAV server **you** configure |
 
 - **Works offline** for whichever steps you keep on the device, once their data is downloaded.
@@ -241,6 +243,10 @@ onspot has **no server, no account and no tracking**. It was built privacy-first
 - **Your data is portable.** Export everything (sessions, recordings, cached audio, settings) to a
   single `.sqlite` file, restore it on another browser or computer, or sync it to your own cloud.
   Google and WebDAV credentials stay in browser storage and are never written to the database.
+- **Prompt sharing is on by default, and you can opt out.** New generated speaking prompts are
+  sent to the shared prompt database so they can be reviewed for everyone. Only the prompt, its
+  languages, level and mode are sent; no recording, transcript, correction, key or device id.
+  Settings → Data turns it off, and prompts generated while it is off stay on your device.
 - **Cloud speech is optional and labelled.** Prefer Groq's hosted Whisper, ElevenLabs, or another
   OpenAI-compatible voice? Turn them on and the app tells you plainly that audio or text is leaving
   your device.
@@ -280,7 +286,7 @@ evidence is in [`docs/benchmarks/`](docs/benchmarks/README.md).
 
 ### Get your keys (two minutes)
 
-You can install onspot first, but you cannot get feedback until you add a key. onspot has no server
+You can install onspot first, but you cannot get feedback until you add a key. onspot has no account
 and no subscription; the key is how the app reaches a language model. Both providers have free
 tiers.
 

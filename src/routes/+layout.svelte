@@ -2,6 +2,7 @@
 
 <script lang="ts">
 	import '../app.css';
+	import type { Component } from 'svelte';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
@@ -140,6 +141,25 @@
 
 	// A finger shows a press on any neo button at once, and lets go at once.
 	onMount(showPressesImmediately);
+
+	/*
+	 * P1's bridge readout. Loaded only in a dev build: `import.meta.env.DEV` is a
+	 * literal false in `bun run build`, so Rollup drops the import, the component
+	 * and its CSS from the production bundle. It proves the wasm/Tauri round trip
+	 * and the event channel during development.
+	 */
+	let CoreBridgeProbe = $state<Component | null>(null);
+	/** P2's browser check: Rust migration + settings/history through the SQL host. */
+	let CoreStorageCheck = $state<Component | null>(null);
+	onMount(() => {
+		if (!import.meta.env.DEV) return;
+		void import('#lib/core-client/CoreBridgeProbe.svelte').then((module) => {
+			CoreBridgeProbe = module.default;
+		});
+		void import('#lib/core-client/CoreStorageCheck.svelte').then((module) => {
+			CoreStorageCheck = module.default;
+		});
+	});
 </script>
 
 <PaperTexture class="paper-page" params={PAGE[theme.current]} preloadParams={PAGE_PAPERS} publishAs="--paper-page" />
@@ -167,6 +187,12 @@
 	<LanguageDownloadBar />
 	<PwaUpdate />
 	<PwaInstallPrompt />
+	{#if CoreBridgeProbe}
+		<CoreBridgeProbe />
+	{/if}
+	{#if CoreStorageCheck}
+		<CoreStorageCheck />
+	{/if}
 
 	{#if $settingsReady && !$appSettings.targetLanguage}
 		<LanguagePicker />

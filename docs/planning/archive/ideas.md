@@ -133,3 +133,50 @@ app has no local LLM. whisper.cpp, the GGUF-style Whisper, was benchmarked at ab
 and a smaller download, but 8–12× slower in WASM (a 60 s answer took about 15–20 minutes). Piper
 has no GGUF path. Evidence: [`benchmarks/stt.md`](../../benchmarks/stt.md). The follow-up became
 "Find a lighter STT model or runtime", which remains active.
+
+## Archived 2026-11-10
+
+### About page with GitHub/Twitter links (implemented 2026-11-10)
+
+Added a dedicated `/about` route with the app's aims, a "What it can and cannot do" section
+(two columns: what it helps with vs. what it does not), a link to the GitHub repo
+(`github.com/khizardevelops/onspot`), and a link to the developer's X/Twitter
+(`@khizardevelops`). The pre-existing "What onspot does" section was removed from Settings
+and replaced with a plain link to the new About page. The About page icon (Info) was added
+to the main navigation bar alongside the existing Practice/History/Insights/Settings keys.
+
+### Language-aware prompts (implemented 2026-11-10)
+
+When the learner changes their instruction language (e.g. from English to French), the
+practice-topic prompt shown in the bar is now translated into that language in the background.
+A new `promptDisplayText` field in `PracticeState` holds the translated version;
+`prompt.text` (always English) remains the canonical seed. Translation falls back to English
+silently on any error. The `setInstructionLanguage` function in `practice.ts` replaces the
+previous `setSetting('instructionLanguage', …)` call in Settings so the prompt re-translates
+immediately on change.
+
+### Dynamic font size for follow-up questions (implemented 2026-11-10)
+
+The follow-up question text now scales dynamically based on its length. Short questions render
+at up to 22 px (≈1.5× the base); long questions shrink to a floor of 12 px. The calculation
+uses the existing `fitFontSize` utility (area model, no DOM measurement) and is applied via a
+CSS custom property `--follow-up-font-scale` on the follow-up container. The learner's
+text-size preference (Settings → Text size) is multiplied in, so both scales compose cleanly.
+
+### Part-of-speech info in word-hover tooltips (implemented 2026-11-10)
+
+A new **Show part of speech in word tooltips** toggle in Settings (Language section) lets the
+learner see whether a hovered word is a noun, verb, adjective, etc. When enabled, the LLM
+returns a `pos` object alongside the glosses; POS is stored in a new optional `pos` array in
+`TextGlosses` and shown as the detail line in the hover label. Disabled by default so existing
+users are not affected. Requires a new hover to fetch updated data.
+
+### Free-flow speaking mode (implemented 2026-11-10)
+
+A third practice mode, **Free Flow**, is now available alongside Exam and Casual. In Free Flow
+the learner speaks about anything they like without a set topic; the bar shows "Speak freely —
+say anything you like" in a muted italic. The LLM evaluates grammar, vocabulary and register
+as usual but also assesses coherence and substance (was the speech logically connected and
+meaningful, or rambling?). The mode selector in the bar and the Default mode setting in
+Settings both include the new option. History shows "Free Flow" for sessions recorded in this
+mode. The evaluation prompt sends no topic line to the model in this mode.

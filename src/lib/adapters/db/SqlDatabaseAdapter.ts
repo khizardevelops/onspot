@@ -20,6 +20,7 @@ import type {
 	TextGlosses,
 	WordGlosses,
 	Prompt,
+	PromptSubmission,
 	Session,
 	SessionSetup,
 	Setting,
@@ -36,6 +37,10 @@ import type {
 } from './types';
 
 const nowIso = () => new Date().toISOString();
+
+/** The prompt columns every read returns, in the order their fields appear on `Prompt`. */
+const PROMPT_COLUMNS =
+	'id, title, text, category, language, instruction_language AS instructionLanguage, created_at AS createdAt';
 
 /** Upsert clause shared by every table: replace all columns on conflict. */
 function upsert(table: string, columns: string[]): string {
@@ -101,6 +106,14 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 		return this.dbPromise;
 	}
 
+	/**
+	 * The low-level driver, for the Rust core's browser host shim (P2). The
+	 * adapter stays the owner of the connection: a caller must not close it.
+	 */
+	async driver(): Promise<SqlDriver> {
+		return this.sql();
+	}
+
 	async init(): Promise<void> {
 		const db = await this.sql();
 		await db.execute('PRAGMA foreign_keys = ON');
@@ -139,23 +152,31 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 
 	// ---------------------------------------------------------------- Prompts
 
-	async listPrompts(language?: string): Promise<Prompt[]> {
+	async listPrompts(language?: string, instructionLanguage?: string): Promise<Prompt[]> {
 		const db = await this.sql();
+		const conditions: string[] = [];
+		const values: SqlValue[] = [];
+
 		if (language) {
-			return db.select<Prompt>(
-				'SELECT id, title, text, category, language, created_at AS createdAt FROM prompts WHERE language = ? ORDER BY created_at DESC',
-				[language]
-			);
+			conditions.push('language = ?');
+			values.push(language);
 		}
+		if (instructionLanguage) {
+			conditions.push('instruction_language = ?');
+			values.push(instructionLanguage);
+		}
+
+		const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 		return db.select<Prompt>(
-			'SELECT id, title, text, category, language, created_at AS createdAt FROM prompts ORDER BY created_at DESC'
+			`SELECT ${PROMPT_COLUMNS} FROM prompts${where} ORDER BY created_at DESC`,
+			values
 		);
 	}
 
 	async getPrompt(id: string): Promise<Prompt | null> {
 		const db = await this.sql();
 		const rows = await db.select<Prompt>(
-			'SELECT id, title, text, category, language, created_at AS createdAt FROM prompts WHERE id = ?',
+			`SELECT ${PROMPT_COLUMNS} FROM prompts WHERE id = ?`,
 			[id]
 		);
 		return rows[0] ?? null;
@@ -164,8 +185,16 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 	async putPrompt(prompt: Prompt): Promise<void> {
 		const db = await this.sql();
 		await db.execute(
-			upsert('prompts', ['id', 'title', 'text', 'category', 'language', 'created_at']),
-			[prompt.id, prompt.title, prompt.text, prompt.category, prompt.language, prompt.createdAt]
+			upsert('prompts', ['id', 'title', 'text', 'category', 'language', 'instruction_language', 'created_at']),
+			[
+				prompt.id,
+				prompt.title,
+				prompt.text,
+				prompt.category,
+				prompt.language,
+				prompt.instructionLanguage,
+				prompt.createdAt
+			]
 		);
 		markContentChanged();
 	}
@@ -404,6 +433,58 @@ export abstract class SqlDatabaseAdapter implements IDatabaseAdapter {
 		markContentChanged();
 	}
 
+	// --------------------------------------------------- Prompt submissions
+
+	async listPromptSubmissions(): Promise<PromptSubmission[]> {
+		const db = await this.sql();
+		return db.select<PromptSubmission>(
+			`SELECT ${PROMPT_SUBMISSION_COLUMNS} FROM prompt_submissions ORDER BY created_at ASC`
+		);
+	}
+
+	async putPromptSubmission(submission: PromptSubmission): Promise<void> {
+		const db = await this.sql();
+		// The same prompt can be queued again when contributions are re-enabled;
+		// keep the existing row so a failed send does not lose its backoff.
+		await db.execute(
+			`INSERT INTO prompt_submissions
+			 (id, title, text, instruction_language, target_language, level, mode, created_at,
+			  attempts, last_attempt_at, last_error)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(id) DO NOTHING`,
+			[
+				submission.id,
+				submission.title,
+				submission.text,
+				submission.instructionLanguage,
+				submission.targetLanguage,
+				submission.level,
+				submission.mode,
+				submission.createdAt,
+				submission.attempts,
+				submission.lastAttemptAt,
+				submission.lastError
+			]
+		);
+		markContentChanged();
+	}
+
+	async markPromptSubmissionFailed(id: string, error: string, attemptedAt: string): Promise<void> {
+		const db = await this.sql();
+		await db.execute(
+			`UPDATE prompt_submissions
+			 SET attempts = attempts + 1, last_attempt_at = ?, last_error = ?
+			 WHERE id = ?`,
+			[attemptedAt, error, id]
+		);
+	}
+
+	async deletePromptSubmission(id: string): Promise<void> {
+		const db = await this.sql();
+		await db.execute('DELETE FROM prompt_submissions WHERE id = ?', [id]);
+		markContentChanged();
+	}
+
 	// --------------------------------------------------------------- Settings
 
 	async getSetting(key: string): Promise<string | null> {
@@ -562,7 +643,21 @@ function parseWordGlosses(json: string | null): WordGlosses | null {
 			const phrases = Array.isArray(entry?.phrases) ? entry.phrases.filter(isPhraseGloss) : [];
 			// Kept as stored: without them, meanings fetched a section at a time would read as the whole text's.
 			const sections = Array.isArray(entry?.sections) ? entry.sections.filter(isGlossedRange) : undefined;
-			texts[key] = sections ? { words, phrases, sections } : { words, phrases };
+			// POS is parallel to `words`; dropping it here made every reload lose
+			// the part-of-speech line, even for sections fetched with it on.
+			const pos = Array.isArray(entry?.pos)
+				? entry.pos.filter((label): label is string => typeof label === 'string')
+				: undefined;
+			const posSections = Array.isArray(entry?.posSections)
+				? entry.posSections.filter(isGlossedRange)
+				: undefined;
+			texts[key] = {
+				words,
+				phrases,
+				...(sections ? { sections } : {}),
+				...(pos ? { pos } : {}),
+				...(posSections ? { posSections } : {})
+			};
 		}
 
 		return Object.keys(texts).length > 0 ? texts : null;
@@ -660,8 +755,12 @@ function parseSetupColumn(json: string | null): SessionSetup | null {
 	}
 }
 
+const PROMPT_SUBMISSION_COLUMNS =
+	'id, title, text, instruction_language AS instructionLanguage, target_language AS targetLanguage, level, mode, created_at AS createdAt, attempts, last_attempt_at AS lastAttemptAt, last_error AS lastError';
+
 const EXPORT_TABLES = [
 	'prompts',
+	'prompt_submissions',
 	'sessions',
 	'attempts',
 	'corrections',

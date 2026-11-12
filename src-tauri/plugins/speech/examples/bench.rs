@@ -33,7 +33,9 @@ fn main() {
             .collect();
         let duration = pcm.len() as f64 / 16_000.0;
         let started = Instant::now();
-        let text = engine.transcribe(Path::new(model), &pcm, language).expect("transcribe");
+        let text = engine
+            .transcribe(Path::new(model), &pcm, language)
+            .expect("transcribe");
         let seconds = started.elapsed().as_secs_f64();
         println!(
             "{{\"clip\":{clip:?},\"duration\":{duration:.1},\"seconds\":{seconds:.2},\"rtf\":{:.3},\"text\":{text:?}}}",

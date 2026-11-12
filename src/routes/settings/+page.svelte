@@ -3,7 +3,8 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { LEVELS, appSettings, setSetting } from '#lib/stores/settings.js';
-	import { setTargetLanguage } from '#lib/stores/practice.js';
+	import { setTargetLanguage, setInstructionLanguage } from '#lib/stores/practice.js';
+	import { pageHref } from '#lib/pages.js';
 	import { OFFERED_LANGUAGES, instructionLanguagesFor, isCandidate, requireLanguage } from '#lib/languages/index.js';
 	import SettingsSection from '#lib/components/settings/SettingsSection.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
@@ -14,7 +15,7 @@
 	import ZoomSettings from '#lib/components/settings/ZoomSettings.svelte';
 	import TextSizeSettings from '#lib/components/settings/TextSizeSettings.svelte';
 	import ReminderSettings from '#lib/components/settings/ReminderSettings.svelte';
-	import WhatOnspotDoes from '#lib/components/settings/WhatOnspotDoes.svelte';
+
 	import DataSettings from '#lib/components/settings/DataSettings.svelte';
 	import UsageMonitor from '#lib/components/settings/UsageMonitor.svelte';
 	import VoiceLibraryPanel from '#lib/components/settings/VoiceLibraryPanel.svelte';
@@ -204,7 +205,7 @@
 									label: entry.nativeName === entry.name ? entry.name : `${entry.name} (${entry.nativeName})`
 								}))}
 								value={$appSettings.instructionLanguage}
-								onchange={(value) => setSetting('instructionLanguage', value)}
+								onchange={(value) => setInstructionLanguage(value)}
 							/>
 						</SettingRow>
 						<LanguageSupportNotice />
@@ -223,10 +224,24 @@
 								label="Default mode"
 								options={[
 									{ value: 'exam', label: 'Exam' },
-									{ value: 'casual', label: 'Casual' }
+									{ value: 'casual', label: 'Casual' },
+									{ value: 'freeflow', label: 'Free Flow' }
 								]}
 								value={$appSettings.mode}
-								onchange={(value) => setSetting('mode', value as 'exam' | 'casual')}
+								onchange={(value) => setSetting('mode', value as 'exam' | 'casual' | 'freeflow')}
+							/>
+						</SettingRow>
+						<SettingRow
+							label="Show part of speech in word tooltips"
+							for="showWordPos"
+							hint="When you hover over a word, the tooltip also shows whether it is a noun, verb, adjective, etc."
+						>
+							<input
+								type="checkbox"
+								id="showWordPos"
+								checked={$appSettings.showWordPos}
+								onchange={(e) => setSetting('showWordPos', e.currentTarget.checked)}
+								class="pos-toggle"
 							/>
 						</SettingRow>
 					</SettingsSection>
@@ -239,7 +254,11 @@
 
 					<ReminderSettings />
 
-					<WhatOnspotDoes />
+					<section id="about" class="about-link-row">
+						<a href={pageHref('/about')} class="settings-link" aria-label="Learn about onspot">
+							About onspot — aims, what it can and cannot do, links &amp; source code
+						</a>
+					</section>
 				</div>
 
 				<div class:hidden={tab !== 'usage'}>
@@ -344,5 +363,19 @@
 	:global(.settings-link:hover) {
 		color: var(--brand-hover);
 		text-decoration: underline;
+	}
+
+	.about-link-row {
+		padding: 1rem 0;
+		border-top: 1px solid var(--border);
+		margin-top: 0.5rem;
+	}
+
+	/* Part-of-speech toggle checkbox */
+	.pos-toggle {
+		width: 1.125rem;
+		height: 1.125rem;
+		accent-color: var(--brand);
+		cursor: pointer;
 	}
 </style>

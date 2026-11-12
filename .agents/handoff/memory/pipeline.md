@@ -70,8 +70,10 @@ strict translation-only LLM JSON
   → persist translation set v2 on the existing Attempt
 ```
 
-Everything except the BYOK endpoints runs on the device. Audio is stored so an attempt can be
-replayed; text goes to a cloud LLM only when a key is configured.
+Everything except the BYOK endpoints and the prompt-sharing Worker runs on the device. Audio is
+stored so an attempt can be replayed; text goes to a cloud LLM only when a key is configured.
+Generated prompts go to the shared prompt database while sharing is on (the default), with an opt-out
+in Settings.
 
 ## Language-data download (manual, cancellable)
 

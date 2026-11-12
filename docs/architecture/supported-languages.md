@@ -27,8 +27,11 @@ measured yet, and each approval's by-line says so.
 
 They are generated from one table, `LANGUAGE_FACTS` in `src/lib/languages/index.ts` (English and
 native name, Common Crawl web share, Whisper's name for the language, writing system and
-direction), with the general speaking prompts and the voice sample sentence as their preview.
-French, Japanese and Persian keep their own hand-written definitions.
+direction), with the voice sample sentence as their preview. French, Japanese and Persian keep
+their own hand-written definitions. Speaking prompts are separate from a language's definition:
+they live in `src/lib/practice/promptCatalogue.ts`, keyed by the language they are written in,
+and the learner's own LLM writes them for languages with no catalogue entry
+(`src/lib/adapters/llm/promptTopic.ts`).
 
 **Languages of instruction (35):** the same table; every one has an on-device voice for
 explanations. Web shares are Common Crawl CC-MAIN-2026-43. Nobody is taught a language in itself: a learner of English is taught in

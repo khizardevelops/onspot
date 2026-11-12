@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-adapter-sync-drive"
+description = "Google Drive whole-database snapshot sync"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+onspot-domain = { path = "../../onspot-domain" }
+onspot-ports = { path = "../../onspot-ports" }

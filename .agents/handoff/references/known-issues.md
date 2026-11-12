@@ -15,8 +15,8 @@ brief's Phase 0 walk-through is done (`docs/prompts/ios-focused-pwa.md`).
   without use; a home-screen app is treated separately, and its storage is separate from Safari's.
   The install guide tells learners to install first and to export/restore.
 - **No background work or Web Push.** iOS suspends the app when it leaves the screen, so model
-  downloads, timers and recordings stop; reminders are in-app only. There is no server and no
-  system notification for a closed app. The download-finished toast is the iOS signal.
+  downloads, timers and recordings stop; reminders are in-app only. There is no notification server
+  and no system notification for a closed app. The download-finished toast is the iOS signal.
   `notificationsSupported()` deliberately returns false on Apple touch devices, so Reminder
   Settings uses the in-app copy and does not request a system permission.
 - **Local Whisper is probably too heavy.** Transformers.js `whisper-small` holds about 2 GB and is

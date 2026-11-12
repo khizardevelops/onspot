@@ -102,9 +102,9 @@ pub async fn oauth_loopback_wait(
             .lock()
             .map_err(|_| "The sign-in listener state is unavailable.".to_string())?;
 
-        pending
-            .take()
-            .ok_or_else(|| "No Google sign-in is waiting. Start the connection again.".to_string())?
+        pending.take().ok_or_else(|| {
+            "No Google sign-in is waiting. Start the connection again.".to_string()
+        })?
     };
 
     let timeout = Duration::from_millis(timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS));

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -57,9 +58,13 @@ function basePath(value: string | undefined): '' | `/${string}` {
 	return value as `/${string}`;
 }
 
+/** The app version `core.ping` reports, from the single source package.json. */
+const APP_VERSION = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
+
 export default defineConfig({
 	define: {
-		__BASE_PATH__: JSON.stringify(BASE_PATH)
+		__BASE_PATH__: JSON.stringify(BASE_PATH),
+		__APP_VERSION__: JSON.stringify(APP_VERSION)
 	},
 	plugins: [
 		tailwindcss(),

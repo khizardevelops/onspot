@@ -33,7 +33,9 @@ impl DownloadCancel {
 pub fn model_path<R: Runtime>(app: &AppHandle<R>, file: &str) -> Result<PathBuf> {
     let plain = !file.is_empty()
         && file.ends_with(".bin")
-        && file.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
+        && file
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
     if !plain {
         return Err(Error::Invalid(format!("not a model file name: {file}")));
     }
@@ -65,7 +67,9 @@ pub async fn download(
     mut on_progress: impl FnMut(u64, u64),
 ) -> Result<()> {
     if !url.starts_with(ALLOWED_SOURCE) {
-        return Err(Error::Invalid(format!("models are only downloaded from {ALLOWED_SOURCE}")));
+        return Err(Error::Invalid(format!(
+            "models are only downloaded from {ALLOWED_SOURCE}"
+        )));
     }
     cancel.0.store(false, Ordering::Relaxed);
 
@@ -96,7 +100,11 @@ pub async fn download(
     file.flush().await?;
     drop(file);
 
-    let digest: String = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+    let digest: String = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     if !digest.eq_ignore_ascii_case(sha256) {
         let _ = tokio::fs::remove_file(&partial).await;
         return Err(Error::Checksum);
