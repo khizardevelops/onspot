@@ -9,6 +9,7 @@ use onspot_adapter_llm_openai::explanation::{
 use onspot_adapter_llm_openai::json_repair::repair_json;
 use onspot_adapter_llm_openai::parse::{extract_json, normalize_evaluation, strip_thinking};
 use onspot_adapter_llm_openai::prompt::{build_evaluation_messages, EvaluationPart};
+use onspot_adapter_llm_openai::translation_prompt::translation_rules;
 use serde_json::Value;
 
 #[derive(serde::Deserialize)]
@@ -213,5 +214,40 @@ fn explanation_markup_matches_every_case() {
             "askedQuestion": asked,
         });
         assert_eq!(actual, case.expected, "markup case: {}", case.name);
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct TranslationFixture {
+    cases: Vec<TranslationCase>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TranslationCase {
+    name: String,
+    input: TranslationInput,
+    expected: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TranslationInput {
+    language: String,
+    translation_target: String,
+}
+
+#[test]
+fn translation_rules_match_every_case() {
+    let fixture: TranslationFixture =
+        serde_json::from_str(include_str!("golden/translationPrompt.json"))
+            .expect("translation fixture");
+    for case in fixture.cases {
+        assert_eq!(
+            translation_rules(&case.input.language, &case.input.translation_target),
+            case.expected,
+            "translation prompt case: {}",
+            case.name
+        );
     }
 }

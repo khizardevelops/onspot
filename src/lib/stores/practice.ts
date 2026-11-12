@@ -448,6 +448,36 @@ async function handleCoreEvent(event: UiEvent): Promise<void> {
 		case 'play_recording':
 			void playStoredAudio(event.attempt_id);
 			break;
+		case 'glosses_ready':
+			update({
+				attempts: get(store).attempts.map((attempt) =>
+					attempt.id === event.attempt_id
+						? {
+								...attempt,
+								wordGlosses: {
+									...attempt.wordGlosses,
+									[event.key]: event.glosses as unknown as TextGlosses
+								}
+							}
+						: attempt
+				)
+			});
+			break;
+		case 'phrase_ready':
+			break;
+		case 'translations_ready':
+			update({
+				attempts: get(store).attempts.map((attempt) =>
+					attempt.id === event.attempt_id
+						? {
+								...attempt,
+								translation: event.translations.idiomatic,
+								translations: event.translations as unknown as TranslationSet
+							}
+						: attempt
+				)
+			});
+			break;
 		default:
 			break;
 	}
@@ -1380,6 +1410,26 @@ export function ensureAttemptTranslations(
 		return Promise.resolve(attempt.translations);
 	}
 
+	if (corePracticeEnabled) {
+		return (async () => {
+			await ensureCore();
+			const client = await getCoreClient();
+			const response = await client.command<{ translations: TranslationSet }>(
+				'translations.ensure',
+				{ attemptId }
+			);
+			const translations = response.translations;
+			update({
+				attempts: get(store).attempts.map((item) =>
+					item.id === attemptId
+						? { ...item, translation: translations.idiomatic, translations }
+						: item
+				)
+			});
+			return translations;
+		})();
+	}
+
 	const running = translationJobs.get(attemptId);
 	if (running) return running;
 
@@ -1488,6 +1538,43 @@ export function ensurePhraseMeaning(
 	end: number,
 	phrase: string
 ): Promise<string> {
+	if (corePracticeEnabled) {
+		const jobKey = `${attemptId}:${glossKey(text)}:${start}-${end}`;
+		const running = phraseJobs.get(jobKey);
+		if (running) return running;
+		const job = (async () => {
+			await ensureCore();
+			const client = await getCoreClient();
+			const response = await client.command<{ meaning: string }>('phrases.ensure', {
+				attemptId,
+				text,
+				start,
+				end,
+				phrase
+			});
+			const key = glossKey(text);
+			update({
+				attempts: get(store).attempts.map((item) => {
+					if (item.id !== attemptId) return item;
+					const current = item.wordGlosses[key] ?? { words: [], phrases: [] };
+					return {
+						...item,
+						wordGlosses: {
+							...item.wordGlosses,
+							[key]: {
+								...current,
+								phrases: [
+									...current.phrases,
+									{ start, end, meaning: response.meaning, origin: 'selection' as const }
+								]
+							}
+						}
+					};
+				})
+			});
+			return response.meaning;
+		})();
+	}
 	const jobKey = `${attemptId}:${glossKey(text)}:${start}-${end}`;
 	const running = phraseJobs.get(jobKey);
 	if (running) return running;
@@ -1538,6 +1625,35 @@ export function ensurePhraseMeaning(
 export function ensureWordGlosses(attemptId: string, text: string, wordIndex: number): Promise<void> {
 	const attempt = get(store).attempts.find((item) => item.id === attemptId);
 	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
+
+	if (corePracticeEnabled) {
+		const key = glossJobKey(attemptId, text);
+		const running = glossJobs.get(key);
+		if (running) return running;
+		const job = (async () => {
+			await ensureCore();
+			const client = await getCoreClient();
+			const response = await client.command<{
+				key: string;
+				glosses: TextGlosses;
+			}>('glosses.ensure', { attemptId, text, wordIndex, withPos: get(appSettings).showWordPos });
+			update({
+				attempts: get(store).attempts.map((item) =>
+					item.id === attemptId
+						? {
+								...item,
+								wordGlosses: {
+									...item.wordGlosses,
+									[response.key]: response.glosses as unknown as TextGlosses
+								}
+							}
+						: item
+				)
+			});
+		})().finally(() => glossJobs.delete(key));
+		glossJobs.set(key, job);
+		return job;
+	}
 
 	const settings = get(appSettings);
 	const existing = wordGlossesFor(attempt, text);

@@ -36,6 +36,21 @@ impl OpenAiEvaluator {
         }
     }
 
+    /// Sends one chat-completion request and returns the model's text.
+    pub async fn complete(
+        &self,
+        endpoint: &LlmEndpoint,
+        messages: &[ChatMessage],
+        max_tokens: u32,
+        json_mode: bool,
+        temperature: f32,
+        token: &CancelToken,
+    ) -> Result<String, CoreError> {
+        let _ = temperature;
+        self.completion(endpoint, messages, max_tokens, json_mode, token)
+            .await
+    }
+
     async fn completion(
         &self,
         endpoint: &LlmEndpoint,
@@ -178,6 +193,59 @@ impl LlmProvider for OpenAiEvaluator {
             &request.transcript,
             Some(&request.language),
         ))
+    }
+
+    async fn translate(
+        &self,
+        text: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        token: &CancelToken,
+    ) -> Result<onspot_domain::TranslationSet, CoreError> {
+        OpenAiEvaluator::translate(self, text, endpoint, language, translation_target, token).await
+    }
+
+    async fn gloss(
+        &self,
+        text: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        with_pos: bool,
+        token: &CancelToken,
+    ) -> Result<onspot_domain::TextGlosses, CoreError> {
+        OpenAiEvaluator::gloss(
+            self,
+            text,
+            endpoint,
+            language,
+            translation_target,
+            with_pos,
+            token,
+        )
+        .await
+    }
+
+    async fn phrase(
+        &self,
+        phrase: &str,
+        context: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        token: &CancelToken,
+    ) -> Result<String, CoreError> {
+        OpenAiEvaluator::phrase(
+            self,
+            phrase,
+            context,
+            endpoint,
+            language,
+            translation_target,
+            token,
+        )
+        .await
     }
 
     async fn test_connection(

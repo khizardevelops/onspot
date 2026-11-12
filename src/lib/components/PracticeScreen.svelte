@@ -30,7 +30,7 @@
 	} from '#lib/stores/processing.js';
 	import { getInstructionLanguage, getLanguage } from '#lib/languages/index.js';
 	import { exportSessionTranscript } from '#lib/utils/sessionTranscript.js';
-	import { usageWarnings } from '#lib/usage/monitor.js';
+	import { usageWarningsStore as usageWarnings } from '#lib/usage/view.js';
 	import { pacingWait } from '#lib/adapters/llm/index.js';
 	import { toast } from '#lib/stores/toast.js';
 	import { MAX_RECORDING_SEC } from '#lib/config.js';

@@ -1,0 +1,121 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/usage/rateLimits.ts",
+	"function": "parseDuration / parseRefusal",
+	"cases": [
+		{
+			"name": "duration \"1m26.4s\"",
+			"input": {
+				"duration": "1m26.4s"
+			},
+			"expected": {
+				"duration": 86400
+			}
+		},
+		{
+			"name": "duration \"547ms\"",
+			"input": {
+				"duration": "547ms"
+			},
+			"expected": {
+				"duration": 547
+			}
+		},
+		{
+			"name": "duration \"7.66s\"",
+			"input": {
+				"duration": "7.66s"
+			},
+			"expected": {
+				"duration": 7660
+			}
+		},
+		{
+			"name": "duration \"2h0m0s\"",
+			"input": {
+				"duration": "2h0m0s"
+			},
+			"expected": {
+				"duration": 7200000
+			}
+		},
+		{
+			"name": "duration \"15\"",
+			"input": {
+				"duration": "15"
+			},
+			"expected": {
+				"duration": 15000
+			}
+		},
+		{
+			"name": "duration \"\"",
+			"input": {
+				"duration": ""
+			},
+			"expected": {
+				"duration": null
+			}
+		},
+		{
+			"name": "duration \"abc\"",
+			"input": {
+				"duration": "abc"
+			},
+			"expected": {
+				"duration": null
+			}
+		},
+		{
+			"name": "duration \"1.5m\"",
+			"input": {
+				"duration": "1.5m"
+			},
+			"expected": {
+				"duration": 90000
+			}
+		},
+		{
+			"name": "TPM refusal with used and retry",
+			"input": {
+				"body": "Rate limit reached for model on tokens per minute (TPM): Limit 8000, Used 7843, Requested 2416. Please try again in 16.9s.",
+				"now": 1000
+			},
+			"expected": {
+				"refusal": {
+					"window": "TPM",
+					"limit": 8000,
+					"used": 7843,
+					"requested": 2416,
+					"retryAt": 17900
+				}
+			}
+		},
+		{
+			"name": "TPD refusal without retry",
+			"input": {
+				"body": "on tokens per day (TPD): Limit 200000, Used 199052, Requested 2410",
+				"now": 500
+			},
+			"expected": {
+				"refusal": {
+					"window": "TPD",
+					"limit": 200000,
+					"used": 199052,
+					"requested": 2410,
+					"retryAt": null
+				}
+			}
+		},
+		{
+			"name": "no limit named",
+			"input": {
+				"body": "invalid key",
+				"now": 0
+			},
+			"expected": {
+				"refusal": null
+			}
+		}
+	]
+}

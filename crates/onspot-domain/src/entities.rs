@@ -7,10 +7,12 @@
 //! and are mapped by the repositories.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// How a practice session is run. Stored as the same three strings the
 /// TypeScript app uses (`exam`, `casual`, `freeflow`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: String,
@@ -26,7 +28,8 @@ pub struct Session {
 }
 
 /// A session's languages and speaking setup, stored as JSON in `sessions.setup`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSetup {
     pub target_language: String,

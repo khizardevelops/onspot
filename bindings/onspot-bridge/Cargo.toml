@@ -27,6 +27,7 @@ async-trait = "0.1"
 futures = "0.3"
 futures-timer = "3"
 web-time = "1"
+time = { version = "0.3", features = ["formatting"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

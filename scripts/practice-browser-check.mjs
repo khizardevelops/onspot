@@ -115,10 +115,15 @@ async function fullLoopCheck(tone) {
 		const errors = [];
 		page.on('pageerror', (error) => errors.push(error.message));
 		page.on('console', (message) => {
-			if (message.type() === 'error') errors.push(message.text());
+			// The driver's read-back needs a cloud key; this smoke stubs the LLM,
+			// not text-to-speech, so that playback failure is expected.
+			if (message.type() === 'error' && !message.text().includes('speech failed')) {
+				errors.push(message.text());
+			}
 		});
 		let sttCalls = 0;
 		let evaluationCalls = 0;
+		let glossCalls = 0;
 		await page.route('https://api.groq.com/**', async (route) => {
 			const url = route.request().url();
 			if (url.includes('/audio/transcriptions')) {
@@ -132,6 +137,34 @@ async function fullLoopCheck(tone) {
 			}
 			if (url.includes('/chat/completions')) {
 				evaluationCalls += 1;
+				const post = route.request().postData() ?? '';
+				if (post.includes('word meanings')) {
+					glossCalls += 1;
+					const gloss = { glosses: { '1': 'Hello', '2': 'I', '3': 'go' }, expressions: [{ from: 2, to: 3, meaning: 'I go' }] };
+					await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(gloss) } }] }) });
+					return;
+				}
+				if (post.includes('phrases into')) {
+					await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ meaning: 'Hello, I' }) } }] }) });
+					return;
+				}
+				if (post.includes('translation engine')) {
+					const translations = {
+						translations: {
+							idiomatic: 'Bonjour, je vais au marché ce matin.',
+							idiomaticVariants: ['Salut, je vais au marché ce matin.'],
+							literal: 'Bonjour, je vais au marché ce matin.',
+							wordForWord: 'Bonjour je vais au marché ce matin.',
+							wordBreakdown: [{ source: 'Bonjour', target: 'Hello' }]
+						}
+					};
+					await route.fulfill({
+						status: 200,
+						contentType: 'application/json',
+						body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(translations) }, finish_reason: 'stop' }] })
+					});
+					return;
+				}
 				const content = JSON.stringify({
 					correctedText: 'Bonjour, je vais au marché ce matin.',
 					spokenLanguage: 'French',
@@ -172,7 +205,7 @@ async function fullLoopCheck(tone) {
 			{ timeout: 120_000 }
 		);
 
-		const snapshot = await page.evaluate(async () => {
+		const { snapshot, translation: _translation, insights, glosses, phrase, usage } = await page.evaluate(async () => {
 			const find = (name) =>
 				performance
 					.getEntriesByType('resource')
@@ -214,6 +247,18 @@ async function fullLoopCheck(tone) {
 				maxSeconds: 60
 			};
 			await client.command('practice.configure', { config });
+			const usage = await client.command('usage.snapshot', {
+				input: {
+					sttMode: 'cloud', correctionMode: 'cloud', llmProvider: 'groq',
+					llmHost: 'api.groq.com', llmModel: 'openai/gpt-oss-120b', llmFallbackModels: [],
+					llmKeyId: 'test-key', ttsMode: 'cloud', ttsCloudProvider: 'elevenlabs',
+					ttsHost: 'api.elevenlabs.io', ttsModel: 'eleven_multilingual_v2', ttsKeyId: 'no-key',
+					groqKeyId: 'test-key', deepseekKeyId: 'no-key', elevenlabsKeyId: 'no-key',
+					isTauri: false, now: Date.now(), ledger: { calls: [], live: {}, reported: {} },
+					elevenlabs: null, deepseek: null, groqModels: ['openai/gpt-oss-120b'],
+					labels: { 'openai/gpt-oss-120b': 'GPT-OSS 120B' }
+				}
+			});
 			const connection = await client.command('evaluation.test_connection', {
 				endpoint: config.llmEndpoint
 			});
@@ -228,7 +273,40 @@ async function fullLoopCheck(tone) {
 			});
 			await client.command('practice.start_recording');
 			await new Promise((resolve) => setTimeout(resolve, 1_200));
-			return (await client.command('practice.stop_and_analyze')).snapshot;
+			const snapshot = (await client.command('practice.stop_and_analyze')).snapshot;
+			const translation = await client.command('translations.ensure', {
+				attemptId: snapshot.attempts[0].attempt.id
+			});
+			const insights = await client.command('insights.build', null);
+			const glossRequest = {
+				attemptId: snapshot.attempts[0].attempt.id,
+				text: 'Bonjour je vais',
+				wordIndex: 0
+			};
+			const glosses = await client.command('glosses.ensure', glossRequest);
+			await client.command('glosses.ensure', glossRequest);
+			const phrase = await client.command('phrases.ensure', {
+				attemptId: snapshot.attempts[0].attempt.id,
+				text: 'Bonjour je vais',
+				start: 0,
+				end: 1,
+				phrase: 'Bonjour je'
+			});
+			if (!usage.services?.length) throw new Error('usage snapshot returned no services');
+			const llmUsage = usage.services.find((service) => service.capability === 'LLM');
+			if (!llmUsage?.meters.length) throw new Error('usage snapshot returned no LLM meters');
+			const view = await import('/src/lib/usage/view.ts');
+			let monitored = [];
+			const stopView = view.usageServicesStore.subscribe((value) => (monitored = value));
+			const deadline = Date.now() + 5_000;
+			while (!monitored.some((service) => service.capability === 'LLM' && service.meters.length) && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			stopView();
+			if (!monitored.some((service) => service.capability === 'LLM' && service.meters.length)) {
+				throw new Error('core usage monitor did not publish meters');
+			}
+			return { snapshot, translation, insights, glosses, phrase, usage };
 		});
 
 		if (snapshot.phase !== 'idle' || snapshot.attempts.length !== 1) {
@@ -243,8 +321,19 @@ async function fullLoopCheck(tone) {
 		if (sttCalls < 1 || evaluationCalls < 1) {
 			throw new Error(`host calls were not made: stt=${sttCalls}, evaluation=${evaluationCalls}`);
 		}
+		if (_translation.translations.idiomatic !== 'Bonjour, je vais au marché ce matin.') {
+			throw new Error('the Rust translation command did not return the idiomatic view');
+		}
+		if (insights.data.totals.attempts !== 1 || insights.data.patterns.length !== 1) {
+			throw new Error('the Rust insights aggregation did not include the new take');
+		}
+		if (glosses.glosses.words[0] !== 'Hello' || glosses.glosses.phrases.length !== 1) {
+			throw new Error('the Rust gloss command did not return word meanings');
+		}
+		if (glossCalls !== 1) throw new Error(`gloss cache did not coalesce: ${glossCalls} calls`);
+		if (phrase.meaning !== 'Hello, I') throw new Error('the Rust phrase command did not return a meaning');
 		if (errors.length > 0) throw new Error(`page errors: ${errors.join(' | ')}`);
-		return `stt=${sttCalls}, eval=${evaluationCalls}, attempt ${snapshot.attempts[0].attempt.id}`;
+		return `stt=${sttCalls}, eval=${evaluationCalls}, attempt ${snapshot.attempts[0].attempt.id}, translations ready`;
 	} finally {
 		await browser.close();
 	}

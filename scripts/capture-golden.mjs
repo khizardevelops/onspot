@@ -46,6 +46,12 @@ plugin({
 const { buildEvaluationMessages } = await import('../src/lib/adapters/llm/prompt.ts');
 const { normalizeEvaluation, extractJson } = await import('../src/lib/adapters/llm/evaluate.ts');
 const { stripThinking } = await import('../src/lib/adapters/llm/client.ts');
+const { computeInsights } = await import('../src/lib/insights.ts');
+const { translationRules } = await import('../src/lib/adapters/llm/translationPrompt.ts');
+const { parseDuration, parseRefusal } = await import('../src/lib/usage/rateLimits.ts');
+const { GROQ_PUBLISHED_MODELS, groqPublishedLimits, groqKnownLimits } = await import('../src/lib/usage/publishedLimits.ts');
+const usageFormat = await import('../src/lib/usage/format.ts');
+const usageLedger = await import('../src/lib/usage/ledger.ts');
 const { composeExplanation, normalizeExplanation, separateFollowUp } = await import(
 	'../src/lib/adapters/llm/explanation.ts'
 );
@@ -415,6 +421,153 @@ const captures = [
 				return { thinking: stripThinking(text), error: error instanceof Error ? error.message : String(error) };
 			}
 		}
+	},
+	{
+		crate: 'crates/onspot-app',
+		module: 'usageLedger',
+		source: 'src/lib/usage/ledger.ts',
+		fn: 'keyIdOf / scopeKey / totalsWithin',
+		cases: [
+			{ name: 'key id', input: { key: 'secret' } },
+			{ name: 'empty key id', input: { key: '  ' } },
+			{ name: 'scope key', input: { key: 'secret' } },
+			{
+				name: 'totals scope and window',
+				input: {
+					key: 'secret',
+					now: 59999,
+					windowMs: 60000,
+					scope: { host: 'api.groq.com', model: 'm' },
+					calls: [
+						{ host: 'api.groq.com', model: 'm', keyId: usageLedger.keyIdOf('secret'), at: 0, tokens: 10, reservedTokens: 20, audioSeconds: 1.5, characters: 3 },
+						{ host: 'api.groq.com', model: 'm', keyId: usageLedger.keyIdOf('secret'), at: 30000, tokens: 10, reservedTokens: 20, audioSeconds: 1.5, characters: 3 },
+						{ host: 'api.groq.com', model: 'other', keyId: usageLedger.keyIdOf('secret'), at: 0, tokens: 99, reservedTokens: 0, audioSeconds: 0, characters: 0 }
+					]
+				}
+			}
+		],
+		run: ({ key, now, windowMs, scope, calls }) => {
+			if (calls) {
+				const keyId = usageLedger.keyIdOf(key);
+				return {
+					keyId,
+					scopeKey: usageLedger.scopeKey({ ...scope, keyId }),
+					totals: usageLedger.totalsWithin({ calls, live: {}, reported: {} }, { ...scope, keyId }, windowMs, now)
+				};
+			}
+			return { keyId: usageLedger.keyIdOf(key) };
+		}
+	},
+	{
+		crate: 'crates/onspot-app',
+		module: 'usageFormat',
+		source: 'src/lib/usage/format.ts',
+		fn: 'formatCount / formatDuration / formatQuantity / formatPortion / formatReset',
+		cases: [
+			{ name: 'count 0', input: { kind: 'count', value: 0 } },
+			{ name: 'count 999', input: { kind: 'count', value: 999 } },
+			{ name: 'count 196400', input: { kind: 'count', value: 196400 } },
+			{ name: 'duration 45s', input: { kind: 'duration', value: 45 } },
+			{ name: 'duration 1h', input: { kind: 'duration', value: 3600 } },
+			{ name: 'duration 7h58', input: { kind: 'duration', value: 28680 } },
+			{ name: 'quantity 1 request', input: { kind: 'quantity', value: 1, unit: 'requests' } },
+			{ name: 'quantity 8000 tokens', input: { kind: 'quantity', value: 8000, unit: 'tokens' } },
+			{ name: 'portion tokens', input: { kind: 'portion', value: 196400, whole: 200000, unit: 'tokens' } },
+			{ name: 'portion audio', input: { kind: 'portion', value: 28680, whole: 28800, unit: 'seconds' } },
+			{ name: 'reset now', input: { kind: 'reset', value: 1000, now: 1000 } },
+			{ name: 'reset in 1m', input: { kind: 'reset', value: 61000, now: 1000 } }
+		],
+		run: ({ kind, value, whole, unit, now }) => {
+			if (kind === 'count') return usageFormat.formatCount(value);
+			if (kind === 'duration') return usageFormat.formatDuration(value);
+			if (kind === 'quantity') return usageFormat.formatQuantity(value, unit);
+			if (kind === 'portion') return usageFormat.formatPortion(value, whole, unit);
+			return usageFormat.formatReset(value, now);
+		}
+	},
+	{
+		crate: 'crates/onspot-app',
+		module: 'usageLimits',
+		source: 'src/lib/usage/publishedLimits.ts',
+		fn: 'groqPublishedLimits / groqKnownLimits',
+		cases: [
+			...GROQ_PUBLISHED_MODELS.flatMap((model) =>
+				['free', 'developer'].map((plan) => ({
+					name: `${model} · ${plan}`,
+					input: { model, plan }
+				}))
+			),
+			{ name: 'unknown model', input: { model: 'unknown/model', plan: 'free' } }
+		],
+		run: ({ model, plan }) => ({
+			published: groqPublishedLimits(model, plan),
+			known: groqKnownLimits(model, plan)
+		})
+	},
+	{
+		crate: 'crates/onspot-app',
+		module: 'usageRateLimits',
+		source: 'src/lib/usage/rateLimits.ts',
+		fn: 'parseDuration / parseRefusal',
+		cases: [
+			...['1m26.4s', '547ms', '7.66s', '2h0m0s', '15', '', 'abc', '1.5m'].map((value) => ({
+				name: `duration ${JSON.stringify(value)}`,
+				input: { duration: value }
+			})),
+			{ name: 'TPM refusal with used and retry', input: { body: 'Rate limit reached for model on tokens per minute (TPM): Limit 8000, Used 7843, Requested 2416. Please try again in 16.9s.', now: 1000 } },
+			{ name: 'TPD refusal without retry', input: { body: 'on tokens per day (TPD): Limit 200000, Used 199052, Requested 2410', now: 500 } },
+			{ name: 'no limit named', input: { body: 'invalid key', now: 0 } }
+		],
+		run: ({ duration, body, now }) => {
+			if (duration !== undefined) return { duration: parseDuration(duration) };
+			const refusal = parseRefusal(body, now);
+			return refusal ? { refusal } : { refusal: null };
+		}
+	},
+	{
+		crate: 'crates/adapters/llm-openai',
+		module: 'translationPrompt',
+		source: 'src/lib/adapters/llm/translationPrompt.ts',
+		fn: 'translationRules',
+		cases: ['French', 'Japanese', 'Persian'].flatMap((language) =>
+			['English', 'Spanish'].map((translationTarget) => ({
+				name: `${language} → ${translationTarget}`,
+				input: { language, translationTarget }
+			}))
+		),
+		run: ({ language, translationTarget }) => translationRules({ language, translationTarget })
+	},
+	{
+		crate: 'crates/onspot-app',
+		module: 'insights',
+		source: 'src/lib/insights.ts',
+		fn: 'computeInsights',
+		cases: [
+			{
+				name: 'patterns group across sessions and style is excluded',
+				input: {
+					sessions: [
+						{ id: 's1', title: 'Un', mode: 'exam', startedAt: '2026-01-01T00:00:00.000Z', endedAt: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', setup: null },
+						{ id: 's2', title: 'Deux', mode: 'casual', startedAt: '2026-01-02T00:00:00.000Z', endedAt: null, createdAt: '2026-01-02T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z', setup: null }
+					],
+					attempts: [
+						{ id: 'a1', sessionId: 's1', promptId: null, promptText: 'p', transcript: 't', correctedText: null, translation: null, translations: null, ttsVoice: null, explanation: null, followUp: null, wordGlosses: null, durationSec: 2.5, wordCount: 4, audioKey: null, createdAt: '2026-01-01T00:01:00.000Z', updatedAt: '2026-01-01T00:01:00.000Z' },
+						{ id: 'a2', sessionId: 's2', promptId: null, promptText: 'p', transcript: 't', correctedText: null, translation: null, translations: null, ttsVoice: null, explanation: null, followUp: null, wordGlosses: null, durationSec: 3.3, wordCount: 6, audioKey: null, createdAt: '2026-01-02T00:01:00.000Z', updatedAt: '2026-01-02T00:01:00.000Z' }
+					],
+					corrections: [
+						{ id: 'c1', attemptId: 'a1', category: 'grammar', severity: 'error', label: 'Elision', original: 'le', replacement: "l'", replacementTranslation: null, start: null, end: null, explanation: '', speakText: null, examStatus: null, formalAlternatives: [], sortOrder: 0, createdAt: '2026-01-01T00:01:00.000Z' },
+						{ id: 'c2', attemptId: 'a2', category: 'grammar', severity: 'warning', label: '  elision  ', original: 'la', replacement: "l'", replacementTranslation: null, start: null, end: null, explanation: '', speakText: null, examStatus: null, formalAlternatives: [], sortOrder: 0, createdAt: '2026-01-02T00:01:00.000Z' },
+						{ id: 'c3', attemptId: 'a2', category: 'style', severity: 'suggestion', label: 'Upgrade', original: 'a', replacement: 'b', replacementTranslation: null, start: null, end: null, explanation: '', speakText: null, examStatus: null, formalAlternatives: [], sortOrder: 1, createdAt: '2026-01-02T00:01:00.000Z' },
+						{ id: 'c4', attemptId: 'missing', category: 'grammar', severity: 'error', label: 'Ignored', original: 'a', replacement: 'b', replacementTranslation: null, start: null, end: null, explanation: '', speakText: null, examStatus: null, formalAlternatives: [], sortOrder: 0, createdAt: '2026-01-03T00:00:00.000Z' }
+					]
+				}
+			},
+			{
+				name: 'empty database',
+				input: { sessions: [], attempts: [], corrections: [] }
+			}
+		],
+		run: ({ sessions, attempts, corrections }) => computeInsights(sessions, attempts, corrections)
 	},
 	{
 		crate: 'crates/onspot-dsp',

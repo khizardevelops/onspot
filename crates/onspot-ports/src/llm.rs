@@ -8,7 +8,9 @@
 
 use std::collections::BTreeMap;
 
-use onspot_domain::{EvaluationRequest, EvaluationResult, LlmEndpoint};
+use onspot_domain::{
+    EvaluationRequest, EvaluationResult, LlmEndpoint, TextGlosses, TranslationSet,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{CancelToken, CoreError};
@@ -71,6 +73,35 @@ pub trait LlmProvider: Send + Sync {
         endpoint: &LlmEndpoint,
         token: &CancelToken,
     ) -> Result<String, CoreError>;
+
+    async fn translate(
+        &self,
+        text: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        token: &CancelToken,
+    ) -> Result<TranslationSet, CoreError>;
+
+    async fn gloss(
+        &self,
+        text: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        with_pos: bool,
+        token: &CancelToken,
+    ) -> Result<TextGlosses, CoreError>;
+
+    async fn phrase(
+        &self,
+        phrase: &str,
+        context: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        token: &CancelToken,
+    ) -> Result<String, CoreError>;
 }
 
 /// Builds prompts, calls the endpoint and validates its answer (wasm).
@@ -86,6 +117,35 @@ pub trait LlmProvider {
     async fn test_connection(
         &self,
         endpoint: &LlmEndpoint,
+        token: &CancelToken,
+    ) -> Result<String, CoreError>;
+
+    async fn translate(
+        &self,
+        text: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        token: &CancelToken,
+    ) -> Result<TranslationSet, CoreError>;
+
+    async fn gloss(
+        &self,
+        text: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
+        with_pos: bool,
+        token: &CancelToken,
+    ) -> Result<TextGlosses, CoreError>;
+
+    async fn phrase(
+        &self,
+        phrase: &str,
+        context: &str,
+        endpoint: &LlmEndpoint,
+        language: &str,
+        translation_target: &str,
         token: &CancelToken,
     ) -> Result<String, CoreError>;
 }

@@ -361,10 +361,78 @@ export type TestConnectionResponse = { reply: string, };
 
 
 /**
+ * The generated translation set.
+ */
+export type TranslationResponse = { translations: TranslationSet, };
+
+
+/**
+ * The Insights page payload.
+ */
+export type InsightsResponse = { data: InsightsData, };
+
+
+/**
+ * One text's stored meanings.
+ */
+export type GlossesResponse = { key: string, glosses: TextGlosses, };
+
+/**
+ * A selected phrase's meaning.
+ */
+export type PhraseResponse = { meaning: string, };
+
+/**
+ * A session's languages and speaking setup, stored as JSON in `sessions.setup`.
+ */
+export type SessionSetup = { targetLanguage: string, instructionLanguage: string, 
+/**
+ * `local` or `cloud`. Kept as the stored string: history only displays it,
+ * and older rows are accepted exactly as the TypeScript app accepts them.
+ */
+ttsMode: string, ttsVoice: string, explanationVoice: string, targetSpeechPace: number, };
+
+
+/**
+ * How a practice session is run. Stored as the same three strings the
+ * TypeScript app uses (`exam`, `casual`, `freeflow`).
+ */
+export type Session = { id: string, title: string, mode: string, startedAt: string, endedAt: string | null, createdAt: string, updatedAt: string, 
+/**
+ * What the session is practised with (migration 10). `None` on sessions
+ * from before that migration, until they are opened and worked out.
+ */
+setup: SessionSetup | null, };
+
+
+/**
+ * The full Insights page payload.
+ */
+export type InsightsData = { totals: InsightsTotals, patterns: Array<Pattern>, };
+
+/**
+ * Session totals shown above the pattern list.
+ */
+export type InsightsTotals = { sessions: bigint, attempts: bigint, words: bigint, speakingSeconds: number, errors: bigint, warnings: bigint, suggestions: bigint, };
+
+
+/**
+ * A repeated mistake.
+ */
+export type Pattern = { key: string, label: string, category: string, severity: string, count: bigint, sessionIds: Array<string>, occurrences: Array<Occurrence>, };
+
+
+/**
+ * One correction and the rows it belongs to.
+ */
+export type Occurrence = { session: Session | null, attempt: Attempt, correction: Correction, };
+
+
+/**
  * Something a driver shows or records. Serialized with a `event` tag, e.g.
  * `{ "event": "pong", "seq": 2 }`.
  */
-export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "host_request", id: number, method: string, 
+export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "translations_ready", attempt_id: string, translations: TranslationSet, } | { "event": "glosses_ready", attempt_id: string, key: string, glosses: TextGlosses, } | { "event": "phrase_ready", attempt_id: string, meaning: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "host_request", id: number, method: string, 
 /**
  * JSON-encoded arguments.
  */

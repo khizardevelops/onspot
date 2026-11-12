@@ -1,0 +1,423 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/usage/publishedLimits.ts",
+	"function": "groqPublishedLimits / groqKnownLimits",
+	"cases": [
+		{
+			"name": "canopylabs/orpheus-arabic-saudi · free",
+			"input": {
+				"model": "canopylabs/orpheus-arabic-saudi",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 10,
+					"RPD": 100,
+					"TPM": 1200,
+					"TPD": 3600
+				},
+				"known": {
+					"RPM": 10,
+					"RPD": 100,
+					"TPM": 1200,
+					"TPD": 3600
+				}
+			}
+		},
+		{
+			"name": "canopylabs/orpheus-arabic-saudi · developer",
+			"input": {
+				"model": "canopylabs/orpheus-arabic-saudi",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 250,
+					"RPD": 100000,
+					"TPM": 50000
+				},
+				"known": {
+					"RPM": 250,
+					"RPD": 100000,
+					"TPM": 50000
+				}
+			}
+		},
+		{
+			"name": "canopylabs/orpheus-v1-english · free",
+			"input": {
+				"model": "canopylabs/orpheus-v1-english",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 10,
+					"RPD": 100,
+					"TPM": 1200,
+					"TPD": 3600
+				},
+				"known": {
+					"RPM": 10,
+					"RPD": 100,
+					"TPM": 1200,
+					"TPD": 3600
+				}
+			}
+		},
+		{
+			"name": "canopylabs/orpheus-v1-english · developer",
+			"input": {
+				"model": "canopylabs/orpheus-v1-english",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 250,
+					"RPD": 100000,
+					"TPM": 50000
+				},
+				"known": {
+					"RPM": 250,
+					"RPD": 100000,
+					"TPM": 50000
+				}
+			}
+		},
+		{
+			"name": "meta-llama/llama-prompt-guard-2-22m · free",
+			"input": {
+				"model": "meta-llama/llama-prompt-guard-2-22m",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 30,
+					"RPD": 14400,
+					"TPM": 15000,
+					"TPD": 500000
+				},
+				"known": {
+					"RPM": 30,
+					"RPD": 14400,
+					"TPM": 15000,
+					"TPD": 500000
+				}
+			}
+		},
+		{
+			"name": "meta-llama/llama-prompt-guard-2-22m · developer",
+			"input": {
+				"model": "meta-llama/llama-prompt-guard-2-22m",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 100,
+					"RPD": 50000,
+					"TPM": 30000
+				},
+				"known": {
+					"RPM": 100,
+					"RPD": 50000,
+					"TPM": 30000
+				}
+			}
+		},
+		{
+			"name": "meta-llama/llama-prompt-guard-2-86m · free",
+			"input": {
+				"model": "meta-llama/llama-prompt-guard-2-86m",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 30,
+					"RPD": 14400,
+					"TPM": 15000,
+					"TPD": 500000
+				},
+				"known": {
+					"RPM": 30,
+					"RPD": 14400,
+					"TPM": 15000,
+					"TPD": 500000
+				}
+			}
+		},
+		{
+			"name": "meta-llama/llama-prompt-guard-2-86m · developer",
+			"input": {
+				"model": "meta-llama/llama-prompt-guard-2-86m",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 100,
+					"RPD": 50000,
+					"TPM": 30000
+				},
+				"known": {
+					"RPM": 100,
+					"RPD": 50000,
+					"TPM": 30000
+				}
+			}
+		},
+		{
+			"name": "openai/gpt-oss-120b · free",
+			"input": {
+				"model": "openai/gpt-oss-120b",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 30,
+					"RPD": 1000,
+					"TPM": 8000,
+					"TPD": 200000
+				},
+				"known": {
+					"RPM": 30,
+					"RPD": 1000,
+					"TPM": 8000,
+					"TPD": 200000
+				}
+			}
+		},
+		{
+			"name": "openai/gpt-oss-120b · developer",
+			"input": {
+				"model": "openai/gpt-oss-120b",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 250000
+				},
+				"known": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 250000
+				}
+			}
+		},
+		{
+			"name": "openai/gpt-oss-20b · free",
+			"input": {
+				"model": "openai/gpt-oss-20b",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 30,
+					"RPD": 1000,
+					"TPM": 8000,
+					"TPD": 200000
+				},
+				"known": {
+					"RPM": 30,
+					"RPD": 1000,
+					"TPM": 8000,
+					"TPD": 200000
+				}
+			}
+		},
+		{
+			"name": "openai/gpt-oss-20b · developer",
+			"input": {
+				"model": "openai/gpt-oss-20b",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 250000
+				},
+				"known": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 250000
+				}
+			}
+		},
+		{
+			"name": "openai/gpt-oss-safeguard-20b · free",
+			"input": {
+				"model": "openai/gpt-oss-safeguard-20b",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 3,
+					"RPD": 1000,
+					"TPM": 2000,
+					"TPD": 200000
+				},
+				"known": {
+					"RPM": 3,
+					"RPD": 1000,
+					"TPM": 2000,
+					"TPD": 200000
+				}
+			}
+		},
+		{
+			"name": "openai/gpt-oss-safeguard-20b · developer",
+			"input": {
+				"model": "openai/gpt-oss-safeguard-20b",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 150000
+				},
+				"known": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 150000
+				}
+			}
+		},
+		{
+			"name": "qwen/qwen3.8-27b · free",
+			"input": {
+				"model": "qwen/qwen3.8-27b",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 30,
+					"RPD": 1000,
+					"TPM": 8000,
+					"TPD": 200000
+				},
+				"known": {
+					"RPM": 30,
+					"RPD": 1000,
+					"TPM": 8000,
+					"TPD": 200000,
+					"OTPM": 1000
+				}
+			}
+		},
+		{
+			"name": "qwen/qwen3.8-27b · developer",
+			"input": {
+				"model": "qwen/qwen3.8-27b",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 250000
+				},
+				"known": {
+					"RPM": 1000,
+					"RPD": 500000,
+					"TPM": 250000
+				}
+			}
+		},
+		{
+			"name": "whisper-large-v3 · free",
+			"input": {
+				"model": "whisper-large-v3",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 20,
+					"RPD": 2000,
+					"ASH": 7200,
+					"ASD": 28800
+				},
+				"known": {
+					"RPM": 20,
+					"RPD": 2000,
+					"ASH": 7200,
+					"ASD": 28800
+				}
+			}
+		},
+		{
+			"name": "whisper-large-v3 · developer",
+			"input": {
+				"model": "whisper-large-v3",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 300,
+					"RPD": 200000,
+					"ASH": 200000,
+					"ASD": 4000000
+				},
+				"known": {
+					"RPM": 300,
+					"RPD": 200000,
+					"ASH": 200000,
+					"ASD": 4000000
+				}
+			}
+		},
+		{
+			"name": "whisper-large-v3-turbo · free",
+			"input": {
+				"model": "whisper-large-v3-turbo",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {
+					"RPM": 20,
+					"RPD": 2000,
+					"ASH": 7200,
+					"ASD": 28800
+				},
+				"known": {
+					"RPM": 20,
+					"RPD": 2000,
+					"ASH": 7200,
+					"ASD": 28800
+				}
+			}
+		},
+		{
+			"name": "whisper-large-v3-turbo · developer",
+			"input": {
+				"model": "whisper-large-v3-turbo",
+				"plan": "developer"
+			},
+			"expected": {
+				"published": {
+					"RPM": 400,
+					"RPD": 200000,
+					"ASH": 400000,
+					"ASD": 4000000
+				},
+				"known": {
+					"RPM": 400,
+					"RPD": 200000,
+					"ASH": 400000,
+					"ASD": 4000000
+				}
+			}
+		},
+		{
+			"name": "unknown model",
+			"input": {
+				"model": "unknown/model",
+				"plan": "free"
+			},
+			"expected": {
+				"published": {},
+				"known": {}
+			}
+		}
+	]
+}

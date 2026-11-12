@@ -2,7 +2,45 @@
 
 # State
 
-## Hexagonal migration: P4 complete in code (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+## Hexagonal migration: P6 complete (2026-11-12, branch `refactor/hex-arch-p0`)
+
+- **P6 is implemented end-to-end:** device-local ledger math, live-header/refusal parsing,
+  published Groq tables, display formatting, deterministic monitor, bridge snapshot/warning event,
+  and the Settings/practice rewire behind `useCore('usage')`.
+- **Coverage:** 48 captured goldens/interop/unit assertions across rate limits, limits, format,
+  ledger and monitor behavior; browser gate now asserts `usage.snapshot` and the core-backed
+  monitor store produce LLM meters.
+- **Formatting decision:** grouped/compact/relative strings still use the driver's `Intl`; the
+  core owns duration/quantity/portion/reset text. No locale package was added in P6.
+- **External gaps:** live-key meter comparison and a desktop-webview usage-page smoke need a real
+  provider key/device; physical Android remains unavailable. Core and web paths are verified.
+- **Next:** run the external smoke when a key/device is available, then P7 (sync/export).
+- **P5 status:** code-complete except the same live-key hover/restart smoke; P5/P6 work is
+  uncommitted.
+
+## Hexagonal migration: P5 started## Hexagonal migration: P5 started — insights aggregation ported (2026-11-12, branch `refactor/hex-arch-p0`)
+
+- **Committed:** P4 is `74db35c` (`P4: port the LLM evaluation pipeline to the Rust core`).
+- **P5 start:** `onspot-app::insights` now ports `src/lib/insights.ts` (`computeInsights`) with the
+  same grouping (`category|normalized label`), worst-severity promotion, style exclusion, orphan
+  filtering and newest-first occurrences. A captured golden passes.
+- **Translation prompt:** `llm-openai::translation_prompt` ports the v3 schema, rules, French
+  contrastive example, language guidance and chat messages; six language-pair goldens pass.
+- **Translations path:** `llm-openai::translation` parses/validates the v3 reply; the bridge
+  `translations.ensure` persists the set and emits `translations_ready`; the practice store uses it.
+- **Insights path:** `insights.build` aggregates through `HistoryStore`/`RecordsStore` and the
+  Insights page consumes it behind `useCore('insights')`.
+- **Glosses/phrases:** `llm-openai::gloss` ports word-meaning and selected-phrase prompts/parsing
+  (including optional POS); `glosses.ensure` and `phrases.ensure` persist with the legacy cache key
+  and emit readiness events. The practice store coalesces identical in-flight jobs; the browser
+  check verifies two identical requests make one provider call.
+- **Smoke:** `test:practice` now also generates translations and builds insights on the core path.
+- **Next:** translation prompt v3/parsing and the translation use case; glossary prompts/parsing
+  with coalescing; phrase meanings; bridge commands/events; rewire the hover/translation/Insights
+  data paths; cache interop and smoke.
+- **Gates:** cargo fmt/clippy/test workspace green after the insights slice. P5 work is uncommitted.
+
+## Hexagonal migration: P4 complete in code (superseded; committed `74db35c`) (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
 
 - **LLM pipeline:** `llm-openai` now holds byte-identical prompt rendering, JSON repair,
   `stripThinking`, extraction, evaluation parsing, explanation composition/markup and the

@@ -126,3 +126,12 @@ fn an_unknown_host_reply_is_reported_not_panicking() {
     .expect("reply command");
     assert_eq!(response["accepted"], false);
 }
+
+#[test]
+fn gloss_cache_keys_match_the_legacy_hash() {
+    use super::{gloss_key, hash_text};
+    assert_eq!(hash_text("Bonjour je vais"), "ed9c0c8e-f");
+    assert_eq!(hash_text("Bonjour je vais é"), "d966b3b9-h");
+    assert_eq!(gloss_key("Bonjour je vais", "en"), "numbered:ed9c0c8e-f");
+    assert_eq!(gloss_key("Bonjour je vais", "es"), "numbered:es:ed9c0c8e-f");
+}

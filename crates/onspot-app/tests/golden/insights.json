@@ -1,0 +1,292 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/insights.ts",
+	"function": "computeInsights",
+	"cases": [
+		{
+			"name": "patterns group across sessions and style is excluded",
+			"input": {
+				"sessions": [
+					{
+						"id": "s1",
+						"title": "Un",
+						"mode": "exam",
+						"startedAt": "2026-01-01T00:00:00.000Z",
+						"endedAt": null,
+						"createdAt": "2026-01-01T00:00:00.000Z",
+						"updatedAt": "2026-01-01T00:00:00.000Z",
+						"setup": null
+					},
+					{
+						"id": "s2",
+						"title": "Deux",
+						"mode": "casual",
+						"startedAt": "2026-01-02T00:00:00.000Z",
+						"endedAt": null,
+						"createdAt": "2026-01-02T00:00:00.000Z",
+						"updatedAt": "2026-01-02T00:00:00.000Z",
+						"setup": null
+					}
+				],
+				"attempts": [
+					{
+						"id": "a1",
+						"sessionId": "s1",
+						"promptId": null,
+						"promptText": "p",
+						"transcript": "t",
+						"correctedText": null,
+						"translation": null,
+						"translations": null,
+						"ttsVoice": null,
+						"explanation": null,
+						"followUp": null,
+						"wordGlosses": null,
+						"durationSec": 2.5,
+						"wordCount": 4,
+						"audioKey": null,
+						"createdAt": "2026-01-01T00:01:00.000Z",
+						"updatedAt": "2026-01-01T00:01:00.000Z"
+					},
+					{
+						"id": "a2",
+						"sessionId": "s2",
+						"promptId": null,
+						"promptText": "p",
+						"transcript": "t",
+						"correctedText": null,
+						"translation": null,
+						"translations": null,
+						"ttsVoice": null,
+						"explanation": null,
+						"followUp": null,
+						"wordGlosses": null,
+						"durationSec": 3.3,
+						"wordCount": 6,
+						"audioKey": null,
+						"createdAt": "2026-01-02T00:01:00.000Z",
+						"updatedAt": "2026-01-02T00:01:00.000Z"
+					}
+				],
+				"corrections": [
+					{
+						"id": "c1",
+						"attemptId": "a1",
+						"category": "grammar",
+						"severity": "error",
+						"label": "Elision",
+						"original": "le",
+						"replacement": "l'",
+						"replacementTranslation": null,
+						"start": null,
+						"end": null,
+						"explanation": "",
+						"speakText": null,
+						"examStatus": null,
+						"formalAlternatives": [],
+						"sortOrder": 0,
+						"createdAt": "2026-01-01T00:01:00.000Z"
+					},
+					{
+						"id": "c2",
+						"attemptId": "a2",
+						"category": "grammar",
+						"severity": "warning",
+						"label": "  elision  ",
+						"original": "la",
+						"replacement": "l'",
+						"replacementTranslation": null,
+						"start": null,
+						"end": null,
+						"explanation": "",
+						"speakText": null,
+						"examStatus": null,
+						"formalAlternatives": [],
+						"sortOrder": 0,
+						"createdAt": "2026-01-02T00:01:00.000Z"
+					},
+					{
+						"id": "c3",
+						"attemptId": "a2",
+						"category": "style",
+						"severity": "suggestion",
+						"label": "Upgrade",
+						"original": "a",
+						"replacement": "b",
+						"replacementTranslation": null,
+						"start": null,
+						"end": null,
+						"explanation": "",
+						"speakText": null,
+						"examStatus": null,
+						"formalAlternatives": [],
+						"sortOrder": 1,
+						"createdAt": "2026-01-02T00:01:00.000Z"
+					},
+					{
+						"id": "c4",
+						"attemptId": "missing",
+						"category": "grammar",
+						"severity": "error",
+						"label": "Ignored",
+						"original": "a",
+						"replacement": "b",
+						"replacementTranslation": null,
+						"start": null,
+						"end": null,
+						"explanation": "",
+						"speakText": null,
+						"examStatus": null,
+						"formalAlternatives": [],
+						"sortOrder": 0,
+						"createdAt": "2026-01-03T00:00:00.000Z"
+					}
+				]
+			},
+			"expected": {
+				"totals": {
+					"sessions": 2,
+					"attempts": 2,
+					"words": 10,
+					"speakingSeconds": 5.8,
+					"errors": 1,
+					"warnings": 1,
+					"suggestions": 1
+				},
+				"patterns": [
+					{
+						"key": "grammar|elision",
+						"label": "Elision",
+						"category": "grammar",
+						"severity": "error",
+						"count": 2,
+						"sessionIds": [
+							"s1",
+							"s2"
+						],
+						"occurrences": [
+							{
+								"session": {
+									"id": "s2",
+									"title": "Deux",
+									"mode": "casual",
+									"startedAt": "2026-01-02T00:00:00.000Z",
+									"endedAt": null,
+									"createdAt": "2026-01-02T00:00:00.000Z",
+									"updatedAt": "2026-01-02T00:00:00.000Z",
+									"setup": null
+								},
+								"attempt": {
+									"id": "a2",
+									"sessionId": "s2",
+									"promptId": null,
+									"promptText": "p",
+									"transcript": "t",
+									"correctedText": null,
+									"translation": null,
+									"translations": null,
+									"ttsVoice": null,
+									"explanation": null,
+									"followUp": null,
+									"wordGlosses": null,
+									"durationSec": 3.3,
+									"wordCount": 6,
+									"audioKey": null,
+									"createdAt": "2026-01-02T00:01:00.000Z",
+									"updatedAt": "2026-01-02T00:01:00.000Z"
+								},
+								"correction": {
+									"id": "c2",
+									"attemptId": "a2",
+									"category": "grammar",
+									"severity": "warning",
+									"label": "  elision  ",
+									"original": "la",
+									"replacement": "l'",
+									"replacementTranslation": null,
+									"start": null,
+									"end": null,
+									"explanation": "",
+									"speakText": null,
+									"examStatus": null,
+									"formalAlternatives": [],
+									"sortOrder": 0,
+									"createdAt": "2026-01-02T00:01:00.000Z"
+								}
+							},
+							{
+								"session": {
+									"id": "s1",
+									"title": "Un",
+									"mode": "exam",
+									"startedAt": "2026-01-01T00:00:00.000Z",
+									"endedAt": null,
+									"createdAt": "2026-01-01T00:00:00.000Z",
+									"updatedAt": "2026-01-01T00:00:00.000Z",
+									"setup": null
+								},
+								"attempt": {
+									"id": "a1",
+									"sessionId": "s1",
+									"promptId": null,
+									"promptText": "p",
+									"transcript": "t",
+									"correctedText": null,
+									"translation": null,
+									"translations": null,
+									"ttsVoice": null,
+									"explanation": null,
+									"followUp": null,
+									"wordGlosses": null,
+									"durationSec": 2.5,
+									"wordCount": 4,
+									"audioKey": null,
+									"createdAt": "2026-01-01T00:01:00.000Z",
+									"updatedAt": "2026-01-01T00:01:00.000Z"
+								},
+								"correction": {
+									"id": "c1",
+									"attemptId": "a1",
+									"category": "grammar",
+									"severity": "error",
+									"label": "Elision",
+									"original": "le",
+									"replacement": "l'",
+									"replacementTranslation": null,
+									"start": null,
+									"end": null,
+									"explanation": "",
+									"speakText": null,
+									"examStatus": null,
+									"formalAlternatives": [],
+									"sortOrder": 0,
+									"createdAt": "2026-01-01T00:01:00.000Z"
+								}
+							}
+						]
+					}
+				]
+			}
+		},
+		{
+			"name": "empty database",
+			"input": {
+				"sessions": [],
+				"attempts": [],
+				"corrections": []
+			},
+			"expected": {
+				"totals": {
+					"sessions": 0,
+					"attempts": 0,
+					"words": 0,
+					"speakingSeconds": 0,
+					"errors": 0,
+					"warnings": 0,
+					"suggestions": 0
+				},
+				"patterns": []
+			}
+		}
+	]
+}

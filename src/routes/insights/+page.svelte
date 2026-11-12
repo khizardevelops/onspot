@@ -8,6 +8,8 @@
 	import { computeInsights, SEVERITY_RANK, type InsightsData, type Occurrence } from '#lib/insights.js';
 	import { openSession } from '#lib/stores/practice.js';
 	import { toast } from '#lib/stores/toast.js';
+	import { useCore } from '#lib/core-client/backend.js';
+	import { getCoreClient } from '#lib/core-client/client.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
 	import { NeoDivider } from '@dvcol/neo-svelte/divider';
@@ -45,13 +47,21 @@
 		loadError = '';
 		try {
 			const db = await getDatabaseAdapter();
-			const [sessions, attempts, corrections] = await Promise.all([
-				db.listSessions(),
-				db.listAllAttempts(),
-				db.listAllCorrections()
-			]);
-			data = computeInsights(sessions, attempts, corrections);
-			attemptIndex = indexAttempts(attempts);
+			if (useCore('insights')) {
+				const client = await getCoreClient();
+				const response = await client.command<{ data: InsightsData }>('insights.build');
+				const attempts = await db.listAllAttempts();
+				data = response.data;
+				attemptIndex = indexAttempts(attempts);
+			} else {
+				const [sessions, attempts, corrections] = await Promise.all([
+					db.listSessions(),
+					db.listAllAttempts(),
+					db.listAllCorrections()
+				]);
+				data = computeInsights(sessions, attempts, corrections);
+				attemptIndex = indexAttempts(attempts);
+			}
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'The local database could not be opened.';
 		} finally {

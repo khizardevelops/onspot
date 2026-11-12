@@ -62,7 +62,41 @@
       storage path.
 - [ ] Android build of the new storage path (needs the NDK toolchain).
 
-## Hexagonal migration P4 (started 2026-11-12)
+## Hexagonal migration P6 (started 2026-11-12, complete 2026-11-12)
+- [x] Usage map (`docs/architecture/usage-map.md`): ledger rows, scopes, 24 h retention,
+      header/refusal parsing, published tables, monitor consumers, time semantics.
+- [x] Goldens and ports: `parseDuration`/`parseRefusal` (11), Groq tables (21), display
+      formatting (12), ledger key/scope/totals (4); legacy `localStorage` JSON interop test.
+- [x] `onspot-app::usage_monitor`: meters from live headers/refusals/counts, roll-forward,
+      take/read estimates, notes, warnings, account-backed ElevenLabs/DeepSeek and local services.
+- [x] Bridge `usage.snapshot` + `usage_warning { kind, provider, message_code }`; web/Android
+      desktop-style header figure paths preserved.
+- [x] Settings usage meters and practice warnings use `usage/view.ts`, which selects core or
+      legacy; core monitor starts only when `useCore('usage')`.
+- [x] Browser gate exercises the command and the core-backed store (`test:practice`); build,
+      svelte-check, clippy, workspace tests, boundaries and SPDX green.
+- [ ] Live-key meter comparison and a desktop (Tauri webview) usage-page smoke need a real key
+      and device; not available in this session.
+
+## Hexagonal migration P5 (started 2026-11-12)
+- [x] Capture the Insights aggregation golden and port `computeInsights` to
+      `onspot-app::insights`; the fixture covers grouping, severity, style exclusion and
+      orphan-correction filtering.
+- [x] Translation v3 prompt rules and messages ported; 6 language-pair goldens pass.
+- [x] Translation response parsing and the `translations.ensure` bridge command; the core path
+      persists the v3 set and `ensureAttemptTranslations` uses it.
+- [x] Insights bridge (`insights.build`) and the Insights page data source behind `useCore`.
+- [x] Glossary/hover prompts, parsing, `glosses.ensure`/`glosses_ready`, phrase translation and
+      `phrases.ensure`/`phrase_ready`; the practice store coalesces identical jobs in flight.
+- [x] Legacy-compatible gloss cache key (FNV-1a over UTF-16 + base-36 length, `numbered:` prefix).
+- [x] Legacy gloss-key parity test and a browser cache check (two identical requests → one provider
+      call); POS (`withPos`) is threaded through the core gloss request.
+- [x] Bridge commands for translations/glosses/phrases/insights and the practice/Insights data paths.
+- [ ] Live provider hover/restart smoke on a device with a real key (the browser check stubs the LLM).
+- [ ] Phrase meanings; bridge commands/events; rewire hover/translation/Insights data paths.
+- [ ] Legacy/core cache interop test and the web/desktop smoke.
+
+## Hexagonal migration P4 (finished 2026-11-12, committed `74db35c`)
 - [x] Extend the golden harness with prompt, evaluation-parse, explanation, markup and JSON-extract
       fixtures (captured from the current TS).
 - [x] Port the pure LLM pipeline to `onspot-adapter-llm-openai`: `json_repair`, `strip_thinking`,

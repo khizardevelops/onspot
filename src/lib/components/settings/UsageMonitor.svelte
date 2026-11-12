@@ -6,15 +6,15 @@
 	 * left, per model or per account as the provider counts it.
 	 */
 	import {
-		accountsLoading,
-		accountsReadAt,
-		refreshAccountUsage,
-		usageClock,
-		usageServices,
+		accountsLoadingStore as accountsLoading,
+		accountsReadAtStore as accountsReadAt,
+		refreshAccountUsageFn as refreshAccountUsage,
+		usageClockStore as usageClock,
+		usageServicesStore as usageServices,
 		type ModelUsage,
 		type ServiceUsage,
 		type UsageView
-	} from '#lib/usage/monitor.js';
+	} from '#lib/usage/view.js';
 	import { formatAgo } from '#lib/usage/format.js';
 	import SettingsSection from '#lib/components/settings/SettingsSection.svelte';
 	import UsageMeterRow from '#lib/components/settings/UsageMeterRow.svelte';

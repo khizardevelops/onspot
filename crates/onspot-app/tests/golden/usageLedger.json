@@ -1,0 +1,88 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/usage/ledger.ts",
+	"function": "keyIdOf / scopeKey / totalsWithin",
+	"cases": [
+		{
+			"name": "key id",
+			"input": {
+				"key": "secret"
+			},
+			"expected": {
+				"keyId": "667c6911-6"
+			}
+		},
+		{
+			"name": "empty key id",
+			"input": {
+				"key": "  "
+			},
+			"expected": {
+				"keyId": "no-key"
+			}
+		},
+		{
+			"name": "scope key",
+			"input": {
+				"key": "secret"
+			},
+			"expected": {
+				"keyId": "667c6911-6"
+			}
+		},
+		{
+			"name": "totals scope and window",
+			"input": {
+				"key": "secret",
+				"now": 59999,
+				"windowMs": 60000,
+				"scope": {
+					"host": "api.groq.com",
+					"model": "m"
+				},
+				"calls": [
+					{
+						"host": "api.groq.com",
+						"model": "m",
+						"keyId": "667c6911-6",
+						"at": 0,
+						"tokens": 10,
+						"reservedTokens": 20,
+						"audioSeconds": 1.5,
+						"characters": 3
+					},
+					{
+						"host": "api.groq.com",
+						"model": "m",
+						"keyId": "667c6911-6",
+						"at": 30000,
+						"tokens": 10,
+						"reservedTokens": 20,
+						"audioSeconds": 1.5,
+						"characters": 3
+					},
+					{
+						"host": "api.groq.com",
+						"model": "other",
+						"keyId": "667c6911-6",
+						"at": 0,
+						"tokens": 99,
+						"reservedTokens": 0,
+						"audioSeconds": 0,
+						"characters": 0
+					}
+				]
+			},
+			"expected": {
+				"keyId": "667c6911-6",
+				"scopeKey": "667c6911-6|api.groq.com|m",
+				"totals": {
+					"requests": 2,
+					"tokens": 20,
+					"audioSeconds": 3,
+					"characters": 6
+				}
+			}
+		}
+	]
+}

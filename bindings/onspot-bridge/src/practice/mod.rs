@@ -53,6 +53,11 @@ pub const PRACTICE_PLAY_RECORDING: &str = "practice.play_recording";
 pub const PRACTICE_SET_ATTEMPT_VOICE: &str = "practice.set_attempt_voice";
 pub const CORE_HOST_REPLY: &str = "core.host_reply";
 pub const EVALUATION_TEST_CONNECTION: &str = "evaluation.test_connection";
+pub const TRANSLATIONS_ENSURE: &str = "translations.ensure";
+pub const INSIGHTS_BUILD: &str = "insights.build";
+pub const GLOSSES_ENSURE: &str = "glosses.ensure";
+pub const PHRASES_ENSURE: &str = "phrases.ensure";
+pub const USAGE_SNAPSHOT: &str = "usage.snapshot";
 
 /// `practice.configure` arguments.
 #[derive(Debug, Clone, Deserialize)]
@@ -238,6 +243,11 @@ pub async fn dispatch(
         PRACTICE_SET_ATTEMPT_VOICE => set_attempt_voice(core, payload).await.and_then(serialize),
         CORE_HOST_REPLY => host_reply(core, payload).and_then(serialize),
         EVALUATION_TEST_CONNECTION => test_connection(core, payload).await.and_then(serialize),
+        TRANSLATIONS_ENSURE => ensure_translations(core, payload).await.and_then(serialize),
+        INSIGHTS_BUILD => build_insights(core).await.and_then(serialize),
+        GLOSSES_ENSURE => ensure_glosses(core, payload).await.and_then(serialize),
+        PHRASES_ENSURE => ensure_phrase(core, payload).await.and_then(serialize),
+        USAGE_SNAPSHOT => usage_snapshot(core, payload).and_then(serialize),
         _ => return None,
     };
     Some(result)
@@ -512,6 +522,337 @@ async fn test_connection(
         .await
         .map_err(core_error)?;
     Ok(TestConnectionResponse { reply })
+}
+
+/// `usage.snapshot` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageRequest {
+    pub input: onspot_app::UsageInput,
+}
+
+fn usage_snapshot(core: &Core, payload: Value) -> Result<onspot_app::UsageSnapshot, BridgeError> {
+    let request: UsageRequest = parse(USAGE_SNAPSHOT, payload)?;
+    let snapshot = onspot_app::usage_snapshot(&request.input);
+    for warning in &snapshot.warnings {
+        core.emit(UiEvent::UsageWarning {
+            kind: warning.level.clone(),
+            provider: String::from("usage"),
+            message_code: warning.message.clone(),
+        });
+    }
+    Ok(snapshot)
+}
+
+/// `glosses.ensure` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlossesRequest {
+    pub attempt_id: String,
+    pub text: String,
+    pub word_index: i64,
+    #[serde(default)]
+    pub with_pos: bool,
+}
+
+/// `phrases.ensure` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhraseRequest {
+    pub attempt_id: String,
+    pub text: String,
+    pub start: i64,
+    pub end: i64,
+    pub phrase: String,
+}
+
+/// One text's stored meanings.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct GlossesResponse {
+    pub key: String,
+    pub glosses: onspot_domain::TextGlosses,
+}
+
+/// A selected phrase's meaning.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct PhraseResponse {
+    pub meaning: String,
+}
+
+fn gloss_key(text: &str, instruction_language: &str) -> String {
+    let text_key = if instruction_language == "en" {
+        hash_text(text)
+    } else {
+        format!("{instruction_language}:{}", hash_text(text))
+    };
+    format!("numbered:{text_key}")
+}
+
+fn hash_text(text: &str) -> String {
+    let mut hash: u32 = 0x811c_9dc5;
+    for unit in text.encode_utf16() {
+        hash ^= u32::from(unit);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    let mut length = text.encode_utf16().count() as u64;
+    let mut base36 = String::new();
+    if length == 0 {
+        base36.push('0');
+    }
+    while length > 0 {
+        let digit = length % 36;
+        base36.insert(0, char::from_digit(digit as u32, 36).unwrap_or('0'));
+        length /= 36;
+    }
+    format!("{hash:08x}-{base36}")
+}
+
+async fn ensure_glosses(core: &Core, payload: Value) -> Result<GlossesResponse, BridgeError> {
+    let request: GlossesRequest = parse(GLOSSES_ENSURE, payload)?;
+    let session = practice(core)?;
+    let config = session.config();
+    let records = core
+        .hosts()
+        .records
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let mut attempt = records
+        .get_attempt(&request.attempt_id)
+        .await
+        .map_err(|error| BridgeError::new("glosses.persistence_failed", error.message))?
+        .ok_or_else(|| {
+            BridgeError::new("practice.attempt_not_found", "the attempt is not stored")
+        })?;
+    let key = gloss_key(&request.text, &config.instruction_language_id);
+    let mut glosses_by_text = attempt.word_glosses.clone().unwrap_or_default();
+    if let Some(existing) = glosses_by_text.get(&key) {
+        if existing.sections.is_some() || !existing.words.is_empty() {
+            return Ok(GlossesResponse {
+                key,
+                glosses: existing.clone(),
+            });
+        }
+    }
+
+    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let glosses = evaluator
+        .gloss(
+            &request.text,
+            &config.llm_endpoint,
+            &config.target_language_name,
+            &config.instruction_language_name,
+            request.with_pos,
+            &CancelToken::new(),
+        )
+        .await
+        .map_err(core_error)?;
+    glosses_by_text.insert(key.clone(), glosses.clone());
+    attempt.word_glosses = Some(glosses_by_text);
+    attempt.updated_at = now_rfc3339(SystemClock.now_ms());
+    records
+        .put_attempt(&attempt)
+        .await
+        .map_err(|error| BridgeError::new("glosses.persistence_failed", error.message))?;
+    core.emit(UiEvent::GlossesReady {
+        attempt_id: request.attempt_id,
+        key: key.clone(),
+        glosses: glosses.clone(),
+    });
+    let _ = request.word_index;
+    Ok(GlossesResponse { key, glosses })
+}
+
+async fn ensure_phrase(core: &Core, payload: Value) -> Result<PhraseResponse, BridgeError> {
+    let request: PhraseRequest = parse(PHRASES_ENSURE, payload)?;
+    let session = practice(core)?;
+    let config = session.config();
+    let records = core
+        .hosts()
+        .records
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let mut attempt = records
+        .get_attempt(&request.attempt_id)
+        .await
+        .map_err(|error| BridgeError::new("phrases.persistence_failed", error.message))?
+        .ok_or_else(|| {
+            BridgeError::new("practice.attempt_not_found", "the attempt is not stored")
+        })?;
+    let key = gloss_key(&request.text, &config.instruction_language_id);
+    let mut glosses_by_text = attempt.word_glosses.clone().unwrap_or_default();
+    if let Some(existing) = glosses_by_text.get(&key) {
+        if let Some(saved) = existing.phrases.iter().find(|phrase| {
+            phrase.origin == "selection"
+                && phrase.start == request.start
+                && phrase.end == request.end
+        }) {
+            return Ok(PhraseResponse {
+                meaning: saved.meaning.clone(),
+            });
+        }
+    }
+
+    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let meaning = evaluator
+        .phrase(
+            &request.phrase,
+            &request.text,
+            &config.llm_endpoint,
+            &config.target_language_name,
+            &config.instruction_language_name,
+            &CancelToken::new(),
+        )
+        .await
+        .map_err(core_error)?;
+    let entry = glosses_by_text
+        .entry(key)
+        .or_insert_with(|| onspot_domain::TextGlosses {
+            words: Vec::new(),
+            phrases: Vec::new(),
+            pos: None,
+            pos_sections: None,
+            sections: None,
+        });
+    entry.phrases.push(onspot_domain::PhraseGloss {
+        start: request.start,
+        end: request.end,
+        meaning: meaning.clone(),
+        origin: String::from("selection"),
+    });
+    attempt.word_glosses = Some(glosses_by_text);
+    attempt.updated_at = now_rfc3339(SystemClock.now_ms());
+    records
+        .put_attempt(&attempt)
+        .await
+        .map_err(|error| BridgeError::new("phrases.persistence_failed", error.message))?;
+    core.emit(UiEvent::PhraseReady {
+        attempt_id: request.attempt_id,
+        meaning: meaning.clone(),
+    });
+    Ok(PhraseResponse { meaning })
+}
+
+/// The Insights page payload.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct InsightsResponse {
+    pub data: onspot_app::InsightsData,
+}
+
+async fn build_insights(core: &Core) -> Result<InsightsResponse, BridgeError> {
+    let history = core
+        .hosts()
+        .history
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let records = core
+        .hosts()
+        .records
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let sessions = history
+        .list_sessions()
+        .await
+        .map_err(|error| BridgeError::new("insights.persistence_failed", error.message))?;
+    let attempts = records
+        .list_all_attempts()
+        .await
+        .map_err(|error| BridgeError::new("insights.persistence_failed", error.message))?;
+    let corrections = records
+        .list_all_corrections()
+        .await
+        .map_err(|error| BridgeError::new("insights.persistence_failed", error.message))?;
+    Ok(InsightsResponse {
+        data: onspot_app::compute_insights(&sessions, &attempts, &corrections),
+    })
+}
+
+/// `translations.ensure` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttemptRequest {
+    pub attempt_id: String,
+}
+
+/// The generated translation set.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationResponse {
+    pub translations: onspot_domain::TranslationSet,
+}
+
+async fn ensure_translations(
+    core: &Core,
+    payload: Value,
+) -> Result<TranslationResponse, BridgeError> {
+    let request: AttemptRequest = parse(TRANSLATIONS_ENSURE, payload)?;
+    let session = practice(core)?;
+    let config = session.config();
+    let records = core
+        .hosts()
+        .records
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let mut attempt = records
+        .get_attempt(&request.attempt_id)
+        .await
+        .map_err(|error| BridgeError::new("translations.persistence_failed", error.message))?
+        .ok_or_else(|| {
+            BridgeError::new("practice.attempt_not_found", "the attempt is not stored")
+        })?;
+    let text = attempt
+        .corrected_text
+        .clone()
+        .filter(|text| !text.trim().is_empty())
+        .unwrap_or_else(|| attempt.transcript.clone());
+    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let mut translations = evaluator
+        .translate(
+            &text,
+            &config.llm_endpoint,
+            &config.target_language_name,
+            &config.instruction_language_name,
+            &CancelToken::new(),
+        )
+        .await
+        .map_err(core_error)?;
+    translations.instruction_language = Some(config.instruction_language_id.clone());
+    attempt.translation = Some(translations.idiomatic.clone());
+    attempt.translations = Some(translations.clone());
+    attempt.updated_at = now_rfc3339(SystemClock.now_ms());
+    records
+        .put_attempt(&attempt)
+        .await
+        .map_err(|error| BridgeError::new("translations.persistence_failed", error.message))?;
+    core.emit(UiEvent::TranslationsReady {
+        attempt_id: request.attempt_id,
+        translations: translations.clone(),
+    });
+    Ok(TranslationResponse { translations })
+}
+
+fn now_rfc3339(now_ms: u64) -> String {
+    let seconds = (now_ms / 1000).min(i64::MAX as u64) as i64;
+    let millis = (now_ms % 1000) as u32;
+    time::OffsetDateTime::from_unix_timestamp(seconds)
+        .ok()
+        .map(|datetime| {
+            datetime
+                .replace_nanosecond(millis * 1_000_000)
+                .unwrap_or(datetime)
+        })
+        .and_then(|datetime| {
+            datetime
+                .format(&time::format_description::well_known::Rfc3339)
+                .ok()
+        })
+        .unwrap_or_else(|| String::from("1970-01-01T00:00:00Z"))
 }
 
 fn host_reply(core: &Core, payload: Value) -> Result<AcceptedResponse, BridgeError> {

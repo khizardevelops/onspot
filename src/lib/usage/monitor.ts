@@ -32,6 +32,7 @@ import {
 } from './publishedLimits';
 import type { HeaderBudget, LimitWindow } from './rateLimits';
 import { formatCount, formatDuration, formatQuantity, formatReset, type UsageUnit } from './format';
+import { useCore } from '#lib/core-client/backend.js';
 
 /**
  * The usage monitor: how much of each cloud service's limit or credit is left
@@ -247,6 +248,7 @@ let accountKeysSeen = '';
 let keyChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
 accountKeysInUse.subscribe((keys) => {
+	if (useCore('usage')) return;
 	const signature = `${keyIdOf(keys.elevenlabs ?? '')}|${keyIdOf(keys.deepseek ?? '')}`;
 	if (signature === accountKeysSeen) return;
 	accountKeysSeen = signature;
@@ -261,6 +263,7 @@ let lastElevenLabsCall = 0;
 let accountRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 usageLedger.subscribe((state) => {
+	if (useCore('usage')) return;
 	const latest = state.calls.findLast((call) => call.host === ELEVENLABS_HOST);
 	if (!latest || latest.at <= lastElevenLabsCall) return;
 

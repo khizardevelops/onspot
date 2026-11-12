@@ -62,6 +62,16 @@ const TYPE_ORDER = [
 	'OpenResponse',
 	'AcceptedResponse',
 	'TestConnectionResponse',
+	'TranslationResponse',
+	'InsightsResponse',
+	'GlossesResponse',
+	'PhraseResponse',
+	'SessionSetup',
+	'Session',
+	'InsightsData',
+	'InsightsTotals',
+	'Pattern',
+	'Occurrence',
 	'UiEvent'
 ];
 

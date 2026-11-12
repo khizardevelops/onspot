@@ -45,6 +45,19 @@ pub enum UiEvent {
     TakeSilent,
     /// Play this track through the host's audio graph.
     SpeakTrack { attempt_id: String, kind: String },
+    /// A take's three translation views are ready and persisted.
+    TranslationsReady {
+        attempt_id: String,
+        translations: onspot_domain::TranslationSet,
+    },
+    /// One text's word meanings are ready and persisted.
+    GlossesReady {
+        attempt_id: String,
+        key: String,
+        glosses: onspot_domain::TextGlosses,
+    },
+    /// A selected phrase's meaning is ready and persisted.
+    PhraseReady { attempt_id: String, meaning: String },
     /// Play one sentence of a take's corrected text.
     PlaySegment {
         attempt_id: String,
@@ -55,6 +68,12 @@ pub enum UiEvent {
     SpeakText { text: String },
     /// Play the take's stored recording.
     PlayRecording { attempt_id: String },
+    /// A usage meter crossed the low-remaining or exhausted threshold.
+    UsageWarning {
+        kind: String,
+        provider: String,
+        message_code: String,
+    },
     /// The core asks the driver to perform one host operation and reply.
     HostRequest {
         id: u32,

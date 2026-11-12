@@ -18,7 +18,7 @@ import { browser } from '$app/env';
 export type CoreBackend = 'legacy' | 'core';
 
 /** Features with a bridge implementation. Grows one commit at a time. */
-export type CoreFeature = 'probe' | 'settings' | 'history' | 'practice' | 'evaluation';
+export type CoreFeature = 'probe' | 'settings' | 'history' | 'practice' | 'evaluation' | 'insights' | 'usage';
 
 const STORAGE_KEY = 'onspot.core-backend.v1';
 
@@ -32,7 +32,9 @@ const FEATURES_WITH_CORE: ReadonlySet<CoreFeature> = new Set<CoreFeature>([
 	'settings',
 	'history',
 	'practice',
-	'evaluation'
+	'evaluation',
+	'insights',
+	'usage'
 ]);
 
 function isBackend(value: unknown): value is CoreBackend {

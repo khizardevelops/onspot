@@ -77,6 +77,11 @@ impl RunPracticeSession {
         }
     }
 
+    /// The settings this session was configured with.
+    pub fn config(&self) -> PracticeConfig {
+        self.lock().config.clone()
+    }
+
     /// The current snapshot.
     pub fn snapshot(&self) -> PracticeSnapshot {
         self.lock().snapshot.clone()

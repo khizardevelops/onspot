@@ -1,0 +1,117 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/usage/format.ts",
+	"function": "formatCount / formatDuration / formatQuantity / formatPortion / formatReset",
+	"cases": [
+		{
+			"name": "count 0",
+			"input": {
+				"kind": "count",
+				"value": 0
+			},
+			"expected": "0"
+		},
+		{
+			"name": "count 999",
+			"input": {
+				"kind": "count",
+				"value": 999
+			},
+			"expected": "999"
+		},
+		{
+			"name": "count 196400",
+			"input": {
+				"kind": "count",
+				"value": 196400
+			},
+			"expected": "196,400"
+		},
+		{
+			"name": "duration 45s",
+			"input": {
+				"kind": "duration",
+				"value": 45
+			},
+			"expected": "45 s"
+		},
+		{
+			"name": "duration 1h",
+			"input": {
+				"kind": "duration",
+				"value": 3600
+			},
+			"expected": "1 h"
+		},
+		{
+			"name": "duration 7h58",
+			"input": {
+				"kind": "duration",
+				"value": 28680
+			},
+			"expected": "7 h 58 min"
+		},
+		{
+			"name": "quantity 1 request",
+			"input": {
+				"kind": "quantity",
+				"value": 1,
+				"unit": "requests"
+			},
+			"expected": "1 request"
+		},
+		{
+			"name": "quantity 8000 tokens",
+			"input": {
+				"kind": "quantity",
+				"value": 8000,
+				"unit": "tokens"
+			},
+			"expected": "8,000 tokens"
+		},
+		{
+			"name": "portion tokens",
+			"input": {
+				"kind": "portion",
+				"value": 196400,
+				"whole": 200000,
+				"unit": "tokens"
+			},
+			"expected": {
+				"part": "196,400",
+				"ofWhole": "of 200,000 tokens"
+			}
+		},
+		{
+			"name": "portion audio",
+			"input": {
+				"kind": "portion",
+				"value": 28680,
+				"whole": 28800,
+				"unit": "seconds"
+			},
+			"expected": {
+				"part": "7 h 58 min",
+				"ofWhole": "of 8 h"
+			}
+		},
+		{
+			"name": "reset now",
+			"input": {
+				"kind": "reset",
+				"value": 1000,
+				"now": 1000
+			},
+			"expected": "now"
+		},
+		{
+			"name": "reset in 1m",
+			"input": {
+				"kind": "reset",
+				"value": 61000,
+				"now": 1000
+			},
+			"expected": "in 1 min"
+		}
+	]
+}

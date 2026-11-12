@@ -9,11 +9,14 @@
 
 pub mod client;
 pub mod explanation;
+pub mod gloss;
 pub mod json_repair;
 pub mod language_guidance;
 pub mod pacing;
 pub mod parse;
 pub mod prompt;
+pub mod translation;
+pub mod translation_prompt;
 
 #[cfg(test)]
 mod tests {
