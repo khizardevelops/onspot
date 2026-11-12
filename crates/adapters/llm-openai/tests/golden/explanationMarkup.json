@@ -1,0 +1,63 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/adapters/llm/explanation.ts",
+	"function": "normalizeExplanation / separateFollowUp",
+	"cases": [
+		{
+			"name": "unknown tags are dropped",
+			"input": {
+				"markup": "Bonjour <b>tout</b> le monde."
+			},
+			"expected": {
+				"markup": "Bonjour tout le monde.",
+				"parts": [
+					{
+						"text": "Bonjour tout le monde.",
+						"highlight": null
+					}
+				],
+				"askedQuestion": null
+			}
+		},
+		{
+			"name": "nested and unclosed tags leave plain text",
+			"input": {
+				"markup": "Un <wrong>deux <x>trois</wrong> quatre"
+			},
+			"expected": {
+				"markup": "Un <wrong>deux trois</wrong> quatre",
+				"parts": [
+					{
+						"text": "Un ",
+						"highlight": null
+					},
+					{
+						"text": "deux trois",
+						"highlight": "wrong"
+					},
+					{
+						"text": " quatre",
+						"highlight": null
+					}
+				],
+				"askedQuestion": null
+			}
+		},
+		{
+			"name": "legacy ask is separated",
+			"input": {
+				"markup": "Bien. <ask>Et ensuite ?</ask>"
+			},
+			"expected": {
+				"markup": "Bien. <ask>Et ensuite ?</ask>",
+				"parts": [
+					{
+						"text": "Bien. ",
+						"highlight": null
+					}
+				],
+				"askedQuestion": "Et ensuite ?"
+			}
+		}
+	]
+}

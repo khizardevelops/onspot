@@ -19,12 +19,11 @@ use onspot_app::practice::{
     PracticeConfig, PracticePorts, PracticeSnapshot, PromptView, RunPracticeSession,
 };
 use onspot_app::{Core, UiEvent};
-use onspot_domain::EvaluationResult;
 use onspot_ports::{
     AudioCapture, AudioClip, AudioFrame, AudioLevelSink, AudioPlayback, CancelToken,
-    CaptureOptions, Clock, CoreError, EvaluationPort, GeneratedPrompt, IdSource, ModelProgress,
-    PlaybackRequest, PromptRequest, PromptSource, SpeechPiece, SttEngine, SttOptions,
-    SttProgressSink, Transcript, TtsEngine,
+    CaptureOptions, Clock, CoreError, GeneratedPrompt, HttpClient, HttpRequest, HttpResponse,
+    IdSource, LlmProvider, ModelProgress, PlaybackRequest, PromptRequest, PromptSource,
+    SpeechPiece, SttEngine, SttOptions, SttProgressSink, Transcript, TtsEngine,
 };
 
 use crate::commands::serialize;
@@ -53,6 +52,7 @@ pub const PRACTICE_SPEAK_TEXT: &str = "practice.speak_text";
 pub const PRACTICE_PLAY_RECORDING: &str = "practice.play_recording";
 pub const PRACTICE_SET_ATTEMPT_VOICE: &str = "practice.set_attempt_voice";
 pub const CORE_HOST_REPLY: &str = "core.host_reply";
+pub const EVALUATION_TEST_CONNECTION: &str = "evaluation.test_connection";
 
 /// `practice.configure` arguments.
 #[derive(Debug, Clone, Deserialize)]
@@ -237,6 +237,7 @@ pub async fn dispatch(
         PRACTICE_PLAY_RECORDING => play_recording(core, payload).and_then(serialize),
         PRACTICE_SET_ATTEMPT_VOICE => set_attempt_voice(core, payload).await.and_then(serialize),
         CORE_HOST_REPLY => host_reply(core, payload).and_then(serialize),
+        EVALUATION_TEST_CONNECTION => test_connection(core, payload).await.and_then(serialize),
         _ => return None,
     };
     Some(result)
@@ -278,7 +279,9 @@ fn configure(core: &Core, payload: Value) -> Result<PracticeResponse, BridgeErro
                 tts: Arc::new(RpcTts(core.host_rpc().clone())),
                 playback: Arc::new(RpcPlayback),
                 clock: Arc::new(SystemClock),
-                evaluation: Arc::new(RpcEvaluation(core.host_rpc().clone())),
+                evaluation: Arc::new(onspot_app::EvaluatorPort::new(rust_evaluator(
+                    core.host_rpc().clone(),
+                ))),
                 prompts: Arc::new(RpcPrompts(core.host_rpc().clone())),
                 ids: Arc::new(BridgeIds::default()),
             };
@@ -483,6 +486,34 @@ async fn set_attempt_voice(core: &Core, payload: Value) -> Result<PracticeRespon
     })
 }
 
+/// `evaluation.test_connection` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestConnectionRequest {
+    pub endpoint: onspot_domain::LlmEndpoint,
+}
+
+/// The provider's reply to a connection test.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct TestConnectionResponse {
+    pub reply: String,
+}
+
+async fn test_connection(
+    core: &Core,
+    payload: Value,
+) -> Result<TestConnectionResponse, BridgeError> {
+    let request: TestConnectionRequest = parse(EVALUATION_TEST_CONNECTION, payload)?;
+    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let reply = onspot_app::TestLlmConnection::new(evaluator.as_ref())
+        .execute(&request.endpoint, &CancelToken::new())
+        .await
+        .map_err(core_error)?;
+    Ok(TestConnectionResponse { reply })
+}
+
 fn host_reply(core: &Core, payload: Value) -> Result<AcceptedResponse, BridgeError> {
     let request: HostReplyRequest = parse(CORE_HOST_REPLY, payload)?;
     let reply = match request.error {
@@ -586,19 +617,26 @@ impl AudioPlayback for RpcPlayback {
     fn stop(&self) {}
 }
 
+struct RpcHttp(Arc<onspot_app::HostRpc>);
+
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-impl EvaluationPort for RpcEvaluation {
-    async fn evaluate(
+impl HttpClient for RpcHttp {
+    async fn send(
         &self,
-        request: &onspot_domain::EvaluationRequest,
+        request: &HttpRequest,
         _token: &CancelToken,
-    ) -> Result<EvaluationResult, CoreError> {
-        call(&self.0, "evaluation.evaluate", json!(request)).await
+    ) -> Result<HttpResponse, CoreError> {
+        call(&self.0, "http.request", json!(request)).await
     }
 }
 
-struct RpcEvaluation(Arc<onspot_app::HostRpc>);
+fn rust_evaluator(rpc: Arc<onspot_app::HostRpc>) -> Arc<dyn LlmProvider> {
+    Arc::new(onspot_adapter_llm_openai::client::OpenAiEvaluator::new(
+        Arc::new(RpcHttp(rpc)),
+        Arc::new(SystemClock),
+    ))
+}
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]

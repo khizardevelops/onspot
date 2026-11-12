@@ -1,0 +1,67 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/adapters/llm/evaluate.ts / client.ts",
+	"function": "extractJson / stripThinking",
+	"cases": [
+		{
+			"name": "thinking block is removed",
+			"input": {
+				"text": "<think>secret {curly}</think>{\"a\":1}"
+			},
+			"expected": {
+				"thinking": "{\"a\":1}",
+				"parsed": {
+					"a": 1
+				}
+			}
+		},
+		{
+			"name": "fenced JSON is unwrapped",
+			"input": {
+				"text": "```json\n{\"a\":1}\n```"
+			},
+			"expected": {
+				"thinking": "```json\n{\"a\":1}\n```",
+				"parsed": {
+					"a": 1
+				}
+			}
+		},
+		{
+			"name": "first balanced object wins",
+			"input": {
+				"text": "prefix {\"a\":{\"b\":1}} suffix {\"c\":2}"
+			},
+			"expected": {
+				"thinking": "prefix {\"a\":{\"b\":1}} suffix {\"c\":2}",
+				"parsed": {
+					"a": {
+						"b": 1
+					}
+				}
+			}
+		},
+		{
+			"name": "truncated object fails",
+			"input": {
+				"text": "{\"a\": [1, 2"
+			},
+			"expected": {
+				"thinking": "{\"a\": [1, 2",
+				"error": "The model’s reply was cut off before it finished. Please try again."
+			}
+		},
+		{
+			"name": "duplicate keys keep the last value",
+			"input": {
+				"text": "{\"a\":1,\"a\":2}"
+			},
+			"expected": {
+				"thinking": "{\"a\":1,\"a\":2}",
+				"parsed": {
+					"a": 2
+				}
+			}
+		}
+	]
+}

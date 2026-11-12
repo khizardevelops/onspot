@@ -301,6 +301,24 @@ function coreConfig(): PracticeConfig {
 		explanationVoice: settings.explanationVoice,
 		pace: settings.targetSpeechPace,
 		explanationAudioAvailable: get(explanationAudioAvailable),
+		llmEndpoint: (() => {
+			const endpoint = resolveLlmEndpoint(settings);
+			const host = (() => {
+				try {
+					return new URL(endpoint.baseUrl).host;
+				} catch {
+					return endpoint.baseUrl;
+				}
+			})();
+			const provider =
+				host === 'api.groq.com' ? 'groq' : host === 'api.deepseek.com' ? 'deepseek' : 'custom';
+			return {
+				baseUrl: endpoint.baseUrl,
+				provider,
+				model: endpoint.model,
+				fallbackModels: [...(endpoint.fallbackModels ?? [])]
+			};
+		})(),
 		maxSeconds: MAX_RECORDING_SEC
 	};
 }

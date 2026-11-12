@@ -6,6 +6,7 @@
 //! it an [`EventSink`], and reaches it only through `onspot-bridge`.
 
 pub mod core;
+pub mod evaluation;
 pub mod events;
 pub mod history;
 pub mod host_rpc;
@@ -14,6 +15,7 @@ pub mod practice;
 pub mod settings;
 
 pub use core::{Core, CoreConfig};
+pub use evaluation::{EvaluateAttempt, EvaluatorPort, TestLlmConnection};
 pub use events::{EventSink, UiEvent};
 pub use history::{HistoryError, HistoryService, HistorySession};
 pub use host_rpc::HostRpc;

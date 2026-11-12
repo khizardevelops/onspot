@@ -19,6 +19,7 @@
  * runtime and Web Workers are not touched.
  */
 
+import { plugin } from 'bun';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,24 @@ import { sentenceChunks } from '../src/lib/utils/textChunks.ts';
 import { compileMatcher } from '../src/lib/utils/historySearch.ts';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// The LLM modules use the app's `#lib/*` package import. Bun does not map the
+// `.js` suffix to a `.ts` source, so resolve it here before importing them.
+plugin({
+	name: 'onspot-lib-alias',
+	setup(build) {
+		build.onResolve({ filter: /^#lib\// }, (args) => ({
+			path: join(REPO_ROOT, 'src/lib', args.path.slice('#lib/'.length).replace(/\.js$/, '.ts'))
+		}));
+	}
+});
+
+const { buildEvaluationMessages } = await import('../src/lib/adapters/llm/prompt.ts');
+const { normalizeEvaluation, extractJson } = await import('../src/lib/adapters/llm/evaluate.ts');
+const { stripThinking } = await import('../src/lib/adapters/llm/client.ts');
+const { composeExplanation, normalizeExplanation, separateFollowUp } = await import(
+	'../src/lib/adapters/llm/explanation.ts'
+);
 const CAPTURE_LABEL = 'v0.2.4 working tree, 2026-11-12 (P0)';
 
 /**
@@ -195,6 +214,207 @@ const captures = [
 			{ name: 'different kanji are different words', input: { first: '元気です', second: '天気です' } }
 		],
 		run: ({ first, second }) => sameWords(first, second)
+	},
+	{
+		crate: 'crates/adapters/llm-openai',
+		module: 'evaluationPrompt',
+		source: 'src/lib/adapters/llm/prompt.ts',
+		fn: 'buildEvaluationMessages',
+		cases: [
+			...['exam', 'casual', 'freeflow'].flatMap((mode) =>
+				['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].flatMap((level) =>
+					['French', 'Japanese', 'Persian'].flatMap((language) =>
+						['English', 'Spanish'].map((translationTarget) => ({
+							name: `${mode} · ${level} · ${language} · ${translationTarget}`,
+							input: {
+								transcript: 'Bonjour, je vais au marché.',
+								prompt: 'Racontez votre matinée.',
+								mode,
+								level,
+								language,
+								translationTarget
+							}
+						}))
+					)
+				)
+			),
+			{ name: 'part two of three', input: { transcript: 'Deuxième partie.', prompt: 'Racontez.', mode: 'casual', level: 'B1', language: 'French', translationTarget: 'English', part: { number: 2, count: 3 } } }
+		],
+		run: ({ transcript, prompt, mode, level, language, translationTarget, part }) =>
+			buildEvaluationMessages({ transcript, prompt, mode, level, language, translationTarget }, part)
+	},
+	{
+		crate: 'crates/adapters/llm-openai',
+		module: 'evaluationParse',
+		source: 'src/lib/adapters/llm/evaluate.ts',
+		fn: 'normalizeEvaluation',
+		cases: [
+			{
+				name: 'clean evaluation',
+				input: {
+					transcript: 'je vais au marché',
+					language: 'French',
+					raw: {
+						correctedText: 'Je vais au marché.',
+						spokenLanguage: 'French',
+						explanation: { note: 'Bien.', mistakes: [] },
+						followUp: { question: 'Et ensuite ?', translation: 'And then?' },
+						corrections: [],
+						vocabulary: [],
+						connectors: []
+					}
+				}
+			},
+			{
+				name: 'unknown category and severity are dropped',
+				input: {
+					transcript: 'je vais',
+					language: 'French',
+					raw: {
+						correctedText: 'Je vais.',
+						spokenLanguage: 'French',
+						explanation: null,
+						followUp: null,
+						corrections: [
+							{ category: 'unknown', severity: 'error', original: 'je', replacement: 'Je' },
+							{ category: 'grammar', severity: 'wrong', original: 'vais', replacement: 'vais' },
+							{ category: 'grammar', severity: 'error', original: 'je vais', replacement: 'je vais.' }
+						],
+						vocabulary: [{ original: 'vais', suggestion: 'me rends' }],
+						connectors: [{ connector: 'ensuite' }]
+					}
+				}
+			},
+			{
+				name: 'wrong language becomes one correction',
+				input: {
+					transcript: 'I went to the market',
+					language: 'French',
+					raw: {
+						correctedText: 'Je suis allé au marché.',
+						spokenLanguage: 'English',
+						explanation: { note: 'Answer in French.', mistakes: [] },
+						followUp: null,
+						corrections: [],
+						vocabulary: [],
+						connectors: []
+					}
+				}
+			},
+			{
+				name: 'many vocabulary suggestions all survive',
+				input: {
+					transcript: 'bonjour',
+					language: 'French',
+					raw: {
+						correctedText: 'Bonjour.',
+						spokenLanguage: 'French',
+						explanation: { note: 'Bien.', mistakes: [] },
+						followUp: null,
+						corrections: [],
+						vocabulary: [
+							{ original: 'a', suggestion: 'b', why: 'c' },
+							{ original: 'd', suggestion: 'e', why: 'f' },
+							{ original: 'g', suggestion: 'h', why: 'i' },
+							{ original: 'j', suggestion: 'k', why: 'l' }
+						],
+						connectors: []
+					}
+				}
+			},
+			{
+				name: 'missing follow-up and mismatched replacement',
+				input: {
+					transcript: 'bonjour',
+					language: 'French',
+					raw: {
+						correctedText: 'Bonjour.',
+						spokenLanguage: 'French',
+						explanation: 'Bonjour.',
+						followUp: { question: 'Ça va ?' },
+						corrections: [],
+						vocabulary: [],
+						connectors: []
+					}
+				}
+			}
+		],
+		run: ({ transcript, language, raw }) => normalizeEvaluation(raw, transcript, language)
+	},
+	{
+		crate: 'crates/adapters/llm-openai',
+		module: 'explanation',
+		source: 'src/lib/adapters/llm/explanation.ts',
+		fn: 'composeExplanation',
+		cases: [
+			{ name: 'all correct note', input: { note: 'Nice, that was all correct.', mistakes: [] } },
+			{
+				name: 'model line is kept when it names the fix',
+				input: {
+					note: 'You described that trip vividly.',
+					mistakes: [
+						{ said: 'dans Paris', say: 'à Paris', line: 'You said <wrong>dans Paris</wrong>, but with a city we say <right>à Paris</right>.' }
+					]
+				}
+			},
+			{
+				name: 'missing fix names falls back',
+				input: { note: '', mistakes: [{ said: 'j’ai allé', say: 'je suis allé', line: 'That one is wrong.' }] }
+			},
+			{
+				name: 'unchanged word is dropped and max mistakes apply',
+				input: {
+					note: '',
+					mistakes: [
+						{ said: 'bonjour', say: 'Bonjour', line: '' },
+						{ said: 'je', say: '', line: 'Leave it out.' },
+						{ said: 'vais', say: 'irai', line: '' },
+						{ said: 'au', say: 'à', line: '' },
+						{ said: 'marché', say: 'marché', line: '' }
+					]
+				}
+			}
+		],
+		run: (input) => composeExplanation(input)
+	},
+	{
+		crate: 'crates/adapters/llm-openai',
+		module: 'explanationMarkup',
+		source: 'src/lib/adapters/llm/explanation.ts',
+		fn: 'normalizeExplanation / separateFollowUp',
+		cases: [
+			{ name: 'unknown tags are dropped', input: { markup: 'Bonjour <b>tout</b> le monde.' } },
+			{ name: 'nested and unclosed tags leave plain text', input: { markup: 'Un <wrong>deux <x>trois</wrong> quatre' } },
+			{ name: 'legacy ask is separated', input: { markup: 'Bien. <ask>Et ensuite ?</ask>' } }
+		],
+		run: ({ markup }) => {
+			const separated = separateFollowUp(normalizeExplanation(markup));
+			return {
+				markup: normalizeExplanation(markup),
+				parts: separated.parts,
+				askedQuestion: separated.askedQuestion
+			};
+		}
+	},
+	{
+		crate: 'crates/adapters/llm-openai',
+		module: 'jsonExtract',
+		source: 'src/lib/adapters/llm/evaluate.ts / client.ts',
+		fn: 'extractJson / stripThinking',
+		cases: [
+			{ name: 'thinking block is removed', input: { text: '<think>secret {curly}</think>{"a":1}' } },
+			{ name: 'fenced JSON is unwrapped', input: { text: '```json\n{"a":1}\n```' } },
+			{ name: 'first balanced object wins', input: { text: 'prefix {"a":{"b":1}} suffix {"c":2}' } },
+			{ name: 'truncated object fails', input: { text: '{"a": [1, 2' } },
+			{ name: 'duplicate keys keep the last value', input: { text: '{"a":1,"a":2}' } }
+		],
+		run: ({ text }) => {
+			try {
+				return { thinking: stripThinking(text), parsed: extractJson(text) };
+			} catch (error) {
+				return { thinking: stripThinking(text), error: error instanceof Error ? error.message : String(error) };
+			}
+		}
 	},
 	{
 		crate: 'crates/onspot-dsp',

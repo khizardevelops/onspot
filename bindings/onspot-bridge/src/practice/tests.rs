@@ -50,6 +50,12 @@ fn config() -> Value {
             "sttMode": "local",
             "ttsVoice": "fr_FR-siwis",
             "explanationVoice": "en_US-amy",
+            "llmEndpoint": {
+                "baseUrl": "http://127.0.0.1:4330/v1",
+                "provider": "custom",
+                "model": "stub",
+                "fallbackModels": []
+            },
             "pace": 1.0,
             "explanationAudioAvailable": true,
             "maxSeconds": 60

@@ -1324,6 +1324,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
+name = "fancy-regex"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
+dependencies = [
+ "bit-set 0.8.0",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3141,8 +3152,17 @@ dependencies = [
 name = "onspot-adapter-llm-openai"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "fancy-regex",
+ "futures",
+ "once_cell",
  "onspot-domain",
+ "onspot-dsp",
  "onspot-ports",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -3210,6 +3230,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "js-sys",
+ "onspot-adapter-llm-openai",
  "onspot-adapter-repo-sql",
  "onspot-app",
  "onspot-domain",
@@ -3236,6 +3257,7 @@ dependencies = [
 name = "onspot-dsp"
 version = "0.1.0"
 dependencies = [
+ "once_cell",
  "regex",
  "serde",
  "serde_json",

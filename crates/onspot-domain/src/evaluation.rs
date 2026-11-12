@@ -8,8 +8,27 @@
 //! existing copy do not change.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::FollowUp;
+
+/// Which OpenAI-compatible endpoint and model to call.
+///
+/// The API key is never here: the host adds it from its `SecretStore` when the
+/// HTTP request crosses the bridge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct LlmEndpoint {
+    /// Base URL up to but excluding `/chat/completions`.
+    pub base_url: String,
+    /// Provider id (`groq`, `deepseek`, `custom`) used by the host to pick a key.
+    pub provider: String,
+    pub model: String,
+    /// Models to continue with when the preferred one is out of room.
+    #[serde(default)]
+    pub fallback_models: Vec<String>,
+}
 
 /// What the core asks an evaluation adapter to judge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +46,8 @@ pub struct EvaluationRequest {
     pub language: String,
     /// Language of instruction name, e.g. `English`.
     pub translation_target: String,
+    /// The endpoint and model chosen in Settings.
+    pub endpoint: LlmEndpoint,
 }
 
 /// One correction the model proposed.

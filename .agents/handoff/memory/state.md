@@ -2,7 +2,29 @@
 
 # State
 
-## Hexagonal migration: P3 complete in code; media smoke needs models (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+## Hexagonal migration: P4 complete in code (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
+
+- **LLM pipeline:** `llm-openai` now holds byte-identical prompt rendering, JSON repair,
+  `stripThinking`, extraction, evaluation parsing, explanation composition/markup and the
+  Japanese/Persian guidance. The prompt matrix golden covers 3 modes × 6 levels × 3 languages ×
+  2 instruction languages.
+- **Ports:** `HttpClient` and `LlmProvider`; `OpenAiEvaluator` performs the OpenAI-compatible call,
+  validates/repairs JSON and owns the token-bucket pacing over `Clock`. The host adds the API key
+  and performs HTTP; the core never sees it (ADR-010).
+- **Use cases:** `EvaluateAttempt`, `TestLlmConnection` and `EvaluatorPort` in
+  `onspot-app::evaluation`; `RunPracticeSession` uses the Rust evaluator. The bridge exposes
+  `evaluation.test_connection`; Settings' connection test branches to it.
+- **Events:** `evaluation_finished { ok }` joins the P3 catalog.
+- **Deliberate boundaries:** provider/model catalogs and DeepSeek balance stay driver-side until
+  P6/P7; pacing learns only the configured per-minute bucket here (header learning belongs to the
+  P6 ledger). Desktop uses the Tauri HTTP plugin, web uses `fetch`.
+- **Verified:** 109 prompt-matrix cases, parse/explanation/repair/extract goldens, pacing and
+  evaluator tests; cargo fmt/clippy/test workspace; `bun run check`/build; boundaries; SPDX 337;
+  `test:practice` full loop + connection test; `test:storage`; Tauri build; desktop connection test
+  via WebKitWebDriver; Android `cargo check`.
+- **Not verified:** a live provider key/reply (only stubbed) and physical Android. No commit.
+
+## Hexagonal migration: P3 complete in code## Hexagonal migration: P3 complete in code; media smoke needs models (2026-11-12, branch `refactor/hex-arch-p0`, uncommitted)
 
 - **Core loop:** `RunPracticeSession` owns the full state machine, prompt choice/generation,
   persistence, resume/open, session writes, playback intents and the event snapshot. Ports are in

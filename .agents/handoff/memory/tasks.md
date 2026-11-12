@@ -62,6 +62,23 @@
       storage path.
 - [ ] Android build of the new storage path (needs the NDK toolchain).
 
+## Hexagonal migration P4 (started 2026-11-12)
+- [x] Extend the golden harness with prompt, evaluation-parse, explanation, markup and JSON-extract
+      fixtures (captured from the current TS).
+- [x] Port the pure LLM pipeline to `onspot-adapter-llm-openai`: `json_repair`, `strip_thinking`,
+      `extract_json`, `normalize_evaluation`, `compose_explanation`/markup, evaluation prompt
+      rendering, and the Japanese/Persian guidance. All captured fixtures pass byte-for-byte.
+- [x] `onspot-dsp::words`: `same_words`, `overlapping_words`, `ends_sentence` with tests.
+- [x] `HttpClient` + `LlmProvider` ports; `OpenAiEvaluator` adapter over the host HTTP shim;
+      token-bucket pacing over `Clock` with deterministic refill/penalty tests.
+- [x] `onspot-app::evaluation` (`EvaluateAttempt`, `TestLlmConnection`, `EvaluatorPort`); bridge
+      `evaluation.test_connection`; `StopAndAnalyze` uses the Rust evaluator (the P3 host shim is
+      gone); Settings' connection test uses it.
+- [x] Redaction/error-path tests; web full loop and connection test against a stubbed provider;
+      desktop connection test through the Tauri HTTP plugin; Android `cargo check`.
+- [ ] Live Groq/DeepSeek key smoke (no key available here) and a human-quality review of a real
+      model reply.
+
 ## Hexagonal migration P3 (started 2026-11-12)
 - [x] Map the practice God store: `docs/architecture/practice-loop-map.md` (all exports, callers,
       state, companion modules, ports/use cases/events, four race cases). Posted for the phase

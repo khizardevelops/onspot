@@ -37,6 +37,8 @@ pub enum UiEvent {
     TranscriptionProgress { progress: f32, status: String },
     /// The take is being judged.
     EvaluationStarted,
+    /// The judge returned; `ok` is false when the typed error is in the snapshot.
+    EvaluationFinished { ok: bool },
     /// One take finished and its rows were written.
     AttemptPersisted { attempt_id: String },
     /// The take held no speech; nothing was sent to the recognizer.

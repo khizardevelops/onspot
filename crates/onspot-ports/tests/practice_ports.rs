@@ -296,6 +296,12 @@ fn every_practice_port_is_object_safe() {
             level: String::from("b1"),
             language: String::from("French"),
             translation_target: String::from("English"),
+            endpoint: onspot_domain::LlmEndpoint {
+                base_url: String::from("http://localhost:1234/v1"),
+                provider: String::from("custom"),
+                model: String::from("stub"),
+                fallback_models: Vec::new(),
+            },
         },
         &token,
     ))

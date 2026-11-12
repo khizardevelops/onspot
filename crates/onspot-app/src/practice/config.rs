@@ -6,6 +6,7 @@
 //! hands the core this narrow snapshot whenever it changes. It contains no
 //! secret and no provider endpoint.
 
+use onspot_domain::LlmEndpoint;
 use onspot_ports::EngineMode;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -32,6 +33,8 @@ pub struct PracticeConfig {
     pub stt_mode: EngineMode,
     pub tts_voice: String,
     pub explanation_voice: String,
+    /// The LLM endpoint chosen in Settings (no API key).
+    pub llm_endpoint: LlmEndpoint,
     /// Playback pace, `1.0` being normal.
     pub pace: f32,
     /// Whether the explanation track can be spoken with the current voices.

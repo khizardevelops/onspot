@@ -19,6 +19,8 @@ import {
 } from '#lib/languages/index.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
 import { VoiceRecorder } from '#lib/utils/recorder.js';
+import { isTauri } from '#lib/platform/runtime.js';
+import { readSecret } from './secrets.js';
 import { appSettings } from '#lib/stores/settings.js';
 import { groqApiKey } from '#lib/stores/secrets.js';
 import { llmConfigured, resolveLlmEndpoint } from '#lib/stores/llm.js';
@@ -172,6 +174,33 @@ export function createPracticeHost(client: CoreClient): PracticeHost {
 					} catch (error) {
 						throw hostError('practice.evaluation_failed', error);
 					}
+				}
+				case 'http.request': {
+					const request = payload as {
+						method: string;
+						url: string;
+						headers: Record<string, string>;
+						body: string;
+						provider?: string | null;
+					};
+					const headers = { ...request.headers };
+					if (request.provider) {
+						const key = readSecret(`llm.${request.provider}` as never);
+						if (key) headers.Authorization = `Bearer ${key}`;
+					}
+					const requestFetch = isTauri()
+						? (await import('@tauri-apps/plugin-http')).fetch
+						: fetch;
+					const response = await requestFetch(request.url, {
+						method: request.method,
+						headers,
+						body: request.body
+					});
+					return {
+						status: response.status,
+						headers: Object.fromEntries(response.headers.entries()),
+						body: await response.text()
+					};
 				}
 				case 'prompt.write': {
 					if (!get(llmConfigured)) return null;

@@ -1,5 +1,35 @@
 # Decisions
 
+## P4 LLM transport and scope (2026-11-12)
+
+- **HTTP is a host capability; the key never crosses the bridge.** `HttpRequest` carries a
+  provider id, not a key. The host adds `Authorization` and uses `fetch` on web / the Tauri HTTP
+  plugin on desktop, so local servers work where CORS would otherwise block them. ADR-010.
+- **The Rust evaluator lives behind the existing `EvaluationPort`.** `EvaluatorPort` wraps
+  `OpenAiEvaluator`, so P3's state machine did not grow a second LLM path; the bridge now supplies
+  the Rust evaluator and `evaluation.test_connection` covers Settings.
+- **Pacing is a core token bucket, not the P6 ledger.** It reproduces continuous refill and the
+  120 ms margin (`8002/8000 → 15 ms + margin`); header learning, daily windows and model quotas
+  stay with the usage ledger in P6.
+- **Provider catalogs and DeepSeek balance stay in the driver.** They are Settings/display data;
+  P7 moves catalogs and P6 owns balance/usage. The Rust client labels models with the same
+  fallback rule (id after the vendor slash) but does not duplicate the dropdown table.
+- **Prompt templates use replacement tokens.** Literal JSON braces make `format!` fragile; the
+  109-case golden matrix is the byte-parity authority.
+
+## P4 pure LLM port (2026-11-12)
+
+- **Prompt templates use replacement tokens, not `format!`.** The templates contain literal JSON
+  braces, so `{{language}}`/`{{translationTarget}}` tokens are replaced after copying the TS text;
+  the golden hash test is the authority on byte parity.
+- **`once_cell::sync::Lazy` instead of `LazyLock`.** The workspace MSRV is 1.77 and `LazyLock`
+  stabilised in 1.80; clippy enforces the MSRV.
+- **`fancy-regex` for the two patterns Rust's regex engine cannot express.** JSON repair needs
+  look-ahead; explanation tags need a backreference. All other patterns stay on `regex`.
+- **Word helpers live in `onspot-dsp`.** The explanation composer and parser share the exact
+  comparison semantics; the TS `Intl.Segmenter` branch is approximated by letter/number runs, which
+  is enough for the stored comparison rules and pinned by fixtures.
+
 ## P3 host RPC and driver-owned audio (2026-11-12)
 
 - **Host calls are request/response events.** A port in the bridge emits

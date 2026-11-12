@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 onspot-app = { path = "../../crates/onspot-app" }
 onspot-domain = { path = "../../crates/onspot-domain" }
 onspot-ports = { path = "../../crates/onspot-ports" }
+onspot-adapter-llm-openai = { path = "../../crates/adapters/llm-openai" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = "12"

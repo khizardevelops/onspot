@@ -768,6 +768,7 @@ impl RunPracticeSession {
                     level: config.level.clone(),
                     language: config.target_language_name.clone(),
                     translation_target: config.instruction_language_name.clone(),
+                    endpoint: config.llm_endpoint.clone(),
                 },
                 &token,
             )
@@ -776,11 +777,17 @@ impl RunPracticeSession {
             Ok(evaluation) => evaluation,
             Err(error) => {
                 if !token.is_cancelled() {
+                    self.ports
+                        .events
+                        .emit(&UiEvent::EvaluationFinished { ok: false });
                     self.fail_with("practice.evaluation_failed", error.message);
                 }
                 return Ok(());
             }
         };
+        self.ports
+            .events
+            .emit(&UiEvent::EvaluationFinished { ok: true });
 
         if token.is_cancelled() {
             return Ok(());

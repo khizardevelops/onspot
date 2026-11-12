@@ -1,5 +1,33 @@
 # Last Session
 
+## 2026-11-12 (latest): P4 complete in code — Rust LLM pipeline on both runtimes
+
+- **Built:** the full P4 vertical slice: goldens for the prompt matrix, parsing, explanation and
+  JSON handling; Rust prompts/parser/explanation; `HttpClient` + `LlmProvider`; `OpenAiEvaluator`
+  with token-bucket pacing; `EvaluateAttempt`/`TestLlmConnection`; bridge connection test;
+  Settings and `StopAndAnalyze` on the Rust path. The P3 TS evaluation shim is retired from the
+  bridge.
+- **Verified:** web `test:practice` exercises the full Rust evaluation loop and connection test
+  against stubbed Groq endpoints; desktop connection test reaches a local stub through the Tauri
+  HTTP plugin; 109 prompt cases, parser/explanation/repair/extract goldens, pacing and evaluator
+  tests all pass. Tauri build and Android `cargo check` pass.
+- **Not verified:** a live Groq/DeepSeek key and physical Android. Provider catalogs/DeepSeek
+  balance remain driver-side (P6/P7); pacing's header learning waits for P6's ledger. No commit.
+
+
+## 2026-11-12 (latest): P4 started — LLM prompts, parser and explanation in Rust
+
+- **Asked:** proceed to the next phase after committing P0–P3.
+- **Built:** new goldens for evaluation prompts (matrix), evaluation parsing, explanation
+  composition/markup, JSON extraction and thinking removal. Ported those pure pieces to
+  `onspot-adapter-llm-openai`, plus `same_words`/`overlapping_words`/`ends_sentence` in
+  `onspot-dsp`. All 6 golden tests and the DSP tests pass byte-identically.
+- **Notes:** the workspace MSRV is 1.77, so `once_cell` is used instead of `LazyLock`; the two
+  lookaround/backreference patterns use `fancy-regex`. Prompt templates use explicit replacement
+  tokens because JSON braces prevent `format!`.
+- **Next:** `HttpClient`/`LlmProvider`, pacing over `Clock`, `EvaluateAttempt`/`TestLlmConnection`,
+  bridge commands and the StopAndAnalyze/Settings rewire. P4 slice uncommitted; P0–P3 is `baa6f5f`.
+
 ## 2026-11-12 (latest): P3 finished — bridge host RPC, Svelte adapter, smoke gates
 
 - **Asked:** continue until P3 is 100%.

@@ -205,9 +205,19 @@ async function fullLoopCheck(tone) {
 				explanationVoice: 'en_US-amy',
 				pace: 1,
 				explanationAudioAvailable: false,
+				llmEndpoint: {
+					baseUrl: 'https://api.groq.com/openai/v1',
+					provider: 'groq',
+					model: 'openai/gpt-oss-120b',
+					fallbackModels: []
+				},
 				maxSeconds: 60
 			};
 			await client.command('practice.configure', { config });
+			const connection = await client.command('evaluation.test_connection', {
+				endpoint: config.llmEndpoint
+			});
+			if (!connection.reply) throw new Error('the connection test returned no reply');
 			await client.command('practice.set_prompt', {
 				prompt: {
 					id: 'p-1',

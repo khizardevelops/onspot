@@ -1,0 +1,238 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/adapters/llm/evaluate.ts",
+	"function": "normalizeEvaluation",
+	"cases": [
+		{
+			"name": "clean evaluation",
+			"input": {
+				"transcript": "je vais au marché",
+				"language": "French",
+				"raw": {
+					"correctedText": "Je vais au marché.",
+					"spokenLanguage": "French",
+					"explanation": {
+						"note": "Bien.",
+						"mistakes": []
+					},
+					"followUp": {
+						"question": "Et ensuite ?",
+						"translation": "And then?"
+					},
+					"corrections": [],
+					"vocabulary": [],
+					"connectors": []
+				}
+			},
+			"expected": {
+				"correctedText": "Je vais au marché.",
+				"explanation": "Bien.",
+				"followUp": {
+					"question": "Et ensuite ?",
+					"translation": "And then?"
+				},
+				"corrections": [],
+				"vocabulary": [],
+				"connectors": []
+			}
+		},
+		{
+			"name": "unknown category and severity are dropped",
+			"input": {
+				"transcript": "je vais",
+				"language": "French",
+				"raw": {
+					"correctedText": "Je vais.",
+					"spokenLanguage": "French",
+					"explanation": null,
+					"followUp": null,
+					"corrections": [
+						{
+							"category": "unknown",
+							"severity": "error",
+							"original": "je",
+							"replacement": "Je"
+						},
+						{
+							"category": "grammar",
+							"severity": "wrong",
+							"original": "vais",
+							"replacement": "vais"
+						},
+						{
+							"category": "grammar",
+							"severity": "error",
+							"original": "je vais",
+							"replacement": "je vais."
+						}
+					],
+					"vocabulary": [
+						{
+							"original": "vais",
+							"suggestion": "me rends"
+						}
+					],
+					"connectors": [
+						{
+							"connector": "ensuite"
+						}
+					]
+				}
+			},
+			"expected": {
+				"correctedText": "Je vais.",
+				"explanation": "",
+				"followUp": null,
+				"corrections": [],
+				"vocabulary": [
+					{
+						"original": "vais",
+						"suggestion": "me rends",
+						"why": ""
+					}
+				],
+				"connectors": [
+					{
+						"connector": "ensuite",
+						"why": ""
+					}
+				]
+			}
+		},
+		{
+			"name": "wrong language becomes one correction",
+			"input": {
+				"transcript": "I went to the market",
+				"language": "French",
+				"raw": {
+					"correctedText": "Je suis allé au marché.",
+					"spokenLanguage": "English",
+					"explanation": {
+						"note": "Answer in French.",
+						"mistakes": []
+					},
+					"followUp": null,
+					"corrections": [],
+					"vocabulary": [],
+					"connectors": []
+				}
+			},
+			"expected": {
+				"correctedText": "Je suis allé au marché.",
+				"explanation": "Answer in French.",
+				"followUp": null,
+				"corrections": [
+					{
+						"category": "grammar",
+						"severity": "error",
+						"label": "Answered in English instead of French",
+						"original": "I went to the market",
+						"replacement": "Je suis allé au marché.",
+						"explanation": "Answer in French.",
+						"formalAlternatives": []
+					}
+				],
+				"vocabulary": [],
+				"connectors": []
+			}
+		},
+		{
+			"name": "many vocabulary suggestions all survive",
+			"input": {
+				"transcript": "bonjour",
+				"language": "French",
+				"raw": {
+					"correctedText": "Bonjour.",
+					"spokenLanguage": "French",
+					"explanation": {
+						"note": "Bien.",
+						"mistakes": []
+					},
+					"followUp": null,
+					"corrections": [],
+					"vocabulary": [
+						{
+							"original": "a",
+							"suggestion": "b",
+							"why": "c"
+						},
+						{
+							"original": "d",
+							"suggestion": "e",
+							"why": "f"
+						},
+						{
+							"original": "g",
+							"suggestion": "h",
+							"why": "i"
+						},
+						{
+							"original": "j",
+							"suggestion": "k",
+							"why": "l"
+						}
+					],
+					"connectors": []
+				}
+			},
+			"expected": {
+				"correctedText": "Bonjour.",
+				"explanation": "Bien.",
+				"followUp": null,
+				"corrections": [],
+				"vocabulary": [
+					{
+						"original": "a",
+						"suggestion": "b",
+						"why": "c"
+					},
+					{
+						"original": "d",
+						"suggestion": "e",
+						"why": "f"
+					},
+					{
+						"original": "g",
+						"suggestion": "h",
+						"why": "i"
+					},
+					{
+						"original": "j",
+						"suggestion": "k",
+						"why": "l"
+					}
+				],
+				"connectors": []
+			}
+		},
+		{
+			"name": "missing follow-up and mismatched replacement",
+			"input": {
+				"transcript": "bonjour",
+				"language": "French",
+				"raw": {
+					"correctedText": "Bonjour.",
+					"spokenLanguage": "French",
+					"explanation": "Bonjour.",
+					"followUp": {
+						"question": "Ça va ?"
+					},
+					"corrections": [],
+					"vocabulary": [],
+					"connectors": []
+				}
+			},
+			"expected": {
+				"correctedText": "Bonjour.",
+				"explanation": "Bonjour.",
+				"followUp": {
+					"question": "Ça va ?",
+					"translation": ""
+				},
+				"corrections": [],
+				"vocabulary": [],
+				"connectors": []
+			}
+		}
+	]
+}

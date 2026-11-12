@@ -133,6 +133,26 @@ export type SettingValueResponse = { value: string | null, };
  */
 export type EngineMode = "local" | "cloud";
 
+/**
+ * Which OpenAI-compatible endpoint and model to call.
+ *
+ * The API key is never here: the host adds it from its `SecretStore` when the
+ * HTTP request crosses the bridge.
+ */
+export type LlmEndpoint = { 
+/**
+ * Base URL up to but excluding `/chat/completions`.
+ */
+baseUrl: string, 
+/**
+ * Provider id (`groq`, `deepseek`, `custom`) used by the host to pick a key.
+ */
+provider: string, model: string, 
+/**
+ * Models to continue with when the preferred one is out of room.
+ */
+fallbackModels: Array<string>, };
+
 
 /**
  * The language, level and voice choices for the open session.
@@ -166,6 +186,10 @@ mode: string, ttsMode: EngineMode,
  * Speech-to-text path for the take.
  */
 sttMode: EngineMode, ttsVoice: string, explanationVoice: string, 
+/**
+ * The LLM endpoint chosen in Settings (no API key).
+ */
+llmEndpoint: LlmEndpoint, 
 /**
  * Playback pace, `1.0` being normal.
  */
@@ -330,12 +354,17 @@ export type OpenResponse = { opened: boolean, snapshot: PracticeSnapshot, };
  */
 export type AcceptedResponse = { accepted: boolean, };
 
+/**
+ * The provider's reply to a connection test.
+ */
+export type TestConnectionResponse = { reply: string, };
+
 
 /**
  * Something a driver shows or records. Serialized with a `event` tag, e.g.
  * `{ "event": "pong", "seq": 2 }`.
  */
-export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "host_request", id: number, method: string, 
+export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "host_request", id: number, method: string, 
 /**
  * JSON-encoded arguments.
  */

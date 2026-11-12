@@ -11,6 +11,8 @@
 	} from '#lib/stores/secrets.js';
 	import { currentLlmEndpoint, resolveLlmEndpoint } from '#lib/stores/llm.js';
 	import { getLanguage } from '#lib/languages/index.js';
+	import { useCore } from '#lib/core-client/backend.js';
+	import { testConnectionCore } from '#lib/core-client/llm.js';
 	import {
 		AUTOMATIC_MODEL,
 		LLM_PROVIDERS,
@@ -205,7 +207,7 @@
 				!local && ($appSettings.llmProvider === 'groq' || $appSettings.llmProvider === 'deepseek');
 			if (needsKey && !endpoint.apiKey) throw new Error('Add an API key first.');
 
-			const reply = await testConnection(endpoint);
+			const reply = useCore('evaluation') ? await testConnectionCore(endpoint) : await testConnection(endpoint);
 			testOk = true;
 			testMessage = reply
 				? `Connected — the model replied "${reply}".`

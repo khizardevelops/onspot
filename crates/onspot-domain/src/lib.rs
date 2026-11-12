@@ -17,7 +17,7 @@ pub mod records;
 
 pub use entities::{AttemptPreview, Session, SessionSetup, Setting};
 pub use evaluation::{
-    ConnectorSuggestion, EvaluationCorrection, EvaluationRequest, EvaluationResult,
+    ConnectorSuggestion, EvaluationCorrection, EvaluationRequest, EvaluationResult, LlmEndpoint,
     VocabularySuggestion,
 };
 pub use records::{

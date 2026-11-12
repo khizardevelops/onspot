@@ -13,7 +13,7 @@ stable code (see `BRIDGE.md`).
 
 | Port | Today (verified) | Size | First Rust adapter | Web host adapter | Notes |
 |---|---|---|---|---|---|
-| `LlmProvider` | `adapters/llm/client.ts` + `providers.ts` | 379 + 167 | `llm-openai` (P4) | host HTTP shim while the server needs CORS | Groq, DeepSeek, OpenAI-compatible, local servers. JSON repair and pacing are adapter behaviour, not core. P3 declares `EvaluationPort` (shim) and `PromptSource` (host writer) around it; ADR-009. |
+| `LlmProvider` / `HttpClient` | `adapters/llm/client.ts` + `providers.ts` | 379 + 167 | `llm-openai` (P4 **implemented**) | host `fetch` / Tauri HTTP plugin | Groq, DeepSeek, OpenAI-compatible, local servers. The core builds prompts, repairs/parses JSON and paces a token bucket; the host adds the API key and performs HTTP (ADR-010). P3's evaluation host shim is retired. Provider catalogs and DeepSeek balance remain driver-side (P6/P7). |
 | `SttEngine` | `speech/stt/service.ts`, `localEngine.ts`, `transformers/`, `cloud/`, native plugin | ~2,000 | `native-stt` (P3, desktop/Android) | Transformers.js worker, permanent | **P3 declared** (`practice.rs`). Groq call is a `SttEngine` adapter too (P4 shares the HTTP client). |
 | `TtsEngine` | `speech/tts/service.ts`, `local/`, `piper/`, `supertonic/`, `cloud/` | ~4,500 | — (ports first; native voices are a later decision) | Piper/Supertonic worker, permanent; cloud TTS uses `HttpClient` | **P3 declared.** Clip loudness leveling stays in the worker/host: it is asset processing, not policy. |
 | `AudioCapture` | `utils/recorder.ts` | 361 | — | `getUserMedia` shim, permanent | **P3 declared.** Web Audio is the only implementation on every runtime; Tauri uses the webview. |

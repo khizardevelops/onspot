@@ -7,6 +7,14 @@
 //! must stay byte-identical (invariant I5); the JSON repair behaviour is
 //! pinned by `tests/golden/jsonRepair.json`.
 
+pub mod client;
+pub mod explanation;
+pub mod json_repair;
+pub mod language_guidance;
+pub mod pacing;
+pub mod parse;
+pub mod prompt;
+
 #[cfg(test)]
 mod tests {
     #[test]

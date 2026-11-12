@@ -12,11 +12,13 @@
 //! P3 adds cancellation, the stable error shape and the practice audio ports.
 
 mod error;
+pub mod llm;
 pub mod practice;
 pub mod sql;
 mod token;
 
 pub use error::CoreError;
+pub use llm::{HttpClient, HttpRequest, HttpResponse, LlmProvider};
 pub use practice::{
     AudioCapture, AudioClip, AudioFrame, AudioLevelSink, AudioPlayback, BlobHandle, CaptureOptions,
     Clock, EngineMode, EvaluationPort, GeneratedPrompt, IdSource, ModelProgress, PlaybackRequest,

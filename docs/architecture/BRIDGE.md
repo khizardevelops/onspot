@@ -66,6 +66,7 @@ until its phase declares the payload in the bridge and generates the type.
 | `practice.speak_track` / `practice.play_segment` / `practice.speak_text` / `practice.play_recording` | P3 **implemented** | Driver playback intents. |
 | `practice.set_attempt_voice` | P3 **implemented** | Persist a take's read-back voice. |
 | `core.host_reply` | P3 **implemented** | Internal reply to one `host_request`; drivers only. |
+| `evaluation.test_connection` | P4 **implemented** | `{ endpoint }` → `{ reply }`; the Settings connection test on the Rust path. |
 | `history.list` | P2 **implemented** | Sessions with their take previews, newest first. |
 | `history.search` | P2 **implemented** | `{ query, regex, caseSensitive }` → the same shape; invalid patterns return `history.invalid_regex`. Empty query returns every session. |
 | `history.rename` | P2 **implemented** | `{ sessionId, title }` → `{ changed }`; emits `history_changed` when a row changed. |
@@ -111,10 +112,11 @@ use case can emit without knowing a driver exists.
 | `audio_level` | P3 **implemented** | `{ level }` — live microphone level. |
 | `transcription_progress` | P3 **implemented** | `{ progress, status }`. |
 | `evaluation_started` | P3 **implemented** | `{}`. |
+| `evaluation_finished` | P4 **implemented** | `{ ok }` — the judge returned; errors are in the snapshot. |
 | `attempt_persisted` | P3 **implemented** | `{ attemptId }`. |
 | `take_silent` | P3 **implemented** | `{}` — the snapshot carries the stable error code. |
 | `speak_track` / `play_segment` / `speak_text` / `play_recording` | P3 **implemented** | The driver performs playback; the core decides what and in which order. |
-| `host_request` | P3 **implemented** | `{ id, method, payload }` — an internal request to the driver, answered with `core.host_reply`. |
+| `host_request` | P3 **implemented** | `{ id, method, payload }` — an internal request to the driver, answered with `core.host_reply`. P4 adds the `http.request` method for LLM transport. |
 | `download_progress` | P7 | `{ target, loadedBytes, totalBytes, label }`. |
 | `usage_warning` | P6 | `{ provider, window, remaining }`. |
 | `sync_changed` | P7 | `{ state, remoteModifiedAt }`. |

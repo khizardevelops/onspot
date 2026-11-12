@@ -1,0 +1,77 @@
+{
+	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
+	"source": "src/lib/adapters/llm/explanation.ts",
+	"function": "composeExplanation",
+	"cases": [
+		{
+			"name": "all correct note",
+			"input": {
+				"note": "Nice, that was all correct.",
+				"mistakes": []
+			},
+			"expected": "Nice, that was all correct."
+		},
+		{
+			"name": "model line is kept when it names the fix",
+			"input": {
+				"note": "You described that trip vividly.",
+				"mistakes": [
+					{
+						"said": "dans Paris",
+						"say": "à Paris",
+						"line": "You said <wrong>dans Paris</wrong>, but with a city we say <right>à Paris</right>."
+					}
+				]
+			},
+			"expected": "You described that trip vividly. You said <wrong>dans Paris</wrong>, but with a city we say <right>à Paris</right>."
+		},
+		{
+			"name": "missing fix names falls back",
+			"input": {
+				"note": "",
+				"mistakes": [
+					{
+						"said": "j’ai allé",
+						"say": "je suis allé",
+						"line": "That one is wrong."
+					}
+				]
+			},
+			"expected": "You said <wrong>j’ai allé</wrong>; say <right>je suis allé</right> instead."
+		},
+		{
+			"name": "unchanged word is dropped and max mistakes apply",
+			"input": {
+				"note": "",
+				"mistakes": [
+					{
+						"said": "bonjour",
+						"say": "Bonjour",
+						"line": ""
+					},
+					{
+						"said": "je",
+						"say": "",
+						"line": "Leave it out."
+					},
+					{
+						"said": "vais",
+						"say": "irai",
+						"line": ""
+					},
+					{
+						"said": "au",
+						"say": "à",
+						"line": ""
+					},
+					{
+						"said": "marché",
+						"say": "marché",
+						"line": ""
+					}
+				]
+			},
+			"expected": "Leave it out. You said <wrong>vais</wrong>; say <right>irai</right> instead. You said <wrong>au</wrong>; say <right>à</right> instead."
+		}
+	]
+}

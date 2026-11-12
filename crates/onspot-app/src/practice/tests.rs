@@ -287,6 +287,12 @@ fn config() -> PracticeConfig {
         stt_mode: EngineMode::Local,
         tts_voice: String::from("fr_FR-siwis"),
         explanation_voice: String::from("en_US-amy"),
+        llm_endpoint: onspot_domain::LlmEndpoint {
+            base_url: String::from("http://127.0.0.1:4330/v1"),
+            provider: String::from("custom"),
+            model: String::from("stub"),
+            fallback_models: Vec::new(),
+        },
         pace: 1.0,
         explanation_audio_available: true,
         max_seconds: 60,

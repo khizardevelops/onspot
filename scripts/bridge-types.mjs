@@ -41,6 +41,7 @@ const TYPE_ORDER = [
 	'SettingValueResponse',
 	// P3 practice view and commands.
 	'EngineMode',
+	'LlmEndpoint',
 	'PracticeConfig',
 	'PracticePhase',
 	'TranslationBreakdownItem',
@@ -60,6 +61,7 @@ const TYPE_ORDER = [
 	'ResumeResponse',
 	'OpenResponse',
 	'AcceptedResponse',
+	'TestConnectionResponse',
 	'UiEvent'
 ];
 
