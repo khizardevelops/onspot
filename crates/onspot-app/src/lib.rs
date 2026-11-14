@@ -20,6 +20,7 @@ pub mod onboarding;
 pub mod portability;
 pub mod practice;
 pub mod prompts;
+pub mod providers;
 pub mod reminders;
 pub mod settings;
 pub mod sync;
@@ -60,7 +61,7 @@ pub use prompts::{
 pub use reminders::{
     is_reminder_due, reminder_state, ReminderFrequency, ReminderInput, ReminderState,
 };
-pub use settings::SettingsService;
+pub use settings::{AppSettings, LoadedSettings, PatchedSettings, SettingsService, VoiceTuning};
 pub use sync::{run_sync, SyncOutcome, SyncRequest};
 pub use sync_policy::{
     compare_sync, decide_sync, decide_with_choice, RemoteFile, SyncChoice, SyncComparison,

@@ -22,6 +22,8 @@
     "bridge:wasm": "scripts/bridge-wasm.sh",
     "catalog:export": "bun scripts/export-language-catalog.mjs",
     "catalog:check": "bun scripts/export-language-catalog.mjs --check",
+    "providers:export": "bun scripts/export-provider-catalog.mjs",
+    "providers:check": "bun scripts/export-provider-catalog.mjs --check",
     "test:storage": "bun scripts/storage-browser-check.mjs",
     "test:sync": "bun scripts/sync-browser-check.mjs",
     "test:sync:desktop": "bun scripts/sync-desktop-check.mjs",

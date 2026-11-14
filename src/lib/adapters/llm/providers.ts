@@ -4,6 +4,13 @@ import type { LanguageResourceLevel } from '#lib/languages/index.js';
 import type { LlmModelOption, LlmProviderConfig, LlmProviderId } from './types';
 
 /**
+ * The view catalog for the Settings screen and the synchronous client helpers.
+ * The core's authoritative copy and Automatic-model policy live in
+ * `crates/onspot-app/src/providers.rs`; `bun run providers:check` keeps the
+ * checked-in JSON in step with this file.
+ */
+
+/**
  * Known model ids. This is the enum the settings dropdown is built from; the
  * `(string & {})` arm keeps autocomplete while allowing a model fetched live
  * from the provider or typed for the custom provider.
@@ -107,7 +114,7 @@ interface AutomaticModel {
  * Which model handles which level is a judgement from model size, not yet a
  * measurement: revisit it with an evaluation per language when one is approved.
  */
-const AUTOMATIC_MODELS: Record<LlmProviderId, readonly AutomaticModel[]> = {
+export const AUTOMATIC_MODELS: Record<LlmProviderId, readonly AutomaticModel[]> = {
 	groq: [
 		{ id: 'openai/gpt-oss-120b', leastResourced: 'low' },
 		{ id: 'qwen/qwen3.8-27b', leastResourced: 'medium' },

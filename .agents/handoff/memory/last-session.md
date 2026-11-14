@@ -1,5 +1,25 @@
 # Last Session
 
+## 2026-11-14: P0-P7 audit before P8
+
+- **Verdict:** P0-P7 are behaviourally green, but P7 is not fully closed against its own deferred
+  promises. Do not start P8 cutover yet.
+- **Found:** `c11ca8c` shipped a stale coupling matrix (`--check` failed); regenerated it, so the
+  architecture job is green again. ADR-008's typed `AppSettings` defaults/merge/normalise still
+  live in `stores/settings.ts` (520 lines) and ADR-010's provider/model catalog + automatic-model
+  policy still live in `adapters/llm/providers.ts` (167 lines). P8 deletes both. P5's phrase task
+  was stale; its real gap is a legacy-written gloss/translation fixture assertion. Gloss job
+  coalescing is still driver-side in `stores/practice.ts` (unrecorded deviation, behaviour fine).
+- **Docs fixed:** PORTS.md statuses for HttpClient/OAuthBroker/BlobStore/NotificationScheduler/
+  Settings and the provider-catalog note; BRIDGE.md command names (`usage.snapshot`,
+  `insights.build`, `sync.connect/account/disconnect/now`), `usage_warning` implemented, removed
+  the nonexistent `sync_changed` row and duplicate `error` row.
+- **Verified now:** `test:storage`, `test:sync`, `check` (0 errors), boundaries (0 warnings), SPDX
+  (383), catalog, typegen (no diff), coupling `--check`. Earlier session already ran workspace
+  tests/clippy/fmt and all P7 desktop/browser smokes.
+- **Blocked:** Android (SDK/NDK present, no rustup Android targets), live keys, real downloads,
+  Drive, physical devices.
+
 ## 2026-11-14: P7 desktop sync smoke unblocked; driver host centralized
 
 - **Real bug found and fixed:** `getCoreClient` did not install the driver host. Only
@@ -43,6 +63,7 @@
   already counted. The driver passes them from `voiceCacheState`, so switching to a shared-model
   Supertonic style no longer re-prices a model that is already on disk. Rust unit test added;
   regenerated bindings/wasm and rebuilt the desktop binary.
+- **Committed:** P7 is `c11ca8c` (`P7: port export, sync and language-data features to the core`).
 - **Verified:** `bun run test:sync`, `bun run test:sync:desktop`, `bun run test:portability`,
   `bun run test:portability:desktop`, `bun run test:practice`, `bun run test:storage`,
   `cargo test --workspace`, clippy `-D warnings`, `cargo fmt --check`, svelte-check 0 errors,
@@ -105,3 +126,18 @@
   and export/restore manual smokes.
 - **Disk:** removed 6.5 GB incremental build after `/mnt/data` hit 100%.
 
+
+
+## 2026-11-14: P7 closeout — typed settings and provider catalog
+
+- **Built:** `onspot-app::settings` (`AppSettings`, `VoiceTuning`, defaults/merge/normalise,
+  Automatic-model migration, `load_document`/`patch_document`) and `onspot-app::providers`
+  (catalog + policy over generated `assets/providers.json`); bridge `settings.load`/`settings.patch`;
+  TS store delegates under `useCore('settings')`; generated ts-rs types; provider export/check
+  scripts + CI step; compile-time store/core document coverage guard.
+- **Verified:** `cargo test --workspace` (108 app tests), clippy `-D warnings`, `cargo fmt --check`,
+  svelte-check 0 errors/9 warnings, `test:storage` (now includes load/patch round trip),
+  `test:practice`, `test:sync`, `test:portability`, boundaries, SPDX (385), catalog/providers checks,
+  coupling `--check`, wasm rebuild.
+- **Not done:** commit; P5 gloss fixture assertion; Android/live-key/Drive/device smokes. P8 can
+  start once the user confirms the closeout.

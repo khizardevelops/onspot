@@ -129,6 +129,31 @@ export type SettingsResponse = { settings: Array<SettingView>, };
 export type SettingValueResponse = { value: string | null, };
 
 /**
+ * Per-voice learner adjustments, in dB.
+ */
+export type VoiceTuning = { volumeDb: number, bassDb: number, bodyDb: number, presenceDb: number, trebleDb: number, };
+
+
+/**
+ * Non-secret preferences, persisted in the database so they sync with the
+ * learner's data.
+ */
+export type AppSettings = { level: string, mode: string, sttMode: string, ttsMode: string, ttsVoice: string, targetVoiceByLanguage: { [key in string]: string }, targetSpeechPace: number, correctionMode: string, localLlmUrl: string, localLlmModel: string, ttsCloudProvider: string, elevenLabsModel: string, elevenLabsVoiceId: string, ttsApiBaseUrl: string, ttsApiModel: string, ttsApiVoice: string, llmProvider: string, llmModel: string, customBaseUrl: string, customModel: string, explanationVoice: string, explanationVoiceByLanguage: { [key in string]: string }, targetLanguage: string, instructionLanguage: string, syncProvider: string, webdavUrl: string, webdavPath: string, voiceTunings: { [key in string]: VoiceTuning }, practiceReminders: boolean, reminderFrequency: string, showWordPos: boolean, promptContributions: boolean, };
+
+
+/**
+ * `settings.load` response: the normalised document and the rows it was
+ * built from (after the Automatic-model migration writes).
+ */
+export type SettingsLoadResponse = { settings: AppSettings, rows: Array<SettingView>, };
+
+
+/**
+ * `settings.patch` response.
+ */
+export type SettingsPatchResponse = { settings: AppSettings, changed: boolean, };
+
+/**
  * Whether a speech engine runs on the device or through a BYOK endpoint.
  */
 export type EngineMode = "local" | "cloud";

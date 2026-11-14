@@ -1,6 +1,6 @@
 # ADR-008: Typed settings defaults and merge stay in TypeScript until P7
 
-- Status: Accepted
+- Status: Accepted; implemented in the P7 closeout (2026-11-14)
 - Date: 2026-11-12
 - Phase: P2 (storage, settings, history)
 

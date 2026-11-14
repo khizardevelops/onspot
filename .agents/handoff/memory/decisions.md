@@ -1895,3 +1895,15 @@ only when the user answers the prompt).
 provider and voice catalogs that move then. P2 owns the persisted rows and the
 `settings.*` commands. This reconciles the phase prompt with the earlier
 deferral; see `docs/architecture/adr/008-p2-typed-settings-deferred.md`.
+
+
+## P7 closeout: core owns the settings document and provider catalog (2026-11-14)
+
+`AppSettings` defaults/merge/normalisation and the provider/model catalog moved to the core during
+the P7 closeout, closing both P8 cutover blockers. The TypeScript registries stay the human-edited
+source for catalogs: `scripts/export-provider-catalog.mjs` writes `assets/providers.json`, and
+`bun run providers:check` (with `catalog:check`) fails CI when they drift. Settings writes use a
+JSON-field patch: `settings.patch` applies changes to the normalised document, writes only rows that
+differ, returns the normalised document, and the driver adopts that document as its `written` map
+so defaults and stale values are never written back. The Svelte store remains the optimistic view;
+it no longer owns the rules.

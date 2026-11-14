@@ -5,6 +5,7 @@ import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import type { RunMode } from '#lib/adapters/db/index.js';
 import { useCore } from '#lib/core-client/backend.js';
 import { getCoreClient } from '#lib/core-client/client.js';
+import type { AppSettings as CoreAppSettings } from '#lib/core-client/types.gen.js';
 import type { LlmModelId, LlmProviderId } from '#lib/adapters/llm/index.js';
 import { AUTOMATIC_MODEL, getProvider, isChatModel } from '#lib/adapters/llm/index.js';
 import {
@@ -117,6 +118,15 @@ export interface AppSettings {
 	 */
 	promptContributions: boolean;
 }
+
+/**
+ * Compile-time guard: every core document field must also exist in the store's
+ * narrower view (whose choices are unions). Regenerate `types.gen.ts` after a
+ * Rust field change and this fails until the store is updated.
+ */
+type SettingsDocumentCoverage = AppSettings extends CoreAppSettings ? true : never;
+const settingsDocumentCoverage: SettingsDocumentCoverage = true;
+void settingsDocumentCoverage;
 
 /**
  * The speaking paces a learner can choose for the target-language voice, as
@@ -258,6 +268,36 @@ async function writeSetting(key: string, value: string): Promise<void> {
 }
 
 /**
+ * Adopts a core-normalised document: every field the core returned is now the
+ * value on disk, so the driver never writes defaults or stale values back.
+ */
+function adoptCoreSettings(
+	settings: AppSettings,
+	inFlight?: AppSettings,
+	latest?: AppSettings | null
+): void {
+	written.clear();
+	for (const [field, value] of Object.entries(settings)) {
+		written.set(field, JSON.stringify(value));
+	}
+	let adopted = settings;
+	if (inFlight && latest) {
+		// A field edited while the patch was in flight is newer than the reply;
+		// keep it in the store and leave `written` at the reply's value so the
+		// queued snapshot patches it next.
+		adopted = { ...settings };
+		for (const field of Object.keys(latest) as (keyof AppSettings)[]) {
+			if (latest[field] !== inFlight[field]) {
+				(adopted as unknown as Record<string, unknown>)[field] = latest[field];
+			}
+		}
+	}
+	applying = true;
+	store.set(adopted);
+	applying = false;
+}
+
+/**
  * Writes are serialized and coalesced: typing in a field produces many store
  * updates, and overlapping full-snapshot writes could land out of order and
  * leave an older value in the database.
@@ -271,9 +311,29 @@ async function persist(value: AppSettings): Promise<void> {
 			const next = queued;
 			queued = null;
 			try {
+				const patch: Record<string, string> = {};
 				for (const [field, fieldValue] of Object.entries(next)) {
 					const json = JSON.stringify(fieldValue);
 					if (written.get(field) === json) continue;
+					patch[field] = json;
+				}
+				if (Object.keys(patch).length === 0) continue;
+
+				if (useCore('settings') && !coreStorageBroken) {
+					try {
+						const client = await getCoreClient();
+						const result = await client.command<{ settings: AppSettings }>('settings.patch', {
+							patch
+						});
+						adoptCoreSettings(result.settings, next, queued);
+						continue;
+					} catch (error) {
+						coreStorageBroken = true;
+						console.error('[settings] core write failed; using the legacy adapter', error);
+					}
+				}
+
+				for (const [field, json] of Object.entries(patch)) {
 					await writeSetting(`${FIELD_PREFIX}${field}`, json);
 					written.set(field, json);
 				}
@@ -294,9 +354,22 @@ async function persist(value: AppSettings): Promise<void> {
  */
 async function persistChosenWhileLoading(value: AppSettings, fields: (keyof AppSettings)[]): Promise<void> {
 	try {
+		const patch: Record<string, string> = {};
 		for (const field of fields) {
 			const json = JSON.stringify(value[field]);
 			if (written.get(field) === json) continue;
+			patch[field] = json;
+		}
+		if (Object.keys(patch).length === 0) return;
+
+		if (useCore('settings') && !coreStorageBroken) {
+			const client = await getCoreClient();
+			const result = await client.command<{ settings: AppSettings }>('settings.patch', { patch });
+			adoptCoreSettings(result.settings);
+			return;
+		}
+
+		for (const [field, json] of Object.entries(patch)) {
 			await writeSetting(`${FIELD_PREFIX}${field}`, json);
 			written.set(field, json);
 		}
@@ -312,6 +385,35 @@ export async function initSettings(): Promise<void> {
 	// defaults for fields the restored file lacks cannot write a change back
 	// into the database (and bump the sync revision) during rehydration.
 	hydrated = false;
+
+	if (useCore('settings') && !coreStorageBroken) {
+		try {
+			const client = await getCoreClient();
+			const result = await client.command<{ settings: AppSettings }>('settings.load');
+			const loaded = result.settings as unknown as AppSettings;
+			// Adopt the stored document first, so its fields stay in `written` and
+			// are not patched back. A choice made while loading is then a real
+			// difference and the subscriber's `persist` writes it.
+			const chosenWhileLoading = new Map(pending);
+			pending.clear();
+			adoptCoreSettings(loaded);
+			hydrated = true;
+			settingsReady.set(true);
+			if (chosenWhileLoading.size > 0) {
+				store.update((value) => {
+					const merged = { ...value };
+					for (const [field, fieldValue] of chosenWhileLoading) {
+						(merged as unknown as Record<string, unknown>)[field] = fieldValue;
+					}
+					return merged;
+				});
+			}
+			return;
+		} catch (error) {
+			coreStorageBroken = true;
+			console.error('[settings] core load failed; using the legacy adapter', error);
+		}
+	}
 
 	const rows = await readSettingRows();
 	const loaded: AppSettings = { ...DEFAULT_SETTINGS };

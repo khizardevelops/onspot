@@ -39,6 +39,10 @@ const TYPE_ORDER = [
 	'SettingView',
 	'SettingsResponse',
 	'SettingValueResponse',
+	'VoiceTuning',
+	'AppSettings',
+	'SettingsLoadResponse',
+	'SettingsPatchResponse',
 	// P3 practice view and commands.
 	'EngineMode',
 	'LlmEndpoint',

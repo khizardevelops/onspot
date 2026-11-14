@@ -74,8 +74,10 @@ until its phase declares the payload in the bridge and generates the type.
 | `settings.list` | P2 **implemented** | Every key/value row; a restored file's `onspot.key.*` rows are filtered out. |
 | `settings.get` | P2 **implemented** | `{ key }` → `{ value }`; secret-prefixed keys return `null`. |
 | `settings.set` | P2 **implemented** | `{ key, value }` → `{ changed }`; emits `settings_changed`. |
-| `usage.summary` | P6 | Ledger totals for the monitor. |
-| `insights.summary` | P5 | Aggregated corrections and patterns. |
+| `settings.load` | P7 **implemented** | `{}` → `{ settings, rows }`; the typed `AppSettings`, normalised, plus the rows after the Automatic-model migration writes. |
+| `settings.patch` | P7 **implemented** | `{ patch: Record<string, string> }` (JSON-encoded fields) → `{ settings, changed }`; writes only changed fields and returns the normalised document. |
+| `usage.snapshot` | P6 **implemented** | Ledger totals and warnings for the monitor. |
+| `insights.build` | P5 **implemented** | Aggregated corrections and patterns. |
 | `export.session_markdown` | P7 **implemented** | Assemble a session transcript document. |
 | `export.database` | P7 **implemented** | `{}` → `{ saved, fileName }`; a whole `.sqlite` image through `FileSystemSink` (`fs.save`). |
 | `restore.pick` | P7 **implemented** | `{}` → `{ fileName }`; opens the picker (`fs.pick`), checks the format and stages the backup. |
@@ -83,7 +85,7 @@ until its phase declares the payload in the bridge and generates the type.
 | `restore.cancel` | P7 **implemented** | `{}` → `{ cancelled }`; discards a staged backup. |
 | `sync.decide` | P7 **implemented** | `{ comparison, choice? }` → `{ decision }`; the conflict policy. |
 | `reminders.state` / `onboarding.decide` / `prompts.catalogue` / `language.plan` / `language.catalog` | P7 **implemented** | Pure state and catalog lookups used by the driver stores. |
-| `sync.status` / `sync.run` / `sync.resolve_conflict` | P7 | Drive sync and the conflict decision. |
+| `sync.connect` / `sync.account` / `sync.disconnect` / `sync.now` | P7 **implemented** | Drive/WebDAV connection state, snapshot sync, and the conflict choice. |
 | `language.plan` | P7 **implemented** | `{ input }` → required/installed parts, pending bytes and readiness (byte counts are `u32` so wasm does not hand the driver a `bigint`). |
 | `language.catalog` | P7 **implemented** | The checked-in registry as JSON. |
 | `language.download` | P7 **implemented** | `{ input }` → final `{ status, progress, pending, ready, label }`; runs the missing STT, voice and explanation-voice downloads in order. |
@@ -128,9 +130,7 @@ use case can emit without knowing a driver exists.
 | `speak_track` / `play_segment` / `speak_text` / `play_recording` | P3 **implemented** | The driver performs playback; the core decides what and in which order. |
 | `host_request` | P3 **implemented** | `{ id, method, payload }` — an internal request to the driver, answered with `core.host_reply`. P4 adds the `http.request` method for LLM transport. |
 | `download_progress` | P7 **implemented** | `{ target, loaded_bytes, total_bytes, label, progress }`; `progress` is the combined 0–100 figure, `target` names the current part (`stt`, `voice`, `explanation_voice`, `ready`). |
-| `usage_warning` | P6 | `{ provider, window, remaining }`. |
-| `sync_changed` | P7 | `{ state, remoteModifiedAt }`. |
-| `error` | P1 **implemented** | `{ code, message }` — recoverable; the driver maps the code to learner copy. |
+| `usage_warning` | P6 **implemented** | `{ provider, window, remaining }`. |
 
 Events are additive. A driver that does not know an event must be able to
 ignore it; the runtime decodes by `event` and logs unknown names.

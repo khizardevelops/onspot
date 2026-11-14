@@ -5,7 +5,9 @@
 //! Each command forwards to a service in `onspot-app` and marshals its result.
 //! Mutations emit the change event the driver subscribes to.
 
-use onspot_app::{HistoryService, SettingsService};
+use std::collections::BTreeMap;
+
+use onspot_app::{AppSettings, HistoryService, SettingsService};
 use onspot_domain::{AttemptPreview, Session, SessionSetup, Setting};
 use onspot_ports::{HistoryStore, SettingsStore};
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,8 @@ pub const HISTORY_DELETE: &str = "history.delete";
 pub const SETTINGS_LIST: &str = "settings.list";
 pub const SETTINGS_GET: &str = "settings.get";
 pub const SETTINGS_SET: &str = "settings.set";
+pub const SETTINGS_LOAD: &str = "settings.load";
+pub const SETTINGS_PATCH: &str = "settings.patch";
 
 /// A session as the history screen receives it.
 #[derive(Debug, Clone, Serialize, TS)]
@@ -157,6 +161,32 @@ pub struct SettingSetRequest {
     pub value: String,
 }
 
+/// `settings.load` response: the normalised document and the rows it was
+/// built from (after the Automatic-model migration writes).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsLoadResponse {
+    pub settings: AppSettings,
+    pub rows: Vec<SettingView>,
+}
+
+/// `settings.patch` arguments: field name to JSON-encoded value.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPatchRequest {
+    pub patch: BTreeMap<String, String>,
+}
+
+/// `settings.patch` response.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPatchResponse {
+    pub settings: AppSettings,
+    pub changed: bool,
+}
+
 /// Runs one storage command, or reports that it is not a storage command.
 pub async fn dispatch(
     core: &Core,
@@ -171,6 +201,8 @@ pub async fn dispatch(
         SETTINGS_LIST => settings_list(core).await.and_then(serialize),
         SETTINGS_GET => settings_get(core, payload).await.and_then(serialize),
         SETTINGS_SET => settings_set(core, payload).await.and_then(serialize),
+        SETTINGS_LOAD => settings_load(core).await.and_then(serialize),
+        SETTINGS_PATCH => settings_patch(core, payload).await.and_then(serialize),
         _ => return None,
     };
     Some(result)
@@ -276,6 +308,34 @@ async fn settings_set(core: &Core, payload: Value) -> Result<ChangedResponse, Br
     let sequence = core.next_sequence();
     core.emit(onspot_app::UiEvent::SettingsChanged { seq: sequence });
     Ok(ChangedResponse { changed: true })
+}
+
+async fn settings_load(core: &Core) -> Result<SettingsLoadResponse, BridgeError> {
+    let store = settings_store(core)?;
+    let service = SettingsService::new(store);
+    let (loaded, rows) = service.load_document().await.map_err(store_error)?;
+    Ok(SettingsLoadResponse {
+        settings: loaded.settings,
+        rows: rows.iter().map(setting_view).collect(),
+    })
+}
+
+async fn settings_patch(core: &Core, payload: Value) -> Result<SettingsPatchResponse, BridgeError> {
+    let request: SettingsPatchRequest = parse(SETTINGS_PATCH, payload)?;
+    let store = settings_store(core)?;
+    let service = SettingsService::new(store);
+    let result = service
+        .patch_document(&request.patch)
+        .await
+        .map_err(store_error)?;
+    if result.changed {
+        let sequence = core.next_sequence();
+        core.emit(onspot_app::UiEvent::SettingsChanged { seq: sequence });
+    }
+    Ok(SettingsPatchResponse {
+        settings: result.settings,
+        changed: result.changed,
+    })
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(command: &str, payload: Value) -> Result<T, BridgeError> {

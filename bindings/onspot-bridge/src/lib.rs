@@ -46,8 +46,9 @@ pub use practice::{
 };
 pub use storage::{
     AttemptPreviewView, ChangedResponse, HistoryResponse, HistorySessionView, SearchRequest,
-    SessionView, SettingView, SettingsResponse, SetupView, HISTORY_DELETE, HISTORY_LIST,
-    HISTORY_RENAME, HISTORY_SEARCH, SETTINGS_GET, SETTINGS_LIST, SETTINGS_SET,
+    SessionView, SettingView, SettingsLoadResponse, SettingsPatchRequest, SettingsPatchResponse,
+    SettingsResponse, SetupView, HISTORY_DELETE, HISTORY_LIST, HISTORY_RENAME, HISTORY_SEARCH,
+    SETTINGS_GET, SETTINGS_LIST, SETTINGS_LOAD, SETTINGS_PATCH, SETTINGS_SET,
 };
 pub use sync::{
     SyncAccountResponse, SyncConnectResponse, SyncDisconnectResponse, SyncNowResponse, SyncTarget,

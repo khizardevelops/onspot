@@ -1,0 +1,107 @@
+{
+	"capturedFrom": "src/lib/adapters/llm/providers.ts",
+	"automaticModel": "auto",
+	"providers": [
+		{
+			"id": "groq",
+			"name": "Groq",
+			"baseUrl": "https://api.groq.com/openai/v1",
+			"defaultModel": "openai/gpt-oss-120b",
+			"keyUrl": "https://console.groq.com/keys",
+			"modelsUrl": "https://console.groq.com/docs/models",
+			"note": "Only models your Groq key can actually use are listed. If a model is missing, enable it under Model Permissions in the Groq Console, then Refresh. Some models (e.g. Llama 3.1/3.3) are Enterprise-only and return a 404 for standard accounts."
+		},
+		{
+			"id": "deepseek",
+			"name": "DeepSeek",
+			"baseUrl": "https://api.deepseek.com",
+			"defaultModel": "deepseek-flash",
+			"keyUrl": "https://platform.deepseek.com/api_keys",
+			"modelsUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+			"note": "DeepSeek serves deepseek-flash and deepseek-v4-pro. Create a key and top up your balance on the DeepSeek platform to use them."
+		},
+		{
+			"id": "custom",
+			"name": "Custom (OpenAI-compatible)",
+			"baseUrl": "",
+			"defaultModel": "",
+			"keyUrl": "",
+			"requiresBaseUrl": true,
+			"note": "Point at any OpenAI-compatible endpoint. The model name must match exactly what that server expects."
+		}
+	],
+	"models": {
+		"groq": [
+			{
+				"id": "openai/gpt-oss-120b",
+				"label": "GPT-OSS 120B",
+				"note": "Best quality"
+			},
+			{
+				"id": "openai/gpt-oss-20b",
+				"label": "GPT-OSS 20B",
+				"note": "Faster"
+			},
+			{
+				"id": "groq/compound",
+				"label": "Compound",
+				"note": "8x rate limit (70k TPM)"
+			},
+			{
+				"id": "groq/compound-mini",
+				"label": "Compound Mini",
+				"note": "8x rate limit (70k TPM)"
+			},
+			{
+				"id": "qwen/qwen3.8-27b",
+				"label": "Qwen 3.8 27B",
+				"note": "Alternative 27B model"
+			},
+			{
+				"id": "qwen/qwen3.6-27b",
+				"label": "Qwen 3.6 27B",
+				"note": "Alternative 27B model"
+			}
+		],
+		"deepseek": [
+			{
+				"id": "deepseek-flash",
+				"label": "DeepSeek Flash",
+				"note": "Fast (default)"
+			},
+			{
+				"id": "deepseek-v4-pro",
+				"label": "DeepSeek V4 Pro",
+				"note": "Higher quality"
+			}
+		],
+		"custom": []
+	},
+	"automaticModels": {
+		"groq": [
+			{
+				"id": "openai/gpt-oss-120b",
+				"leastResourced": "low"
+			},
+			{
+				"id": "qwen/qwen3.8-27b",
+				"leastResourced": "medium"
+			},
+			{
+				"id": "openai/gpt-oss-20b",
+				"leastResourced": "high"
+			}
+		],
+		"deepseek": [
+			{
+				"id": "deepseek-flash",
+				"leastResourced": "medium"
+			},
+			{
+				"id": "deepseek-v4-pro",
+				"leastResourced": "low"
+			}
+		],
+		"custom": []
+	}
+}

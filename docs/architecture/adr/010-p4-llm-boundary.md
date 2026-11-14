@@ -1,6 +1,6 @@
 # ADR-010 — P4 LLM boundary: host HTTP, no key in the core
 
-- Status: accepted
+- Status: accepted; provider/model catalog implemented in the P7 closeout (2026-11-14)
 - Date: 2026-11-12 (P4)
 - Deciders: migration lead
 

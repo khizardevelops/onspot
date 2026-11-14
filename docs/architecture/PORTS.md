@@ -13,21 +13,21 @@ stable code (see `BRIDGE.md`).
 
 | Port | Today (verified) | Size | First Rust adapter | Web host adapter | Notes |
 |---|---|---|---|---|---|
-| `LlmProvider` / `HttpClient` | `adapters/llm/client.ts` + `providers.ts` | 379 + 167 | `llm-openai` (P4 **implemented**) | host `fetch` / Tauri HTTP plugin | Groq, DeepSeek, OpenAI-compatible, local servers. The core builds prompts, repairs/parses JSON and paces a token bucket; the host adds the API key and performs HTTP (ADR-010). P3's evaluation host shim is retired. Provider catalogs and DeepSeek balance remain driver-side (P6/P7). |
+| `LlmProvider` / `HttpClient` | `adapters/llm/client.ts` + `providers.ts` | 379 + 167 | `llm-openai` (P4 **implemented**); provider catalog in `onspot-app` (P7 closeout) | host `fetch` / Tauri HTTP plugin | Groq, DeepSeek, OpenAI-compatible, local servers. The core builds prompts, repairs/parses JSON and paces a token bucket; the host adds the API key and performs HTTP (ADR-010). P3's evaluation host shim is retired. The provider/model catalog, Automatic-model policy and `isChatModel`/label/name helpers now live in `crates/onspot-app/src/providers.rs`; `assets/providers.json` is generated from the TypeScript registry and checked in CI. `providers.ts` remains the Settings view catalog. DeepSeek balance stays driver-side (P6). |
 | `SttEngine` | `speech/stt/service.ts`, `localEngine.ts`, `transformers/`, `cloud/`, native plugin | ~2,000 | `native-stt` (P3, desktop/Android) | Transformers.js worker, permanent | **P3 declared** (`practice.rs`). Groq call is a `SttEngine` adapter too (P4 shares the HTTP client). |
 | `TtsEngine` | `speech/tts/service.ts`, `local/`, `piper/`, `supertonic/`, `cloud/` | ~4,500 | — (ports first; native voices are a later decision) | Piper/Supertonic worker, permanent; cloud TTS uses `HttpClient` | **P3 declared.** Clip loudness leveling stays in the worker/host: it is asset processing, not policy. |
 | `AudioCapture` | `utils/recorder.ts` | 361 | — | `getUserMedia` shim, permanent | **P3 declared.** Web Audio is the only implementation on every runtime; Tauri uses the webview. |
 | `AudioPlayback` | `speech/tts/streamingPlayback.ts`, `stores/audio.ts`, `utils/audioEffects.ts` | 341 + | — | Web Audio shim, permanent | **P3 declared.** Playback state becomes events; EQ stays a view/host concern. |
 | `SqlDriver` | `adapters/db/{OpfsSqliteAdapter,TauriSqlAdapter,index}.ts` | 108 each | `repo-sql` over `rusqlite` and the wasm host shim (P2 **done**) | sqlite-wasm worker, permanent | Schema text and migration chain move verbatim. ADR-005 pins rusqlite 0.32 to share `libsqlite3-sys` with plugin-sql; ADR-007 records the JS-promise host and per-target `Send` split. |
 | `SecretStore` | `stores/secrets.ts` → `core-client/secrets.ts` | 57 | driver-side host store, **not** a Rust port (P2) | `localStorage`, permanent | Keys never enter SQLite, settings, exports or fixtures (I3); ADR-007 explains why no bridge command. |
-| `HttpClient` | `adapters/sync/http.ts`, direct `fetch` | 136 | `reqwest` (P7) | `fetch` shim | One place decides CORS vs Tauri HTTP plugin vs native. |
-| `OAuthBroker` | `adapters/sync/google/oauth.ts` + `src-tauri/src/oauth.rs` | 424 + Rust | reuse loopback (P7) | Google Identity Services shim | Loopback capture already exists in Rust; the token exchange policy moves. |
-| `BlobStore` | OPFS paths, `tauri-plugin-fs`, model cache | ~300 | `tauri-plugin-fs` (P7) | OPFS shim, permanent | Covers recordings, cached clips and downloaded models. |
+| `HttpClient` | `adapters/sync/http.ts`, direct `fetch` | 136 | host fetch / Tauri HTTP plugin (P7 **implemented**) | `fetch` shim | One place decides CORS vs Tauri HTTP plugin vs native. No `reqwest` in the workspace. |
+| `OAuthBroker` | `adapters/sync/google/oauth.ts` + `src-tauri/src/oauth.rs` | 424 + Rust | driver loopback + web shim (P7 **implemented**) | Google Identity Services shim | Loopback capture and token exchange stay driver-side; the core sees only access tokens through the port. |
+| `BlobStore` | OPFS paths, `tauri-plugin-fs`, model cache | ~300 | host fetch/cache (P7 **implemented** through `LanguageDataInstaller`) | OPFS shim, permanent | Covers recordings, cached clips and downloaded models. No separate Rust trait. |
 | `LanguageDataInstaller` | `stores/languageData.ts` + STT/TTS services | 443 + workers | host worker calls (P7 **implemented**) | Transformers.js / Piper workers, permanent | The core plans, sequences and folds progress; the driver fetches and caches. Progress returns as `language.download_progress`; Cancel reaches the worker through `language.cancel`. |
 | `FileSystemSink` / `DatabaseFile` | `utils/export.ts`, `adapters/db/*` | 433 | host dialogs + `repo-sql` backup (P7 **implemented**) | `browser-fs-access` + sqlite-wasm, permanent | Whole-database export/restore. The core owns the file name and pre-restore format checks; bytes cross as base64 host calls. Native import uses SQLite's online backup, so open connections are not pointed at a replaced file. |
 | `Clock` | `Date.now` | — | std (P3) | injected | **P3 declared.** Tests never sleep. |
 | `IdGen` | `newId()`/`crypto.randomUUID` | — | std/ulid (P2) | injected | Deterministic in fixtures. |
-| `NotificationScheduler` | `platform/notifications.ts`, `stores/reminders.ts` | 199 + | Tauri notification (P7) | Notification API shim, permanent | On Apple touch devices the capability is absent by design. |
+| `NotificationScheduler` | `platform/notifications.ts`, `stores/reminders.ts` | 199 + | driver scheduler (P7 **implemented**); no core trait | Notification API shim, permanent | The core owns due state; the driver schedules and shows. On Apple touch devices the capability is absent by design. |
 | `EventSink` | implicit: store mutations and callbacks | — | bridge transports (P1) | JS callback | The only way core state reaches a driver. |
 | Repositories `Sessions` | `SqlDatabaseAdapter.ts` | 792 total | `repo-sql` (P2 **done**) | same, over `SqlDriver` | List/rename/delete; attempts by cascade. |
 | `Attempts` | same | | `repo-sql` (P2 **done**) | same | Full attempt row plus JSON translations/follow-up/glosses; history previews remain a narrower read. |
@@ -35,7 +35,7 @@ stable code (see `BRIDGE.md`).
 | `Glosses` | same + `transcriptMeanings.svelte.ts` | 374 | `repo-sql` (P2 **read/write done**) | same | Stored in `attempts.word_glosses`, parsed with the legacy tolerance; UI move is P5. |
 | `Translations` | same + `adapters/llm/translate.ts` | 159 | `repo-sql` (P2 **read/write done**) | same | Stored in `attempts.translations`; set version stays as stored. UI move is P5. |
 | `Usage` | same + `usage/ledger.ts` | 251 | device-local store (P6) | `localStorage`, permanent | Not a SQL table: the ledger is per-device and never synced. Ledger maths pinned by fixtures. |
-| `Settings` | same + `stores/settings.ts` | 485 | `repo-sql` (P2 **rows done**) | same | Key/value rows; typed defaults/merge wait for P7 with the language/voice catalogs (ADR-008). Secret-prefixed keys never surface. |
+| `Settings` | same + `stores/settings.ts` | 485 | `repo-sql` (P2 rows; P7 closeout typed document) | same | Key/value rows, typed `AppSettings`, defaults, merge and normalisation live in `crates/onspot-app/src/settings.rs`; `settings.load`/`settings.patch` are the bridge commands (ADR-008). The Svelte store is now an optimistic driver view. Secret-prefixed keys never surface. |
 | `PromptSubmissions` | same + `practice/promptSubmissions.ts` | 208 | `repo-sql` (P2 **done**) | same | Opt-out; payload stays prompt-only. Sending/backoff stays P5. |
 
 ## P2 status (2026-11-12)
@@ -54,10 +54,14 @@ stable code (see `BRIDGE.md`).
   gloss/translation JSON columns, corrections, audio, prompt submissions and
   sync metadata, with round-trip and fixture-read tests. `Usage` is not a SQL
   table; its port arrives with the P6 device-local ledger.
-- **Settings:** the Svelte store still owns the typed defaults/merge and
-  language/voice normalisation. It reads and writes rows through the bridge
-  when core is selected. Porting that document waits for P7 with the
-  language/voice catalogs (ADR-008).
+- **Settings:** the typed document moved to `crates/onspot-app/src/settings.rs`
+  in the P7 closeout. `settings.load` returns the normalised document and the
+  rows it was built from; `settings.patch` applies JSON-encoded field changes,
+  writes only rows that changed, and returns the normalised document. The
+  Svelte store keeps the optimistic UI and secret store; it is no longer a
+  cutover blocker. Its tests pin malformed rows, legacy language names,
+  cloud-only modes, voice memories, retired voices and the Automatic-model
+  migration.
 
 ## Ports with no Rust adapter planned
 

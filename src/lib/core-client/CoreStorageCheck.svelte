@@ -118,6 +118,29 @@
 
 				const client = await getCoreClient();
 
+				// `settings.load`/`settings.patch` drive the typed document. Toggle a
+				// preference and put it back so the check is repeatable and the
+				// normalised core document (not the raw rows) is what the store sees.
+				const loaded = await client.command<{ settings: { showWordPos: boolean } }>(
+					'settings.load'
+				);
+				if (typeof loaded.settings.showWordPos !== 'boolean') {
+					throw new Error('settings.load did not return a typed document');
+				}
+				const patched = await client.command<{
+					settings: { showWordPos: boolean };
+					changed: boolean;
+				}>('settings.patch', {
+					patch: { showWordPos: JSON.stringify(!loaded.settings.showWordPos) }
+				});
+				if (!patched.changed || patched.settings.showWordPos === loaded.settings.showWordPos) {
+					throw new Error('settings.patch did not apply the changed field');
+				}
+				const restored = await client.command<{ changed: boolean }>('settings.patch', {
+					patch: { showWordPos: JSON.stringify(loaded.settings.showWordPos) }
+				});
+				if (!restored.changed) throw new Error('settings.patch did not restore the field');
+
 				const key = 'onspot.dev.storage-check';
 				// A reload keeps OPFS and this browser's storage: seeing the value
 				// written by the previous load proves settings survive a restart.

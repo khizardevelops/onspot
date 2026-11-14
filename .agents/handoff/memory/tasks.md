@@ -1,5 +1,18 @@
 # Tasks
 
+## Hexagonal migration P7 closeout (2026-11-14, uncommitted)
+- [x] Port the typed `AppSettings` document, defaults, merge and normalisation to
+      `crates/onspot-app/src/settings.rs` (ADR-008); add `settings.load` / `settings.patch`.
+- [x] Port the provider/model catalog and Automatic-model policy to
+      `crates/onspot-app/src/providers.rs` (ADR-010); generate/guard `assets/providers.json`.
+- [x] Rewire `stores/settings.ts` to delegate hydration/writes to the core under
+      `useCore('settings')`, keeping the optimistic store and legacy fallback.
+- [x] Extend the core storage browser check to exercise `settings.load`/`settings.patch`; regenerate
+      ts-rs types and wasm; rerun workspace tests, clippy, fmt, svelte-check, storage/practice/sync/
+      portability, boundaries, SPDX, catalogs and coupling.
+- [ ] Commit the closeout (user has not asked for a commit yet).
+- [ ] P5 legacy→core gloss/translation fixture assertion (separate P5 gap).
+
 ## Hexagonal migration P8 (planned, 2026-11-14)
 - [ ] Build `drivers/cli` over the same `onspot-app` core (settings/sessions/evaluate/insights/
       exports; STT/TTS absent by design).
@@ -128,6 +141,31 @@
       Data buttons, answers the native Save/Open dialogs with xdotool, confirms the replace and
       proves an exported setting came back. It caught the missing `dialog:allow-open` capability
       that made **Restore .sqlite** do nothing.
+- [x] Committed P7 on `refactor/hex-arch-p0` as `c11ca8c` (the `deprecated/` archival policy for
+      P8 is recorded in `decisions.md`).
+
+## P7 closeout audit (2026-11-14)
+- [x] Regenerated `docs/architecture/coupling-matrix.md` (P7 left it stale, so the architecture
+      CI check would fail on `c11ca8c`). `node scripts/coupling-audit.mjs --check` now passes.
+- [x] Re-ran the P0-P7 gates available here: `cargo test --workspace`, clippy, fmt, `check` (0
+      errors), `test:storage`, `test:practice`, `test:sync`, `test:portability`,
+      `test:sync:desktop`, `test:portability:desktop`, boundaries, SPDX, catalog, typegen.
+- [ ] **Port the typed `AppSettings` defaults/merge/normalise document to the core (ADR-008).**
+      P7 promised it and only moved the catalogs; `stores/settings.ts` still owns 520 lines of
+      defaults, migration, `sanitizeTunings`, `rememberedVoices`. P8's deletion list includes
+      `stores/settings.ts` logic, so this must land before the cutover.
+- [ ] **Move the provider/model catalog and automatic-model policy to the core (ADR-010).**
+      `adapters/llm/providers.ts` (167 lines: providers, models, resource-level trust, label and
+      base-URL lookup) still drives Settings and the LLM client. P8's deletion list includes
+      `adapters/llm/*` domain parts.
+- [ ] Fix the remaining stale architecture prose: BRIDGE.md command names are updated; PORTS.md is
+      updated for the P7 statuses. Re-read both once the two ports above land.
+- [ ] Record gloss coalescing as a driver-side deviation (it lives in `stores/practice.ts`, not the
+      core). Behaviour is correct under core; P8 should keep it in the thin store or move it.
+- [ ] Android build still unverified (P1/P2/P3): this host has the Android SDK/NDK but no rustup
+      Android targets. P8 needs an APK build (local toolchain or CI).
+- [ ] Credential/device gates remain: P3 listening pass + physical Android run, P4/P5/P6 live-key
+      smokes, P7 Drive smoke, Windows/macOS export/restore.
 
 ## Hexagonal migration P6 (started 2026-11-12, complete 2026-11-12)
 - [x] Usage map (`docs/architecture/usage-map.md`): ledger rows, scopes, 24 h retention,
@@ -160,8 +198,11 @@
       call); POS (`withPos`) is threaded through the core gloss request.
 - [x] Bridge commands for translations/glosses/phrases/insights and the practice/Insights data paths.
 - [ ] Live provider hover/restart smoke on a device with a real key (the browser check stubs the LLM).
-- [ ] Phrase meanings; bridge commands/events; rewire hover/translation/Insights data paths.
-- [ ] Legacy/core cache interop test and the web/desktop smoke.
+- [x] Phrase meanings; bridge commands/events; rewire hover/translation/Insights data paths.
+      (Was already done when the entry above was written; the duplicate was stale.)
+- [ ] Legacy/core gloss/translation cache interop assertion: the v0.2.4 fixture has legacy
+      `translations` JSON but no glosses, and `the_fixture_reads_through_the_full_repositories`
+      only asserts row counts. Web cache check passes; desktop hover smoke waits on a real key.
 
 ## Hexagonal migration P4 (finished 2026-11-12, committed `74db35c`)
 - [x] Extend the golden harness with prompt, evaluation-parse, explanation, markup and JSON-extract

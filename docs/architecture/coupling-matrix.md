@@ -18,8 +18,8 @@ Score = Svelte × 3 + Tauri × 3 + browser globals × 1 + cross-layer × 6.
 The score ranks where to start, not correctness: a view that uses stores and the DOM to draw
 something is doing its job.
 
-Totals across 232 files: 78 Svelte imports, 16 Tauri imports,
-215 browser-global references, 0 cross-layer imports.
+Totals across 312 files: 82 Svelte imports, 19 Tauri imports,
+220 browser-global references, 0 cross-layer imports.
 
 The top 40 files are listed. The full JSON is not committed; read the
 counts here or re-run the script.
@@ -30,25 +30,25 @@ counts here or re-run the script.
 | 2 | `src/lib/platform/pwa.ts` | 161 | 1 | 0 | 14 | 0 | 17 | — |
 | 3 | `src/lib/components/FeedbackPanel.svelte` | 1456 | 3 | 0 | 4 | 0 | 13 | — |
 | 4 | `src/lib/components/PermissionsPrompt.svelte` | 224 | 1 | 0 | 9 | 0 | 12 | — |
-| 5 | `src/lib/components/AttemptStream.svelte` | 613 | 3 | 0 | 2 | 0 | 11 | — |
-| 6 | `src/lib/gestures/pressFeedback.ts` | 95 | 0 | 0 | 10 | 0 | 10 | — |
-| 7 | `src/lib/stores/voiceLibrary.ts` | 269 | 1 | 0 | 7 | 0 | 10 | — |
-| 8 | `src/lib/adapters/db/TauriSqlAdapter.ts` | 108 | 0 | 3 | 0 | 0 | 9 | — |
-| 9 | `src/lib/components/textSize/TextSizeEditor.svelte` | 380 | 1 | 0 | 6 | 0 | 9 | — |
-| 10 | `src/lib/practice/promptSubmissions.ts` | 208 | 1 | 0 | 6 | 0 | 9 | — |
-| 11 | `src/lib/stores/textSize.svelte.ts` | 346 | 0 | 0 | 8 | 0 | 8 | — |
-| 12 | `src/lib/utils/audioEffects.ts` | 341 | 0 | 0 | 8 | 0 | 8 | — |
-| 13 | `src/lib/utils/export.ts` | 433 | 0 | 2 | 2 | 0 | 8 | — |
-| 14 | `src/lib/utils/storage.ts` | 58 | 0 | 0 | 8 | 0 | 8 | — |
-| 15 | `src/routes/model-lab/vendor/whisper-webgpu/whisper-webgpu.js` | 2 | 0 | 0 | 8 | 0 | 8 | — |
-| 16 | `src/lib/components/PaperTexture.svelte` | 316 | 1 | 0 | 4 | 0 | 7 | — |
-| 17 | `src/lib/components/WindowBar.svelte` | 129 | 1 | 1 | 1 | 0 | 7 | — |
-| 18 | `src/lib/stores/elevenLabsVoice.ts` | 93 | 1 | 0 | 4 | 0 | 7 | — |
-| 19 | `src/lib/stores/reminders.ts` | 199 | 1 | 0 | 4 | 0 | 7 | — |
-| 20 | `src/lib/stores/secrets.ts` | 57 | 1 | 0 | 4 | 0 | 7 | — |
+| 5 | `src/lib/core-client/coreHost.ts` | 446 | 1 | 3 | 0 | 0 | 12 | — |
+| 6 | `src/lib/components/AttemptStream.svelte` | 613 | 3 | 0 | 2 | 0 | 11 | — |
+| 7 | `src/lib/gestures/pressFeedback.ts` | 95 | 0 | 0 | 10 | 0 | 10 | — |
+| 8 | `src/lib/stores/voiceLibrary.ts` | 269 | 1 | 0 | 7 | 0 | 10 | — |
+| 9 | `src/lib/adapters/db/TauriSqlAdapter.ts` | 108 | 0 | 3 | 0 | 0 | 9 | — |
+| 10 | `src/lib/components/textSize/TextSizeEditor.svelte` | 380 | 1 | 0 | 6 | 0 | 9 | — |
+| 11 | `src/lib/practice/promptSubmissions.ts` | 208 | 1 | 0 | 6 | 0 | 9 | — |
+| 12 | `src/lib/stores/textSize.svelte.ts` | 346 | 0 | 0 | 8 | 0 | 8 | — |
+| 13 | `src/lib/utils/audioEffects.ts` | 341 | 0 | 0 | 8 | 0 | 8 | — |
+| 14 | `src/lib/utils/export.ts` | 449 | 0 | 2 | 2 | 0 | 8 | — |
+| 15 | `src/lib/utils/storage.ts` | 58 | 0 | 0 | 8 | 0 | 8 | — |
+| 16 | `src/routes/model-lab/vendor/whisper-webgpu/whisper-webgpu.js` | 2 | 0 | 0 | 8 | 0 | 8 | — |
+| 17 | `src/lib/components/PaperTexture.svelte` | 316 | 1 | 0 | 4 | 0 | 7 | — |
+| 18 | `src/lib/components/WindowBar.svelte` | 129 | 1 | 1 | 1 | 0 | 7 | — |
+| 19 | `src/lib/stores/elevenLabsVoice.ts` | 93 | 1 | 0 | 4 | 0 | 7 | — |
+| 20 | `src/lib/stores/reminders.ts` | 212 | 1 | 0 | 4 | 0 | 7 | — |
 | 21 | `src/lib/stores/ttsPreview.ts` | 299 | 1 | 0 | 4 | 0 | 7 | — |
 | 22 | `src/lib/usage/ledger.ts` | 251 | 1 | 0 | 4 | 0 | 7 | — |
-| 23 | `src/routes/history/+page.svelte` | 564 | 1 | 0 | 4 | 0 | 7 | — |
+| 23 | `src/routes/history/+page.svelte` | 638 | 1 | 0 | 4 | 0 | 7 | — |
 | 24 | `src/lib/components/AppHeader.svelte` | 330 | 2 | 0 | 0 | 0 | 6 | — |
 | 25 | `src/lib/components/AttemptTrack.svelte` | 265 | 2 | 0 | 0 | 0 | 6 | — |
 | 26 | `src/lib/components/PlaybackSpeed.svelte` | 156 | 2 | 0 | 0 | 0 | 6 | — |
@@ -56,13 +56,13 @@ counts here or re-run the script.
 | 28 | `src/lib/components/settings/VoicePicker.svelte` | 362 | 1 | 0 | 3 | 0 | 6 | — |
 | 29 | `src/lib/components/Transcript.svelte` | 505 | 0 | 0 | 6 | 0 | 6 | — |
 | 30 | `src/lib/components/wordSelection.ts` | 417 | 0 | 0 | 6 | 0 | 6 | — |
-| 31 | `src/lib/neo.ts` | 252 | 2 | 0 | 0 | 0 | 6 | — |
-| 32 | `src/lib/platform/backButton.svelte.ts` | 82 | 0 | 2 | 0 | 0 | 6 | — |
-| 33 | `src/lib/stores/practiceSession.ts` | 39 | 2 | 0 | 0 | 0 | 6 | — |
-| 34 | `src/lib/utils/audio.ts` | 330 | 0 | 0 | 6 | 0 | 6 | — |
-| 35 | `src/lib/utils/sessionTranscript.ts` | 217 | 0 | 2 | 0 | 0 | 6 | — |
-| 36 | `src/routes/+layout.svelte` | 244 | 2 | 0 | 0 | 0 | 6 | — |
-| 37 | `src/routes/about/+page.svelte` | 1444 | 1 | 0 | 3 | 0 | 6 | — |
-| 38 | `src/routes/dummy/+page.svelte` | 649 | 1 | 0 | 3 | 0 | 6 | — |
-| 39 | `src/lib/stores/theme.svelte.ts` | 70 | 0 | 0 | 5 | 0 | 5 | — |
-| 40 | `src/routes/settings/+page.svelte` | 381 | 1 | 0 | 2 | 0 | 5 | — |
+| 31 | `src/lib/core-client/CoreStorageCheck.svelte` | 277 | 1 | 0 | 3 | 0 | 6 | — |
+| 32 | `src/lib/neo.ts` | 252 | 2 | 0 | 0 | 0 | 6 | — |
+| 33 | `src/lib/platform/backButton.svelte.ts` | 82 | 0 | 2 | 0 | 0 | 6 | — |
+| 34 | `src/lib/stores/practiceSession.ts` | 39 | 2 | 0 | 0 | 0 | 6 | — |
+| 35 | `src/lib/utils/audio.ts` | 330 | 0 | 0 | 6 | 0 | 6 | — |
+| 36 | `src/lib/utils/sessionTranscript.ts` | 224 | 0 | 2 | 0 | 0 | 6 | — |
+| 37 | `src/routes/+layout.svelte` | 263 | 2 | 0 | 0 | 0 | 6 | — |
+| 38 | `src/routes/about/+page.svelte` | 1444 | 1 | 0 | 3 | 0 | 6 | — |
+| 39 | `src/routes/dummy/+page.svelte` | 649 | 1 | 0 | 3 | 0 | 6 | — |
+| 40 | `src/lib/stores/theme.svelte.ts` | 70 | 0 | 0 | 5 | 0 | 5 | — |

@@ -1,9 +1,43 @@
 # State
 
-# State
+## Hexagonal migration: P7 closeout ports landed (2026-11-14, uncommitted)
 
-## Hexagonal migration: P7 complete in code, web and desktop sync (2026-11-14, branch `refactor/hex-arch-p0`)
+- **Typed settings moved to the core.** `crates/onspot-app/src/settings.rs` now owns `AppSettings`
+  (all 32 fields), `VoiceTuning`, defaults, row merge, language/voice normalisation, choice
+  validation, the Automatic-model migration, the retired ElevenLabs-voice rewrite, and
+  `SettingsService::{load_document, patch_document}`. `settings.load` returns `{ settings, rows }`;
+  `settings.patch` takes `{ patch: Record<string, string> }` (JSON-encoded fields), writes only
+  changed rows and returns `{ settings, changed }`. `stores/settings.ts` keeps the optimistic
+  store and delegates hydration/writes under `useCore('settings')`; legacy remains the fallback.
+- **Provider catalog moved to the core.** `crates/onspot-app/src/providers.rs` reads the generated
+  `assets/providers.json` (from `src/lib/adapters/llm/providers.ts` via
+  `scripts/export-provider-catalog.mjs`) and owns `provider`, `modelOptions`, `automaticModel`,
+  `automaticModels`, `modelLabel`, `providerNameFor`, `isChatModel`. `bun run providers:check`
+  guards it and `architecture.yml` now checks both catalogs. `providers.ts` remains the Settings
+  view catalog.
+- **Bridge/types:** `settings.load`/`settings.patch` wire types; `bridge:types` now assembles
+  `VoiceTuning`, `AppSettings`, `SettingsLoadResponse`, `SettingsPatchResponse` (51 types). The
+  store has a compile-time coverage guard against the generated document.
+- **Verified:** `cargo test --workspace` (app 108 tests incl. settings/provider), clippy `-D
+  warnings`, `cargo fmt --check`, svelte-check 0 errors/9 warnings, `test:storage` (now also calls
+  `settings.load`/`settings.patch` and restores the toggled field), `test:practice`, `test:sync`,
+  `test:portability` (export → wipe → restore), boundaries (0 warnings), SPDX (385), catalog/
+  providers checks, coupling `--check`, wasm rebuild.
+- **Still open:** P5 legacy→core gloss/translation fixture assertion; Android APK build; Drive,
+  live-key, real download and physical-device smokes. P8 cutover can now start without the two
+  ADR promises blocking it.
 
+## Hexagonal migration: P7 complete in code, web and desktop sync (2026-11-14, commit `c11ca8c`, branch `refactor/hex-arch-p0`)
+
+- **Audit (2026-11-14):** P0-P7 gates re-run here and green except for the deferred work below.
+  The P7 commit shipped a stale `coupling-matrix.md` (architecture CI would fail); regenerated and
+  `--check` now passes. Two P7 promises from earlier ADRs are still unported: typed `AppSettings`
+  defaults/merge/normalise (ADR-008) in `stores/settings.ts`, and the provider/model catalog plus
+  automatic-model policy (ADR-010) in `adapters/llm/providers.ts`. P8's deletion list covers both,
+  so they are cutover blockers. Gloss coalescing remains in `stores/practice.ts` (driver-side
+  deviation, behaviour correct). P5's phrase entry was stale; its remaining gap is a legacy→core
+  gloss/translation fixture assertion. Android builds remain unverified here (SDK/NDK present, no
+  rustup Android targets); credential/device smokes unchanged.
 - **Done:** session Markdown export (core builder, bridge command, UI route), backup format guards,
   sync decision policy + `sync.decide` (used by `syncNow`), checked-in language catalog with Rust
   lookup, prompt catalogue + seeding, pure reminder/onboarding decision helpers, the core

@@ -45,6 +45,11 @@ jobs:
       - name: Coupling matrix is current
         run: node scripts/coupling-audit.mjs --check
 
+      - name: Checked-in catalogs match the TypeScript registries
+        run: |
+          bun run catalog:check
+          bun run providers:check
+
       - name: Golden fixtures regenerate without changes
         run: |
           bun run golden:capture

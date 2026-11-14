@@ -137,6 +137,27 @@ pub fn default_voice(id: &str) -> Option<&'static Voice> {
     voices_for(id).iter().find(|voice| voice.id == preferred)
 }
 
+/// The language a learner is taught in until they choose: English, or, for
+/// learners of English, the language with the most text on the web after it.
+pub fn default_instruction_language_for(target_id: &str) -> String {
+    if target_id != "en" {
+        return String::from("en");
+    }
+    let mut best: Option<&InstructionLanguage> = None;
+    for language in &CATALOG.instruction_languages {
+        if language.id == target_id {
+            continue;
+        }
+        if best.map_or(true, |current| {
+            language.web_text_percent > current.web_text_percent
+        }) {
+            best = Some(language);
+        }
+    }
+    best.map(|language| language.id.clone())
+        .unwrap_or_else(|| String::from("en"))
+}
+
 /// Common Crawl share, from the registry's high/medium/low thresholds.
 pub fn resource_level(web_text_percent: f64) -> &'static str {
     if web_text_percent >= 1.0 {
