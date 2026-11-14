@@ -172,6 +172,7 @@ pub async fn init_core_wasm(
             records: Some(Arc::new(onspot_adapter_repo_sql::SqlRecordsStore::new(
                 driver,
             ))),
+            ..HostAdapters::default()
         }
     };
 

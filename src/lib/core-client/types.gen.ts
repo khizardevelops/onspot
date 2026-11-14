@@ -11,11 +11,11 @@
  * copy. `message` is a diagnostic for logs and tests, never a replacement for
  * the driver's copy.
  */
-export type BridgeError = { 
+export type BridgeError = {
 /**
  * Stable machine code, e.g. `bridge.unknown_command`.
  */
-code: string, 
+code: string,
 /**
  * Human-readable diagnostic, not shown to a learner.
  */
@@ -24,7 +24,7 @@ message: string, };
 /**
  * What a driver tells the core at boot.
  */
-export type CoreConfig = { 
+export type CoreConfig = {
 /**
  * The shipping app's version, shown in diagnostics. The web driver passes
  * it from the build; the Tauri driver passes its own package version.
@@ -34,15 +34,15 @@ appVersion: string, };
 /**
  * What a driver gets back from `init_core` (and from `system.init` later).
  */
-export type InitResponse = { 
+export type InitResponse = {
 /**
  * The app version the driver reported at boot.
  */
-appVersion: string, 
+appVersion: string,
 /**
  * The bridge contract version, e.g. `bridge.v1`.
  */
-bridgeVersion: string, 
+bridgeVersion: string,
 /**
  * The number of the `Pong` event emitted by the boot itself.
  */
@@ -52,7 +52,7 @@ sequence: number, };
  * `core.ping` arguments. `note` is echoed back, so a driver can prove that its
  * own payload crossed the boundary unchanged.
  */
-export type PingRequest = { 
+export type PingRequest = {
 /**
  * Free text echoed in the response; no behaviour depends on it.
  */
@@ -61,19 +61,19 @@ note: string | null, };
 /**
  * What `core.ping` returns.
  */
-export type PingResponse = { 
+export type PingResponse = {
 /**
  * The app version the driver reported at boot.
  */
-appVersion: string, 
+appVersion: string,
 /**
  * The bridge contract version, e.g. `bridge.v1`.
  */
-bridgeVersion: string, 
+bridgeVersion: string,
 /**
  * The event number this ping emitted.
  */
-sequence: number, 
+sequence: number,
 /**
  * The request's `note`, unchanged.
  */
@@ -139,15 +139,15 @@ export type EngineMode = "local" | "cloud";
  * The API key is never here: the host adds it from its `SecretStore` when the
  * HTTP request crosses the bridge.
  */
-export type LlmEndpoint = { 
+export type LlmEndpoint = {
 /**
  * Base URL up to but excluding `/chat/completions`.
  */
-baseUrl: string, 
+baseUrl: string,
 /**
  * Provider id (`groq`, `deepseek`, `custom`) used by the host to pick a key.
  */
-provider: string, model: string, 
+provider: string, model: string,
 /**
  * Models to continue with when the preferred one is out of room.
  */
@@ -157,47 +157,47 @@ fallbackModels: Array<string>, };
 /**
  * The language, level and voice choices for the open session.
  */
-export type PracticeConfig = { 
+export type PracticeConfig = {
 /**
  * Target language id, e.g. `fr`.
  */
-targetLanguageId: string, 
+targetLanguageId: string,
 /**
  * Target language name, e.g. `French`.
  */
-targetLanguageName: string, 
+targetLanguageName: string,
 /**
  * Language of instruction id, e.g. `en`.
  */
-instructionLanguageId: string, 
+instructionLanguageId: string,
 /**
  * Language of instruction name, e.g. `English`.
  */
-instructionLanguageName: string, 
+instructionLanguageName: string,
 /**
  * CEFR-ish level id from Settings.
  */
-level: string, 
+level: string,
 /**
  * Default tone for a new draft; an open session keeps its recorded mode.
  */
-mode: string, ttsMode: EngineMode, 
+mode: string, ttsMode: EngineMode,
 /**
  * Speech-to-text path for the take.
  */
-sttMode: EngineMode, ttsVoice: string, explanationVoice: string, 
+sttMode: EngineMode, ttsVoice: string, explanationVoice: string,
 /**
  * The LLM endpoint chosen in Settings (no API key).
  */
-llmEndpoint: LlmEndpoint, 
+llmEndpoint: LlmEndpoint,
 /**
  * Playback pace, `1.0` being normal.
  */
-pace: number, 
+pace: number,
 /**
  * Whether the explanation track can be spoken with the current voices.
  */
-explanationAudioAvailable: boolean, 
+explanationAudioAvailable: boolean,
 /**
  * The take limit, today 60 seconds.
  */
@@ -217,11 +217,11 @@ export type TranslationBreakdownItem = { source: string, target: string, };
 /**
  * The three ways to render the learner's sentence, plus the token mapping.
  */
-export type TranslationSet = { 
+export type TranslationSet = {
 /**
  * Format version; missing on attempts from before the stricter prompt.
  */
-version: bigint | null, 
+version: bigint | null,
 /**
  * Language of instruction it is written in; missing means English.
  */
@@ -235,7 +235,7 @@ export type FollowUp = { question: string, translation: string, };
 /**
  * The meaning of several words read together; `end` is inclusive.
  */
-export type PhraseGloss = { start: bigint, end: bigint, meaning: string, 
+export type PhraseGloss = { start: bigint, end: bigint, meaning: string,
 /**
  * `expression` or `selection`, kept as the stored string.
  */
@@ -250,15 +250,15 @@ export type GlossedRange = { start: bigint, end: bigint, };
 /**
  * One text's hover translations: a meaning per word token, and its phrases.
  */
-export type TextGlosses = { words: Array<string>, phrases: Array<PhraseGloss>, 
+export type TextGlosses = { words: Array<string>, phrases: Array<PhraseGloss>,
 /**
  * Part-of-speech label per word token, parallel to `words`.
  */
-pos: Array<string> | null, 
+pos: Array<string> | null,
 /**
  * The sections whose POS labels have been fetched.
  */
-posSections: Array<GlossedRange> | null, 
+posSections: Array<GlossedRange> | null,
 /**
  * The sections whose meanings have been fetched.
  */
@@ -273,7 +273,7 @@ export type Attempt = { id: string, sessionId: string, promptId: string | null, 
 /**
  * One correction the LLM produced for an attempt.
  */
-export type Correction = { id: string, attemptId: string, category: string, severity: string, label: string, original: string, replacement: string, replacementTranslation: string | null, 
+export type Correction = { id: string, attemptId: string, category: string, severity: string, label: string, original: string, replacement: string, replacementTranslation: string | null,
 /**
  * Character offsets of `original` in the attempt transcript.
  */
@@ -293,11 +293,11 @@ export type AttemptView = { attempt: Attempt, corrections: Array<Correction>, };
 /**
  * Recognizer download/load progress as the screen shows it.
  */
-export type ProgressView = { 
+export type ProgressView = {
 /**
  * 0–100.
  */
-progress: number, 
+progress: number,
 /**
  * Short status copy forwarded from the engine.
  */
@@ -307,15 +307,15 @@ status: string, };
 /**
  * The complete practice snapshot.
  */
-export type PracticeSnapshot = { phase: PracticePhase, prompt: PromptView, 
+export type PracticeSnapshot = { phase: PracticePhase, prompt: PromptView,
 /**
  * Tone for the session; locked once a session row exists.
  */
-mode: string, elapsedSeconds: number, 
+mode: string, elapsedSeconds: number,
 /**
  * Microphone level, 0..1.
  */
-level: number, progress: ProgressView | null, statusText: string, error: ErrorView | null, sessionId: string | null, attempts: Array<AttemptView>, activeAttemptId: string | null, 
+level: number, progress: ProgressView | null, statusText: string, error: ErrorView | null, sessionId: string | null, attempts: Array<AttemptView>, activeAttemptId: string | null,
 /**
  * Whether the explanation track can be spoken now.
  */
@@ -324,7 +324,7 @@ explanationAudioAvailable: boolean, };
 /**
  * The prompt the learner answers.
  */
-export type PromptView = { id: string, title: string, text: string, 
+export type PromptView = { id: string, title: string, text: string,
 /**
  * True when an English catalogue entry is shown for lack of a prompt in
  * the language of instruction.
@@ -385,7 +385,7 @@ export type PhraseResponse = { meaning: string, };
 /**
  * A session's languages and speaking setup, stored as JSON in `sessions.setup`.
  */
-export type SessionSetup = { targetLanguage: string, instructionLanguage: string, 
+export type SessionSetup = { targetLanguage: string, instructionLanguage: string,
 /**
  * `local` or `cloud`. Kept as the stored string: history only displays it,
  * and older rows are accepted exactly as the TypeScript app accepts them.
@@ -397,7 +397,7 @@ ttsMode: string, ttsVoice: string, explanationVoice: string, targetSpeechPace: n
  * How a practice session is run. Stored as the same three strings the
  * TypeScript app uses (`exam`, `casual`, `freeflow`).
  */
-export type Session = { id: string, title: string, mode: string, startedAt: string, endedAt: string | null, createdAt: string, updatedAt: string, 
+export type Session = { id: string, title: string, mode: string, startedAt: string, endedAt: string | null, createdAt: string, updatedAt: string,
 /**
  * What the session is practised with (migration 10). `None` on sessions
  * from before that migration, until they are opened and worked out.
@@ -432,7 +432,7 @@ export type Occurrence = { session: Session | null, attempt: Attempt, correction
  * Something a driver shows or records. Serialized with a `event` tag, e.g.
  * `{ "event": "pong", "seq": 2 }`.
  */
-export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "translations_ready", attempt_id: string, translations: TranslationSet, } | { "event": "glosses_ready", attempt_id: string, key: string, glosses: TextGlosses, } | { "event": "phrase_ready", attempt_id: string, meaning: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "host_request", id: number, method: string, 
+export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "translations_ready", attempt_id: string, translations: TranslationSet, } | { "event": "glosses_ready", attempt_id: string, key: string, glosses: TextGlosses, } | { "event": "phrase_ready", attempt_id: string, meaning: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "download_progress", target: string, loaded_bytes: number, total_bytes: number, label: string, progress: number, } | { "event": "usage_warning", kind: string, provider: string, message_code: string, } | { "event": "host_request", id: number, method: string,
 /**
  * JSON-encoded arguments.
  */

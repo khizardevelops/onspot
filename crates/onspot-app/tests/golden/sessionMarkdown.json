@@ -1,0 +1,58 @@
+{
+	"capturedFrom": "src/lib/utils/sessionTranscript.ts, P7 port fixture",
+	"cases": [
+		{
+			"name": "one full take",
+			"input": {
+				"session": {
+					"id": "s1", "title": "Le marché", "mode": "exam",
+					"startedAt": "2026-11-06T10:05:00", "endedAt": null,
+					"createdAt": "2026-11-06T10:05:00", "updatedAt": "2026-11-06T10:06:00", "setup": null
+				},
+				"attempts": [{
+					"id": "a1", "sessionId": "s1", "promptId": "p1", "promptText": "Racontez votre matinée.",
+					"transcript": "Je suis allé au marché.\nJ'ai acheté des pommes.",
+					"correctedText": "Je suis allée au marché. J'ai acheté des pommes.",
+					"translation": null,
+					"translations": {
+						"idiomatic": "I went to the market.",
+						"idiomaticVariants": ["I went to the market.", "I headed to the market."],
+						"literal": "I am gone to the market.",
+						"wordForWord": "I to-the market went.",
+						"wordBreakdown": [
+							{"source": "marché", "target": "market"},
+							{"source": "—", "target": "dash"}
+						]
+					},
+					"ttsVoice": null,
+					"explanation": "You used <wrong>allé</wrong>; use <right>allée</right>.",
+					"followUp": {"question": "Et vous ?", "translation": "And you?"},
+					"wordGlosses": null, "durationSec": 59.6, "wordCount": 12,
+					"audioKey": null, "createdAt": "2026-11-06T10:05:00", "updatedAt": "2026-11-06T10:06:00"
+				}],
+				"corrections": [{
+					"id": "c1", "attemptId": "a1", "category": "grammar", "severity": "error",
+					"label": "Agreement", "original": "allé", "replacement": "allée",
+					"replacementTranslation": "went (feminine)", "start": 9, "end": 13,
+					"explanation": "Agree with the subject.", "speakText": null,
+					"examStatus": null, "formalAlternatives": [], "sortOrder": 0,
+					"createdAt": "2026-11-06T10:05:00"
+				}],
+				"exportedAt": "2026-11-06T10:05:00"
+			},
+			"expected": "# Le marché\n\n- **Date:** 6 November 2026 at 10:05\n- **Mode:** Exam\n- **Takes:** 1 · 1:00 spoken\n\n_Exported from onspot on 6 November 2026 at 10:05._\n\n## Take 1\n\n1:00 · 12 words · 6 November 2026 at 10:05\n\n**Prompt:** Racontez votre matinée.\n\n**You said**\n\n> Je suis allé au marché.\n> J'ai acheté des pommes.\n\n**Did you mean to say?**\n\n> Je suis allée au marché. J'ai acheté des pommes.\n\n**Explanation**\n\nYou used allé; use allée.\n\n**Follow-up:** Et vous ?\n*And you?*\n\n**Translation**\n\n- **Idiomatic:** I went to the market.\n- **Literal:** I am gone to the market.\n- **Word-for-word:** I to-the market went.\n- **Also:** I went to the market.\n- **Also:** I headed to the market.\n- **Each word:** marché — market\n\n**Corrections**\n\n- **Grammar · error** — \"allé\" → \"allée\" (went (feminine))\n  - Agree with the subject.\n"
+		},
+		{
+			"name": "empty session",
+			"input": {
+				"session": {
+					"id": "s2", "title": "Empty", "mode": "casual",
+					"startedAt": "2026-11-06T10:05:00", "endedAt": null,
+					"createdAt": "2026-11-06T10:05:00", "updatedAt": "2026-11-06T10:05:00", "setup": null
+				},
+				"attempts": [], "corrections": [], "exportedAt": "2026-11-06T10:05:00"
+			},
+			"expected": "# Empty\n\n- **Date:** 6 November 2026 at 10:05\n- **Mode:** Casual\n- **Takes:** 0 · 0:00 spoken\n\n_Exported from onspot on 6 November 2026 at 10:05._\n\n_This session has no takes yet._\n"
+		}
+	]
+}

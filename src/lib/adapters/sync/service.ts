@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { get } from 'svelte/store';
 import { getDatabaseAdapter, type SyncMetadata } from '#lib/adapters/db/index.js';
 import { currentRevision, getSyncedRevision, setSyncedRevision } from '#lib/adapters/db/revision.js';
 import { importSqliteBytes } from '#lib/utils/export.js';
+import { useCore } from '#lib/core-client/backend.js';
+import { syncNowCore, type SyncTarget } from '#lib/core-client/sync.js';
+import { appSettings } from '#lib/stores/settings.js';
+import { webdavPassword, webdavUsername } from '#lib/stores/secrets.js';
 import {
 	SyncError,
 	type RemoteFile,
@@ -183,11 +188,60 @@ export function syncNow(
 	return running;
 }
 
+function syncTargetOf(provider: SyncProvider): SyncTarget {
+	if (provider.id === 'google-drive') return { provider: 'google-drive' };
+
+	const settings = get(appSettings);
+
+	return {
+		provider: 'webdav',
+		webdav: {
+			baseUrl: settings.webdavUrl.trim(),
+			path: settings.webdavPath.trim(),
+			username: get(webdavUsername),
+			password: get(webdavPassword)
+		}
+	};
+}
+
+async function runSyncThroughCore(
+	provider: SyncProvider,
+	choice: SyncChoice | undefined,
+	onProgress?: ProgressCallback
+): Promise<SyncResult> {
+	// Capture the revision before the transfer, exactly as the legacy path
+	// does: a write during the upload must make the next comparison unsynced.
+	const revision = currentRevision();
+
+	onProgress?.('Checking the cloud backup…');
+	const outcome = await syncNowCore(
+		syncTargetOf(provider),
+		revision,
+		getSyncedRevision(provider.id),
+		choice
+	);
+
+	if (outcome.completed) {
+		// A download imports a new database, which bumps the revision; record
+		// the revision the restored file actually has. An upload synced the
+		// revision captured before it started.
+		setSyncedRevision(provider.id, outcome.replacedLocal ? currentRevision() : revision);
+	}
+
+	return {
+		decision: outcome.decision,
+		comparison: outcome.comparison,
+		completed: outcome.completed
+	};
+}
+
 async function runSync(
 	provider: SyncProvider,
 	choice: SyncChoice | undefined,
 	onProgress?: ProgressCallback
 ): Promise<SyncResult> {
+	if (useCore('sync')) return runSyncThroughCore(provider, choice, onProgress);
+
 	const database = await getDatabaseAdapter();
 	const metadata = await database.getSyncMetadata(provider.id);
 	const remote = await provider.getRemote();
@@ -201,7 +255,12 @@ async function runSync(
 		revision,
 		getSyncedRevision(provider.id)
 	);
-	const decision = decideSync(comparison);
+	const decision =
+		choice === 'download'
+			? 'download'
+			: choice === 'upload'
+				? 'upload'
+				: decideSync(comparison);
 
 	if (!choice) {
 		if (decision === 'up-to-date' || decision === 'needs-choice') {

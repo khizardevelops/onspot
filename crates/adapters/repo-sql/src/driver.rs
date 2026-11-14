@@ -7,11 +7,14 @@
 //! on whichever runtime thread invokes the command, as the Tauri SQL plugin
 //! did before it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use onspot_ports::{SqlDriver, SqlError, SqlRow, SqlStatement, SqlValue};
+use onspot_ports::{
+    CoreError, DatabaseFile, RestoreCounts, SqlDriver, SqlError, SqlRow, SqlStatement, SqlValue,
+};
 use rusqlite::types::Value as RusqliteValue;
 use rusqlite::{Connection, OpenFlags};
 
@@ -90,6 +93,95 @@ fn text_value(value: rusqlite::types::ValueRef<'_>) -> SqlValue {
         rusqlite::types::ValueRef::Blob(bytes) => {
             SqlValue::Text(String::from_utf8_lossy(bytes).into_owned())
         }
+    }
+}
+
+/// A unique temporary path for a snapshot that never outlives the call.
+fn snapshot_temp_path(label: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!("onspot-{label}-{nanos}.sqlite"))
+}
+
+fn snapshot_error(context: &str, error: impl std::fmt::Display) -> CoreError {
+    CoreError::new("storage.snapshot_failed", format!("{context}: {error}"))
+}
+
+#[async_trait]
+impl DatabaseFile for RusqliteDriver {
+    async fn export_bytes(&self) -> Result<Vec<u8>, CoreError> {
+        let path = snapshot_temp_path("export");
+        let path_text = path.to_string_lossy().into_owned();
+        let export = (|| -> Result<(), CoreError> {
+            let connection = self
+                .lock()
+                .map_err(|error| snapshot_error("the database connection is unavailable", error))?;
+            // `VACUUM INTO` writes one consistent, compact image without
+            // touching the live file, so an open connection is safe.
+            connection
+                .execute("VACUUM INTO ?1", rusqlite::params![path_text])
+                .map_err(|error| snapshot_error("the database could not be exported", error))?;
+            Ok(())
+        })();
+        if let Err(error) = export {
+            let _ = std::fs::remove_file(&path);
+            return Err(error);
+        }
+        let bytes = std::fs::read(&path)
+            .map_err(|error| snapshot_error("the export could not be read back", error));
+        let _ = std::fs::remove_file(&path);
+        bytes
+    }
+
+    async fn import_bytes(&self, bytes: &[u8]) -> Result<RestoreCounts, CoreError> {
+        let path = snapshot_temp_path("restore");
+        std::fs::write(&path, bytes)
+            .map_err(|error| snapshot_error("the backup could not be staged", error))?;
+
+        let restore = (|| -> Result<(), CoreError> {
+            let source = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|error| snapshot_error("the backup is not readable SQLite", error))?;
+            let mut destination = self
+                .lock()
+                .map_err(|error| snapshot_error("the database connection is unavailable", error))?;
+            // SQLite's own backup API copies page-by-page into the open
+            // connection, so no other connection (the legacy plugin, a second
+            // window) is left pointing at a replaced file.
+            let backup = rusqlite::backup::Backup::new(&source, &mut destination)
+                .map_err(|error| snapshot_error("the backup could not be opened", error))?;
+            backup
+                .run_to_completion(5, Duration::from_millis(10), None)
+                .map_err(|error| snapshot_error("the backup could not be restored", error))
+        })();
+        let _ = std::fs::remove_file(&path);
+        restore?;
+
+        // A snapshot from an older release still has to open on this build.
+        crate::migrate(self).await.map_err(|error| {
+            snapshot_error("the restored database could not be migrated", error)
+        })?;
+
+        Ok(RestoreCounts {
+            sessions: self.count_rows("sessions").await?,
+            attempts: self.count_rows("attempts").await?,
+        })
+    }
+}
+
+impl RusqliteDriver {
+    async fn count_rows(&self, table: &str) -> Result<usize, CoreError> {
+        let rows = self
+            .select(&format!("SELECT COUNT(*) AS total FROM {table}"), &[])
+            .await
+            .map_err(|error| snapshot_error("the restored rows could not be counted", error))?;
+        let total = rows
+            .first()
+            .and_then(|row| row.get("total"))
+            .and_then(SqlValue::as_i64)
+            .unwrap_or_default();
+        Ok(total.max(0) as usize)
     }
 }
 

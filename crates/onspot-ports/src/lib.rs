@@ -12,13 +12,20 @@
 //! P3 adds cancellation, the stable error shape and the practice audio ports.
 
 mod error;
+pub mod files;
+pub mod language_data;
 pub mod llm;
 pub mod practice;
 pub mod sql;
+pub mod sync;
 mod token;
 
 pub use error::CoreError;
-pub use llm::{HttpClient, HttpRequest, HttpResponse, LlmProvider};
+pub use files::{DatabaseFile, FileSystemSink, PickedFile, RestoreCounts};
+pub use language_data::{DownloadProgressSink, LanguageDataInstaller};
+pub use llm::{
+    HttpBytesRequest, HttpBytesResponse, HttpClient, HttpRequest, HttpResponse, LlmProvider,
+};
 pub use practice::{
     AudioCapture, AudioClip, AudioFrame, AudioLevelSink, AudioPlayback, BlobHandle, CaptureOptions,
     Clock, EngineMode, EvaluationPort, GeneratedPrompt, IdSource, ModelProgress, PlaybackRequest,
@@ -31,3 +38,4 @@ pub use sql::{
     HistoryStore, RecordsStore, SettingsStore, SqlDriver, SqlError, SqlRow, SqlStatement, SqlValue,
     StoreError,
 };
+pub use sync::{OAuthBroker, RemoteSnapshot, SyncAccount, SyncProvider, SyncStore};

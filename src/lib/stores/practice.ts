@@ -77,10 +77,9 @@ import {
 } from '#lib/languages/index.js';
 import { MAX_RECORDING_SEC, capWords, countWords } from '#lib/config.js';
 import { useCore } from '#lib/core-client/backend.js';
-import { getCoreClient } from '#lib/core-client/client.js';
-import { createPracticeHost } from '#lib/core-client/practiceHost.js';
+import { getCoreClient, getCoreHost } from '#lib/core-client/client.js';
+import type { CoreHost } from '#lib/core-client/coreHost.js';
 import { practiceApi, type PracticeApi } from '#lib/core-client/practice.js';
-import type { CoreClient } from '#lib/core-client/transport.js';
 import type {
 	PracticeConfig,
 	PracticeSnapshot as CorePracticeSnapshot,
@@ -259,9 +258,8 @@ function update(patch: Partial<PracticeState>): void {
 /** True when the practice screen runs on the Rust state machine. */
 const corePracticeEnabled = useCore('practice');
 
-let coreClient: CoreClient | null = null;
 let coreApi: PracticeApi | null = null;
-let coreHost: ReturnType<typeof createPracticeHost> | null = null;
+let coreHost: CoreHost | null = null;
 let coreReady: Promise<void> | null = null;
 let coreTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -393,30 +391,10 @@ async function tickCore(): Promise<void> {
 	}
 }
 
-/** Handles a host request and the events the core emits for the view. */
+/** Applies the events the core emits for the practice view. */
 async function handleCoreEvent(event: UiEvent): Promise<void> {
-	if (event.event === 'host_request') {
-		if (!coreHost || !coreClient) return;
-		try {
-			const result = await coreHost.handle(event.method, JSON.parse(event.payload) as unknown);
-			await coreClient.command('core.host_reply', { id: event.id, result });
-		} catch (error) {
-			await coreClient
-				.command('core.host_reply', {
-					id: event.id,
-					error: {
-						code:
-							typeof error === 'object' && error !== null && 'code' in error
-								? String((error as { code: unknown }).code)
-								: 'core.host_failed',
-						message: error instanceof Error ? error.message : String(error)
-					}
-				})
-				.catch(() => undefined);
-		}
-		return;
-	}
-
+	// Host requests are answered by the shared client host (`core-client/client.ts`)
+	// before they reach this view listener.
 	switch (event.event) {
 		case 'practice_state_changed':
 			applyCoreSnapshot(event.snapshot);
@@ -488,8 +466,7 @@ async function ensureCore(): Promise<void> {
 	if (!corePracticeEnabled) throw new Error('The core practice backend is off.');
 	coreReady ??= (async () => {
 		const client = await getCoreClient();
-		coreClient = client;
-		coreHost = createPracticeHost(client);
+		coreHost = await getCoreHost();
 		coreApi = practiceApi(client);
 		client.subscribe((event) => {
 			void handleCoreEvent(event);

@@ -7,9 +7,13 @@
 # the legacy backend is the default.
 #
 # Needs:
-#   - the wasm32-unknown-unknown target (`rustup target add wasm32-unknown-unknown`)
+#   - the wasm32-unknown-unknown standard library. With rustup:
+#     `rustup target add wasm32-unknown-unknown`. On a distro Rust without the
+#     target (Arch's `rust` without `rust-wasm`), the `rust-src` component is
+#     enough: the script falls back to `-Z build-std=std,panic_abort`.
 #   - the wasm-bindgen CLI, at exactly the `wasm-bindgen` version Cargo resolved:
 #       cargo install wasm-bindgen-cli --version <see Cargo.lock> --locked
+#     or the matching prebuilt release archive on PATH.
 #
 # Run with `bun run bridge:wasm`. A custom CLI can be named with WASM_BINDGEN.
 
@@ -29,7 +33,23 @@ if ! command -v wasm-bindgen >/dev/null 2>&1; then
 	exit 1
 fi
 
-cargo build -p onspot-bridge --target "$TARGET" --features wasm --release
+# A distro toolchain often ships only the host std. `rust-src` lets cargo build
+# the missing target std from the same compiler, which keeps the metadata
+# compatible (a stock rust-std component from another build does not).
+BUILD_STD=()
+TARGET_LIB_DIR="$(rustc --print target-libdir --target "$TARGET" 2>/dev/null || true)"
+if [ ! -d "$TARGET_LIB_DIR" ]; then
+	if [ ! -d "$(rustc --print sysroot)/lib/rustlib/src/rust/library" ]; then
+		echo "The $TARGET standard library is missing and rust-src is not installed." >&2
+		echo "Install one of them, or run with a rustup toolchain that has the target." >&2
+		exit 1
+	fi
+	echo "The $TARGET standard library is missing; building it from rust-src."
+	BUILD_STD=(-Z build-std=std,panic_abort)
+	export RUSTC_BOOTSTRAP=1
+fi
+
+cargo build -p onspot-bridge --target "$TARGET" --features wasm --release "${BUILD_STD[@]}"
 mkdir -p "$OUT_DIR"
 
 wasm-bindgen "$TARGET_DIR/$TARGET/release/onspot_bridge.wasm" \

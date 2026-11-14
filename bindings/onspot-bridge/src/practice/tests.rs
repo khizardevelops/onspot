@@ -25,6 +25,7 @@ fn core() -> (Core, Arc<HostReplies>) {
         history: Some(Arc::new(SqlHistoryStore::new(driver.clone()))),
         settings: None,
         records: Some(Arc::new(SqlRecordsStore::new(driver))),
+        ..HostAdapters::default()
     };
     let core = Core::with_hosts(
         CoreConfig {

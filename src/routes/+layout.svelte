@@ -20,6 +20,8 @@
 	import '#lib/stores/textSize.svelte.js';
 	import '#lib/stores/zoom.svelte.js';
 	import { toast } from '#lib/stores/toast.js';
+	import { coreBackend } from '#lib/core-client/backend.js';
+	import { getCoreClient } from '#lib/core-client/client.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import PermissionsPrompt from '#lib/components/PermissionsPrompt.svelte';
@@ -29,7 +31,7 @@
 	import PaperTexture from '#lib/components/PaperTexture.svelte';
 	import NeoThemeSync from '#lib/components/NeoThemeSync.svelte';
 	import WindowBar from '#lib/components/WindowBar.svelte';
-	import { currentRuntime } from '#lib/platform/runtime.js';
+	import { currentRuntime, isTauri } from '#lib/platform/runtime.js';
 	import { trackPageHistory } from '#lib/navigation/back.svelte.js';
 	import { showPressesImmediately } from '#lib/gestures/pressFeedback.js';
 	import type { PaperTextureParams } from '@paper-design/shaders';
@@ -103,15 +105,24 @@
 	 * First run: send a learner with no usable LLM to the setup guide. Skipping
 	 * or finishing the guide stops this; Settings can always reopen it.
 	 */
-	function offerOnboarding(): void {
+	async function offerOnboarding(): Promise<void> {
 		if (page.url.pathname === pageHref('/welcome')) return;
-		if (!shouldOfferOnboarding()) return;
+		if (!(await shouldOfferOnboarding())) return;
 		if (get(llmConfigured)) return;
 		void goto(pageHref('/welcome'));
 	}
 
 	onMount(() => {
 		applyTheme(initialTheme);
+		// The Tauri shell always has its Rust core. Boot it at startup so the
+		// driver host (sync, export, language downloads, OAuth) is answering
+		// before the learner opens the screen that needs it. The browser build
+		// still boots lazily, when a core feature first asks.
+		if (coreBackend === 'core' && isTauri()) {
+			void getCoreClient().catch((error) => {
+				console.error('[startup] the core bridge could not start', error);
+			});
+		}
 		// Production web builds only; the module skips dev and the Tauri apps.
 		void registerPwa();
 		void initSettings()

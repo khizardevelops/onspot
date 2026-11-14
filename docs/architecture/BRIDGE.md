@@ -76,9 +76,19 @@ until its phase declares the payload in the bridge and generates the type.
 | `settings.set` | P2 **implemented** | `{ key, value }` → `{ changed }`; emits `settings_changed`. |
 | `usage.summary` | P6 | Ledger totals for the monitor. |
 | `insights.summary` | P5 | Aggregated corrections and patterns. |
-| `export.session_markdown` | P7 | Assemble a session transcript document. |
+| `export.session_markdown` | P7 **implemented** | Assemble a session transcript document. |
+| `export.database` | P7 **implemented** | `{}` → `{ saved, fileName }`; a whole `.sqlite` image through `FileSystemSink` (`fs.save`). |
+| `restore.pick` | P7 **implemented** | `{}` → `{ fileName }`; opens the picker (`fs.pick`), checks the format and stages the backup. |
+| `restore.confirm` | P7 **implemented** | `{}` → `{ sessions, attempts }`; replaces the database from the staged backup. |
+| `restore.cancel` | P7 **implemented** | `{}` → `{ cancelled }`; discards a staged backup. |
+| `sync.decide` | P7 **implemented** | `{ comparison, choice? }` → `{ decision }`; the conflict policy. |
+| `reminders.state` / `onboarding.decide` / `prompts.catalogue` / `language.plan` / `language.catalog` | P7 **implemented** | Pure state and catalog lookups used by the driver stores. |
 | `sync.status` / `sync.run` / `sync.resolve_conflict` | P7 | Drive sync and the conflict decision. |
-| `language.data_status` / `language.download` | P7 | Plan and run model downloads. |
+| `language.plan` | P7 **implemented** | `{ input }` → required/installed parts, pending bytes and readiness (byte counts are `u32` so wasm does not hand the driver a `bigint`). |
+| `language.catalog` | P7 **implemented** | The checked-in registry as JSON. |
+| `language.download` | P7 **implemented** | `{ input }` → final `{ status, progress, pending, ready, label }`; runs the missing STT, voice and explanation-voice downloads in order. |
+| `language.cancel_download` | P7 **implemented** | `{}` → `{ cancelled }`; marks the session cancelled and asks the driver to stop its worker. |
+| `language.download_progress` | P7 **implemented** | `{ progress }` → `{ accepted }`; the driver feeds worker progress back into the running session. |
 | `secrets.set` / `secrets.clear` | driver-local (ADR-007) | BYOK keys are read/written by the driver's `SecretStore` (`core-client/secrets.ts`, `localStorage` on both runtimes). They are deliberately not commands: keys never cross the bridge, enter SQLite, settings or exports. |
 
 ## Boot handshake
@@ -117,7 +127,7 @@ use case can emit without knowing a driver exists.
 | `take_silent` | P3 **implemented** | `{}` — the snapshot carries the stable error code. |
 | `speak_track` / `play_segment` / `speak_text` / `play_recording` | P3 **implemented** | The driver performs playback; the core decides what and in which order. |
 | `host_request` | P3 **implemented** | `{ id, method, payload }` — an internal request to the driver, answered with `core.host_reply`. P4 adds the `http.request` method for LLM transport. |
-| `download_progress` | P7 | `{ target, loadedBytes, totalBytes, label }`. |
+| `download_progress` | P7 **implemented** | `{ target, loaded_bytes, total_bytes, label, progress }`; `progress` is the combined 0–100 figure, `target` names the current part (`stt`, `voice`, `explanation_voice`, `ready`). |
 | `usage_warning` | P6 | `{ provider, window, remaining }`. |
 | `sync_changed` | P7 | `{ state, remoteModifiedAt }`. |
 | `error` | P1 **implemented** | `{ code, message }` — recoverable; the driver maps the code to learner copy. |

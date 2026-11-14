@@ -11,6 +11,7 @@ use ts_rs::TS;
 use crate::events::{EventSink, UiEvent};
 use crate::host_rpc::HostRpc;
 use crate::hosts::HostAdapters;
+use onspot_ports::{ModelProgress, PickedFile};
 
 /// What a driver tells the core at boot.
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -82,6 +83,8 @@ pub struct Core {
     bus: Arc<EventBus>,
     host_rpc: Arc<HostRpc>,
     practice: Mutex<Option<Arc<crate::practice::RunPracticeSession>>>,
+    staged_restore: Mutex<Option<PickedFile>>,
+    language_download: Mutex<Option<Arc<crate::language_download::RunLanguageDownload>>>,
 }
 
 impl Core {
@@ -101,6 +104,8 @@ impl Core {
             bus,
             host_rpc,
             practice: Mutex::new(None),
+            staged_restore: Mutex::new(None),
+            language_download: Mutex::new(None),
         }
     }
 
@@ -170,6 +175,77 @@ impl Core {
     pub fn remove_practice(&self) {
         if let Ok(mut slot) = self.practice.lock() {
             *slot = None;
+        }
+    }
+
+    /// Keeps a picked backup until the learner confirms or cancels it.
+    pub fn stage_restore(&self, file: PickedFile) {
+        if let Ok(mut slot) = self.staged_restore.lock() {
+            *slot = Some(file);
+        }
+    }
+
+    /// The staged backup, if one is waiting for confirmation.
+    pub fn staged_restore(&self) -> Option<PickedFile> {
+        self.staged_restore
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone())
+    }
+
+    /// Removes and returns the staged backup, so a restore cannot run twice.
+    pub fn take_staged_restore(&self) -> Option<PickedFile> {
+        self.staged_restore
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take())
+    }
+
+    /// Discards a staged backup after the learner cancels.
+    pub fn clear_staged_restore(&self) {
+        if let Ok(mut slot) = self.staged_restore.lock() {
+            *slot = None;
+        }
+    }
+
+    /// Installs the running language-data download. A second call replaces it.
+    pub fn install_language_download(
+        &self,
+        session: Arc<crate::language_download::RunLanguageDownload>,
+    ) -> Arc<crate::language_download::RunLanguageDownload> {
+        if let Ok(mut slot) = self.language_download.lock() {
+            *slot = Some(session.clone());
+        }
+        session
+    }
+
+    /// The running language-data download, if one is in flight.
+    pub fn language_download(&self) -> Option<Arc<crate::language_download::RunLanguageDownload>> {
+        self.language_download
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone())
+    }
+
+    /// Drops the language-data download once it has finished or failed.
+    pub fn remove_language_download(&self) {
+        if let Ok(mut slot) = self.language_download.lock() {
+            *slot = None;
+        }
+    }
+
+    /// Marks the running download cancelled. The bridge also stops the host
+    /// worker, because the core cannot reach a Web Worker directly.
+    pub fn cancel_language_download(&self) {
+        if let Some(session) = self.language_download() {
+            session.cancel();
+        }
+    }
+
+    /// Forwards one host progress reading into the running download.
+    pub fn report_language_download_progress(&self, progress: &ModelProgress) {
+        if let Some(session) = self.language_download() {
+            session.report_from_host(progress);
         }
     }
 }

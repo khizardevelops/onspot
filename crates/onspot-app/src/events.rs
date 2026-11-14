@@ -68,6 +68,14 @@ pub enum UiEvent {
     SpeakText { text: String },
     /// Play the take's stored recording.
     PlayRecording { attempt_id: String },
+    /// A language-data download moved; `progress` is the combined 0–100 figure.
+    DownloadProgress {
+        target: String,
+        loaded_bytes: u32,
+        total_bytes: u32,
+        label: String,
+        progress: f32,
+    },
     /// A usage meter crossed the low-remaining or exhausted threshold.
     UsageWarning {
         kind: String,

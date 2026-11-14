@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { useCore } from '#lib/core-client/backend.js';
+import { connectSyncCore, disconnectSyncCore } from '#lib/core-client/sync.js';
 import { httpRequest, requireOk } from '../http.js';
 import {
 	SyncError,
@@ -175,12 +177,17 @@ export class GoogleDriveProvider implements SyncProvider {
 	}
 
 	connect(): Promise<SyncAccount> {
+		if (useCore('sync')) return connectSyncCore({ provider: 'google-drive' });
+
 		return connectGoogleDrive();
 	}
 
-	disconnect(): Promise<void> {
+	async disconnect(): Promise<void> {
+		if (useCore('sync')) {
+			await disconnectSyncCore({ provider: 'google-drive' });
+		}
+
 		disconnectGoogleDrive();
-		return Promise.resolve();
 	}
 
 	getRemote(): Promise<RemoteFile | null> {

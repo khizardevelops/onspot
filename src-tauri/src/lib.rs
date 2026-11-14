@@ -35,7 +35,7 @@ pub fn run() {
             use onspot_adapter_repo_sql::{
                 migrate, RusqliteDriver, SqlHistoryStore, SqlRecordsStore, SqlSettingsStore,
             };
-            use onspot_ports::SqlDriver;
+            use onspot_ports::{DatabaseFile, SqlDriver};
             use tauri::Manager;
 
             #[cfg(target_os = "linux")]
@@ -45,12 +45,15 @@ pub fn run() {
             // own pooled connection to the same file until P8 (ADR-005); the
             // migration chain is idempotent and both paths see the same rows.
             let database_path = app.path().app_config_dir()?.join("onspot.db");
-            let driver: Arc<dyn SqlDriver> = Arc::new(RusqliteDriver::open(&database_path)?);
-            tauri::async_runtime::block_on(migrate(driver.as_ref()))?;
+            let database = Arc::new(RusqliteDriver::open(&database_path)?);
+            tauri::async_runtime::block_on(migrate(database.as_ref()))?;
+            let driver: Arc<dyn SqlDriver> = database.clone();
+            let database_file: Arc<dyn DatabaseFile> = database;
             app.manage(core_bridge::BridgeState::new(
                 Arc::new(SqlHistoryStore::new(driver.clone())),
                 Arc::new(SqlSettingsStore::new(driver.clone())),
                 Arc::new(SqlRecordsStore::new(driver)),
+                database_file,
             ));
             if cfg!(debug_assertions) {
                 app.handle().plugin(

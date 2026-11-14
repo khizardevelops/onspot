@@ -91,7 +91,11 @@ const sections = TYPE_ORDER.map((typeName) => {
 	} catch {
 		throw new Error(`missing ${typeName}.ts: run \`cargo test -p onspot-app -p onspot-bridge export_bindings\` first`);
 	}
-	return source.replace(TS_RS_HEADER, '').replace(TS_RS_IMPORT, '').trimEnd();
+	return source
+		.replace(TS_RS_HEADER, '')
+		.replace(TS_RS_IMPORT, '')
+		.replace(/[ \t]+$/gm, '')
+		.trimEnd();
 });
 
 const output = `// SPDX-License-Identifier: AGPL-3.0-or-later

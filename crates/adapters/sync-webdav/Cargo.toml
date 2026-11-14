@@ -11,3 +11,8 @@ publish = false
 [dependencies]
 onspot-domain = { path = "../../onspot-domain" }
 onspot-ports = { path = "../../onspot-ports" }
+async-trait = "0.1"
+base64 = "0.22"
+
+[dev-dependencies]
+futures = "0.3"

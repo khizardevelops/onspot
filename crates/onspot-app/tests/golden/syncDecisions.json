@@ -1,0 +1,162 @@
+{
+	"capturedFrom": "docs/architecture/sync.md decision table, 2026-11-13 (P7)",
+	"source": "src/lib/adapters/sync/service.ts",
+	"function": "decideSync",
+	"cases": [
+		{
+			"name": "a device with no cloud copy uploads without asking",
+			"input": { "revision": 4, "syncedRevision": null },
+			"expected": { "decision": "upload", "hasLocalChanges": true, "hasRemoteChanges": false }
+		},
+		{
+			"name": "matching revisions and etag are up to date",
+			"input": {
+				"revision": 4,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				},
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-12T10:00:00Z",
+					"etag": "e1",
+					"size": 1024
+				}
+			},
+			"expected": { "decision": "up-to-date", "hasLocalChanges": false, "hasRemoteChanges": false }
+		},
+		{
+			"name": "local edits with an unchanged cloud copy upload",
+			"input": {
+				"revision": 5,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				},
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-12T10:00:00Z",
+					"etag": "e1",
+					"size": 1024
+				}
+			},
+			"expected": { "decision": "upload", "hasLocalChanges": true, "hasRemoteChanges": false }
+		},
+		{
+			"name": "an edited cloud copy asks before replacing this device",
+			"input": {
+				"revision": 4,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				},
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-13T10:00:00Z",
+					"etag": "e2",
+					"size": 2048
+				}
+			},
+			"expected": { "decision": "needs-choice", "hasLocalChanges": false, "hasRemoteChanges": true }
+		},
+		{
+			"name": "changes on both sides ask and never pick a copy",
+			"input": {
+				"revision": 5,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				},
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-13T10:00:00Z",
+					"etag": "e2",
+					"size": 2048
+				}
+			},
+			"expected": { "decision": "needs-choice", "hasLocalChanges": true, "hasRemoteChanges": true }
+		},
+		{
+			"name": "a cloud copy this device never synced with asks first",
+			"input": {
+				"revision": 4,
+				"syncedRevision": 4,
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-13T10:00:00Z",
+					"etag": "e2",
+					"size": 2048
+				}
+			},
+			"expected": { "decision": "needs-choice", "hasLocalChanges": false, "hasRemoteChanges": true }
+		},
+		{
+			"name": "a deleted cloud copy is recreated by an upload",
+			"input": {
+				"revision": 4,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				}
+			},
+			"expected": { "decision": "upload", "hasLocalChanges": false, "hasRemoteChanges": true }
+		},
+		{
+			"name": "an explicit cloud choice downloads even after divergence",
+			"input": {
+				"revision": 5,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				},
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-13T10:00:00Z",
+					"etag": "e2",
+					"size": 2048
+				},
+				"choice": "download"
+			},
+			"expected": { "decision": "download", "hasLocalChanges": true, "hasRemoteChanges": true }
+		},
+		{
+			"name": "an explicit device choice uploads even after divergence",
+			"input": {
+				"revision": 5,
+				"syncedRevision": 4,
+				"metadata": {
+					"etag": "e1",
+					"remoteFileId": "file",
+					"lastSyncedAt": "2026-11-12T10:00:00Z"
+				},
+				"remote": {
+					"id": "file",
+					"name": "onspot.sqlite",
+					"modifiedAt": "2026-11-13T10:00:00Z",
+					"etag": "e2",
+					"size": 2048
+				},
+				"choice": "upload"
+			},
+			"expected": { "decision": "upload", "hasLocalChanges": true, "hasRemoteChanges": true }
+		}
+	]
+}

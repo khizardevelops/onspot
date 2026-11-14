@@ -9,7 +9,7 @@
 //! `SqlDriver`, and a test can supply an in-memory implementation.
 use std::sync::Arc;
 
-use onspot_ports::{HistoryStore, RecordsStore, SettingsStore};
+use onspot_ports::{DatabaseFile, HistoryStore, RecordsStore, SettingsStore};
 
 /// The host implementations a driver supplies at boot.
 #[derive(Clone, Default)]
@@ -20,4 +20,8 @@ pub struct HostAdapters {
     pub settings: Option<Arc<dyn SettingsStore>>,
     /// Prompts, full sessions/attempts, corrections, audio and sync metadata.
     pub records: Option<Arc<dyn RecordsStore>>,
+    /// A native whole-database image port. Drivers that export through their
+    /// own engine (the rusqlite driver) set it; the browser leaves it unset and
+    /// the bridge asks the host's SQLite worker instead.
+    pub database_file: Option<Arc<dyn DatabaseFile>>,
 }

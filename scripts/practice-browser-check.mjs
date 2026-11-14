@@ -205,7 +205,7 @@ async function fullLoopCheck(tone) {
 			{ timeout: 120_000 }
 		);
 
-		const { snapshot, translation: _translation, insights, glosses, phrase, usage } = await page.evaluate(async () => {
+		const { snapshot, translation: _translation, insights, glosses, phrase, usage, exported, sync, reminder, prompts, onboarding, language, catalog } = await page.evaluate(async () => {
 			const find = (name) =>
 				performance
 					.getEntriesByType('resource')
@@ -292,6 +292,30 @@ async function fullLoopCheck(tone) {
 				end: 1,
 				phrase: 'Bonjour je'
 			});
+			const exported = await client.command('export.session_markdown', { sessionId: snapshot.sessionId });
+			const onboarding = await client.command('onboarding.decide', { stored: null });
+			const catalog = await client.command('language.catalog', null);
+			const language = await client.command('language.plan', {
+				input: {
+					languageId: 'fr', instructionLanguageId: 'en', native: true,
+					required: { stt: true, voice: true, explanationVoice: false },
+					installed: { stt: false, voice: false, explanationVoice: false },
+					voiceId: null, explanationVoiceId: null
+				}
+			});
+			const prompts = await client.command('prompts.catalogue', {
+				instructionLanguage: 'en', targetLanguage: 'fr'
+			});
+			const reminder = await client.command('reminders.state', {
+				enabled: true, lastPractisedAtMs: Date.now() - 2 * 86_400_000,
+				snoozedUntilMs: null, frequency: 'frequent', nowMs: Date.now()
+			});
+			const sync = await client.command('sync.decide', {
+				comparison: {
+					localRevision: 2, syncedRevision: 1, localSize: null, remote: null,
+					lastSyncedAt: null, hasLocalChanges: true, hasRemoteChanges: false
+				}
+			});
 			if (!usage.services?.length) throw new Error('usage snapshot returned no services');
 			const llmUsage = usage.services.find((service) => service.capability === 'LLM');
 			if (!llmUsage?.meters.length) throw new Error('usage snapshot returned no LLM meters');
@@ -306,7 +330,7 @@ async function fullLoopCheck(tone) {
 			if (!monitored.some((service) => service.capability === 'LLM' && service.meters.length)) {
 				throw new Error('core usage monitor did not publish meters');
 			}
-			return { snapshot, translation, insights, glosses, phrase, usage };
+			return { snapshot, translation, insights, glosses, phrase, usage, exported, sync, reminder, prompts, onboarding, language, catalog };
 		});
 
 		if (snapshot.phase !== 'idle' || snapshot.attempts.length !== 1) {
@@ -332,6 +356,15 @@ async function fullLoopCheck(tone) {
 		}
 		if (glossCalls !== 1) throw new Error(`gloss cache did not coalesce: ${glossCalls} calls`);
 		if (phrase.meaning !== 'Hello, I') throw new Error('the Rust phrase command did not return a meaning');
+		if (!exported.markdown.startsWith('# Le marché') || !exported.markdown.includes('Bonjour je vais au marché ce matin')) {
+			throw new Error(`the Rust session Markdown did not contain the take: ${JSON.stringify(exported)}`);
+		}
+		if (sync.decision !== 'upload') throw new Error(`unexpected sync decision: ${sync.decision}`);
+		if (!reminder.due || !reminder.nextAt) throw new Error('the Rust reminder was not due');
+		if (!prompts.prompts.some((prompt) => prompt.id === 'en-morning-routine')) throw new Error('the Rust prompt catalogue was empty');
+		if (!onboarding.shouldOffer) throw new Error('the Rust onboarding decision should offer the guide');
+		if (!language.pending?.stt || language.ready) throw new Error('the Rust language plan did not report missing data');
+		if (!catalog.languages.some((entry) => entry.id === 'fr')) throw new Error('the Rust language catalog was empty');
 		if (errors.length > 0) throw new Error(`page errors: ${errors.join(' | ')}`);
 		return `stt=${sttCalls}, eval=${evaluationCalls}, attempt ${snapshot.attempts[0].attempt.id}, translations ready`;
 	} finally {

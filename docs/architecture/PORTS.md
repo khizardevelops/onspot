@@ -23,6 +23,8 @@ stable code (see `BRIDGE.md`).
 | `HttpClient` | `adapters/sync/http.ts`, direct `fetch` | 136 | `reqwest` (P7) | `fetch` shim | One place decides CORS vs Tauri HTTP plugin vs native. |
 | `OAuthBroker` | `adapters/sync/google/oauth.ts` + `src-tauri/src/oauth.rs` | 424 + Rust | reuse loopback (P7) | Google Identity Services shim | Loopback capture already exists in Rust; the token exchange policy moves. |
 | `BlobStore` | OPFS paths, `tauri-plugin-fs`, model cache | ~300 | `tauri-plugin-fs` (P7) | OPFS shim, permanent | Covers recordings, cached clips and downloaded models. |
+| `LanguageDataInstaller` | `stores/languageData.ts` + STT/TTS services | 443 + workers | host worker calls (P7 **implemented**) | Transformers.js / Piper workers, permanent | The core plans, sequences and folds progress; the driver fetches and caches. Progress returns as `language.download_progress`; Cancel reaches the worker through `language.cancel`. |
+| `FileSystemSink` / `DatabaseFile` | `utils/export.ts`, `adapters/db/*` | 433 | host dialogs + `repo-sql` backup (P7 **implemented**) | `browser-fs-access` + sqlite-wasm, permanent | Whole-database export/restore. The core owns the file name and pre-restore format checks; bytes cross as base64 host calls. Native import uses SQLite's online backup, so open connections are not pointed at a replaced file. |
 | `Clock` | `Date.now` | — | std (P3) | injected | **P3 declared.** Tests never sleep. |
 | `IdGen` | `newId()`/`crypto.randomUUID` | — | std/ulid (P2) | injected | Deterministic in fixtures. |
 | `NotificationScheduler` | `platform/notifications.ts`, `stores/reminders.ts` | 199 + | Tauri notification (P7) | Notification API shim, permanent | On Apple touch devices the capability is absent by design. |

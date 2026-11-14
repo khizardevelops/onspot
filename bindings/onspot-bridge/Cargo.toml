@@ -17,10 +17,13 @@ onspot-app = { path = "../../crates/onspot-app" }
 onspot-domain = { path = "../../crates/onspot-domain" }
 onspot-ports = { path = "../../crates/onspot-ports" }
 onspot-adapter-llm-openai = { path = "../../crates/adapters/llm-openai" }
+onspot-adapter-sync-webdav = { path = "../../crates/adapters/sync-webdav" }
+onspot-adapter-sync-drive = { path = "../../crates/adapters/sync-drive" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = "12"
 async-trait = "0.1"
+base64 = "0.22"
 # The command bodies are async use cases, while the dispatcher stays sync for
 # both transports. The native driver completes without yielding, so a plain
 # executor is enough; the wasm SQL shim will make dispatch async.

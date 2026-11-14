@@ -70,11 +70,43 @@ installed. After switching to a branch with different dependencies, run
 - `bun run bridge:types` — regenerate `src/lib/core-client/types.gen.ts` and its per-type
   `bindings/` files from the Rust types (`cargo test -p onspot-app -p onspot-bridge export_bindings`
   then `scripts/bridge-types.mjs`). Commit the result; CI fails on a diff.
+- `bun run catalog:export` / `bun run catalog:check` — regenerate or verify
+  `crates/onspot-app/assets/languages.json` from `src/lib/languages/` (languages, instruction
+  languages, voices and each voice's asset list). `catalog:check` is the generation-diff gate, like
+  `bridge:types`; run it after touching the registry.
 - `bun run bridge:wasm` — build the web transport into the gitignored `static/core-bridge/`.
-  Needs the `wasm32-unknown-unknown` target and `wasm-bindgen` at the version in `Cargo.lock`
-  (0.2.130 at P1). The web build defaults to `core`, so run this before `bun run build` for a
-  deploy; the Pages/Cloudflare workflows and `scripts/cf-deploy.sh` now do it themselves.
+  Needs the `wasm32-unknown-unknown` standard library and `wasm-bindgen` at the version in
+  `Cargo.lock` (0.2.130). With Rustup: `rustup target add wasm32-unknown-unknown`. On distro Rust
+  without the target, **the script falls back to `rust-src` + `-Z build-std=std,panic_abort`**
+  (`RUSTC_BOOTSTRAP=1` is set internally); a stock `rust-std` component from another build is not
+  metadata-compatible. The prebuilt `wasm-bindgen-0.2.130-x86_64-unknown-linux-musl` archive works
+  on PATH. The web build defaults to `core`, so run this before `bun run build` for a deploy; the
+  Pages/Cloudflare workflows and `scripts/cf-deploy.sh` now do it themselves.
   `VITE_CORE_BACKEND=legacy` remains the fallback selector.
+- `bun run test:sync` — real Chrome + an in-memory WebDAV server with CORS: connect (Basic auth),
+  first upload, a no-op second sync, a touched remote that returns `needs-choice`, an explicit
+  download that restores the database, and a corrupt remote that is rejected before replacement.
+  Starts its own dev server on port 4323 and needs `bun run bridge:wasm` first.
+- `bun run test:portability` — Chrome + dev server: the walkthroughs the unit tests cannot cover.
+  One context writes a session and exports the database through `export.database` (browser
+  download, captured by Playwright); the context is closed (the wipe); a fresh context stages the
+  file through `restore.pick` (file chooser) and `restore.confirm`, then reads the restored
+  history and session Markdown back through the core. A third context skips the fresh-database
+  setup guide and proves the redirect stops, and a due reminder reaches a stubbed
+  `Notification`. Needs `bun run bridge:wasm` first.
+- `bun run test:portability:desktop` — the release app under Xvfb (`:98`) + WebKitWebDriver
+  (`:4457`) + `xdotool`: clicks the real Settings → Data export/restore buttons, answers the native
+  GTK Save/Open dialogs, confirms the replace, and proves the exported setting came back. This is
+  the check that caught the missing `dialog:allow-open` capability (the button did nothing because
+  the plugin rejected the open call). Needs `bunx tauri build --no-bundle`, `WebKitWebDriver`,
+  `Xvfb` and `xdotool`.
+- `bun run test:sync:desktop` — the release Tauri app under Xvfb + WebKitWebDriver against the
+  same in-memory WebDAV fixture: connect, native SQLite export, upload, no-op, touched remote →
+  `needs-choice`, rusqlite online-backup restore, and a foreign remote refused before the device
+  database is touched. Needs `bunx tauri build --no-bundle` first (the script fails fast if
+  `target/release/onspot` or `/usr/bin/WebKitWebDriver` is missing). It creates a throwaway
+  `XDG_*` profile, starts its own Xvfb on `:99`, and drives `core_command` directly; the app now
+  boots the shared core host before its first screen, so the host calls are answered.
 - `bun run test:storage` — real Chrome + dev server: the wasm bridge, the Rust migration (including
   the checked-in schema-9 fixture through an in-memory sqlite-wasm host), settings persistence,
   history read/write and the secret-leak regression. Needs `bun run bridge:wasm` first and

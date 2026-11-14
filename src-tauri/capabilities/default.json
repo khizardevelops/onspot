@@ -13,6 +13,7 @@
     "sql:default",
     "sql:allow-execute",
     "dialog:allow-save",
+    "dialog:allow-open",
     "speech:default",
     "opener:default",
     "opener:allow-open-url",

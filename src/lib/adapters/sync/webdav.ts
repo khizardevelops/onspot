@@ -4,6 +4,8 @@ import { get } from 'svelte/store';
 import { isTauri } from '#lib/platform/runtime.js';
 import { appSettings } from '#lib/stores/settings.js';
 import { webdavPassword, webdavUsername } from '#lib/stores/secrets.js';
+import { useCore } from '#lib/core-client/backend.js';
+import { connectSyncCore, disconnectSyncCore, type SyncTarget } from '#lib/core-client/sync.js';
 import { httpRequest, readErrorBody, requireOk } from './http.js';
 import {
 	SyncError,
@@ -392,7 +394,25 @@ export class WebdavProvider implements SyncProvider {
 		}
 	}
 
+	private target(): SyncTarget {
+		const config = configOf();
+
+		return {
+			provider: 'webdav',
+			webdav: {
+				baseUrl: config.baseUrl,
+				path: config.path,
+				username: config.username,
+				password: config.password
+			}
+		};
+	}
+
 	async connect(): Promise<SyncAccount> {
+		if (useCore('sync')) {
+			return connectSyncCore(this.target());
+		}
+
 		await this.transport().test();
 
 		const account = this.getAccount();
@@ -403,10 +423,13 @@ export class WebdavProvider implements SyncProvider {
 		return account;
 	}
 
-	disconnect(): Promise<void> {
+	async disconnect(): Promise<void> {
+		if (useCore('sync')) {
+			await disconnectSyncCore(this.target());
+		}
+
 		webdavUsername.set('');
 		webdavPassword.set('');
-		return Promise.resolve();
 	}
 
 	async getRemote(): Promise<RemoteFile | null> {

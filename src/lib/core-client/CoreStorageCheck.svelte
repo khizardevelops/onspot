@@ -189,7 +189,29 @@
 				if (dump.includes('secret-value')) throw new Error('a secret leaked into the database export');
 				localStorage.removeItem(secretKey);
 
-				detail = `${fixture} · ${persisted ? 'persisted · ' : ''}${listed.settings.length} settings · ${history.sessions.length} sessions`;
+				// P7: the planner returns plain numbers (not BigInt) and the
+				// catalog sizes reach the driver in the shape the bar consumes.
+				const plan = await client.command<{
+					pending: { stt: number; voice: number; storage: number };
+					ready: boolean;
+				}>('language.plan', {
+					input: {
+						languageId: 'fr',
+						instructionLanguageId: 'en',
+						native: false,
+						required: { stt: true, voice: true, explanationVoice: false },
+						installed: { stt: false, voice: false, explanationVoice: true },
+						voiceId: null,
+						explanationVoiceId: null
+					}
+				});
+				if (typeof plan.pending.storage !== 'number' || plan.pending.storage <= 0)
+					throw new Error('language.plan returned no numeric pending bytes');
+				if (plan.pending.stt <= 0 || plan.pending.voice <= 0)
+					throw new Error('language.plan did not size the missing parts');
+				if (plan.ready) throw new Error('language.plan called a missing setup ready');
+
+				detail = `${fixture} · ${persisted ? 'persisted · ' : ''}${listed.settings.length} settings · ${history.sessions.length} sessions · plan ${plan.pending.storage} B`;
 				status = 'pass';
 			} catch (error) {
 				status = 'fail';

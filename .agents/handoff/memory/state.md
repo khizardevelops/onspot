@@ -2,6 +2,79 @@
 
 # State
 
+## Hexagonal migration: P7 complete in code, web and desktop sync (2026-11-14, branch `refactor/hex-arch-p0`)
+
+- **Done:** session Markdown export (core builder, bridge command, UI route), backup format guards,
+  sync decision policy + `sync.decide` (used by `syncNow`), checked-in language catalog with Rust
+  lookup, prompt catalogue + seeding, pure reminder/onboarding decision helpers, the core
+  reminder route used by the store, the onboarding decision used by the layout redirect, and now
+  the whole-database export/restore flow.
+- **Database backups:** `FileSystemSink` and `DatabaseFile` ports; `export.database` (dated name,
+  format checks, `fs.save`), two-step `restore.pick`/`restore.confirm`/`restore.cancel` with the
+  staged backup held in `Core`; bytes cross as base64 host calls. Native rusqlite import uses
+  SQLite's online backup (no replaced file under open connections) and migrates old snapshots;
+  the web host reuses `restoreSqliteBytes`. Data Settings use the core path under `useCore('export')`.
+- **Verified:** 8 portability unit tests (secrets boundary, foreign-file rejection, staging and
+  counts), 3 native snapshot tests (release v9 fixture → schema 12, export → fresh DB → re-export
+  round trip), `cargo test --workspace`, clippy, svelte-check (0 errors), production build,
+  boundaries and SPDX.
+- **Language data:** `LanguageDataInstaller` port + `RunLanguageDownload` sequence the missing
+  STT/voice/explanation-voice parts, fold worker progress into one figure and emit
+  `download_progress`; `language.download`, `language.cancel_download` and
+  `language.download_progress` are wired, the driver host calls keep bytes/workers local, and the
+  existing progress bar reads the same store. `refreshLanguageData` now takes pending/readiness
+  from `language.plan`; byte fields are `u32` so wasm never hands the driver a `bigint`. The
+  checked-in catalog carries per-voice assets, so the planner sums them, dedupes URLs shared by the
+  target and explanation voices, and keeps `transfer` below `storage` for compressed files
+  (Japanese G2P). `voiceAssets` moved into `languages/voices.ts`; `assets.ts` is gone.
+- **Verified:** the asset-level planner tests (shared model counted once, installed target still
+  shares, Japanese transfer < storage), 3 download session tests (order/weights, skip installed,
+  failure state), `catalog:check`, the browser storage check asserts `language.plan` bytes; all P7
+  gates above plus wasm rebuild, `test:storage`, `test:practice`, workspace tests/clippy,
+  svelte-check, build and boundaries.
+- **Sync ports (P7):** `onspot-ports::sync` defines `RemoteSnapshot`, `SyncAccount`, `SyncProvider`
+  (native/wasm variants), `OAuthBroker` and a narrow `SyncStore`; `HttpClient::send_bytes` carries
+  binary bodies. `onspot-app::sync::run_sync` owns probe → compare → decide → upload/download, rejects a
+  foreign/corrupt remote before importing it, and returns `completed`/`replaced_local`.
+  `onspot-adapter-sync-webdav` (PROPFIND/MKCOL/PUT/GET, Basic auth, etag normalization) and
+  `onspot-adapter-sync-drive` (appDataFolder, resumable upload, 401 refresh-retry) are behind the
+  port. The bridge adds `sync.connect/account/disconnect/now`, `http.sync` (base64 binary HTTP),
+  `oauth.access_token/connect/account/disconnect` shims, and a `RecordsStore`-backed `SyncStore`.
+  `syncNow` and the WebDAV/Drive providers' connect/disconnect run through the core under
+  `useCore('sync')`; `connectSyncCore`/`accountSyncCore`/`disconnectSyncCore` are in
+  `core-client/sync.ts`.
+- **Verified:** 9-case `syncDecisions.json` golden (decision table incl. both explicit choices),
+  6 core `run_sync` tests, 8 WebDAV + 8 Drive adapter tests, `bun run test:sync` (Chrome + an
+  in-memory WebDAV server with CORS: connect, upload, no-op, local edit + touched remote → needs-choice,
+  explicit download restores, corrupt remote rejected before replacement), and
+  `bun run test:sync:desktop` (release Tauri app under Xvfb + WebKitWebDriver against the same
+  fixture: native SQLite export, plugin-HTTP WebDAV, rusqlite online-backup restore, foreign
+  remote refused). `bun run test:portability` covers export → fresh context (wipe) → restore →
+  history/Markdown intact, the fresh-database setup guide skip, and a due reminder reaching a
+  stubbed system notification. `bun run test:portability:desktop` drives the real Tauri buttons and
+  native GTK Save/Open dialogs under Xvfb/xdotool and verifies an exported setting returns. The
+  web sync check now forces a real divergence (local write plus touched remote). Workspace tests,
+  clippy, svelte-check 0 errors, build, boundaries, SPDX.
+- **Driver host wiring fixed:** `getCoreClient` now installs the one `createCoreHost` and answers
+  every `host_request` (`http.sync`, `fs.*`, `db.*`, `oauth.*`, language downloads, practice).
+  Before this, only the practice store installed it, so sync/export/language could hang on a
+  screen that had not booted Practice. The Tauri/Android shell also boots the core at startup so
+  the host is ready before the first feature screen.
+- **Desktop capability fixed:** the default capability granted `dialog:allow-save` but not
+  `dialog:allow-open`, so **Restore .sqlite** was rejected before a picker appeared. Added the
+  permission; the dialog's dynamic scope then lets `fs.readFile` read the chosen path.
+- **Planner partial caches fixed:** `LanguagePlanInput.cachedAssets` carries the cached asset
+  URLs, so the core prices only the missing files instead of the whole part. This closes the last
+  known language-planner parity gap; a Rust test covers a voice whose shared model is cached.
+- **Still open:** only the Drive smoke (needs real Google credentials; explicitly out of scope
+  here).
+- **Deviation recorded in `decisions.md`:** OAuth stays driver-side behind the `OAuthBroker` shim
+  (client ids remain `VITE_GOOGLE_CLIENT_ID_*`), and reminders keep the current driver scheduler;
+  the core carries the decision logic, not the platform I/O.
+- **Environment:** `/mnt/data` hit 100% during the workspace test; removed the stale duplicate
+  `src-tauri/target` (14 GB) and `target/debug/incremental`. Commit `e0515ed` holds P5/P6;
+  P7 is uncommitted.
+
 ## Hexagonal migration: P6 complete (2026-11-12, branch `refactor/hex-arch-p0`)
 
 - **P6 is implemented end-to-end:** device-local ledger math, live-header/refusal parsing,

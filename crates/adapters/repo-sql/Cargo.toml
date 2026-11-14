@@ -22,7 +22,7 @@ onspot-ports = { path = "../../onspot-ports" }
 # linking the host's, so behaviour matches the schema. 0.32 is deliberate:
 # libsqlite3-sys has `links = "sqlite3"`, and tauri-plugin-sql (kept until P8)
 # already locks the 0.30 generation; one version must satisfy both (ADR-005).
-rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+rusqlite = { version = "0.32", features = ["bundled", "backup"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"

@@ -151,6 +151,26 @@ export async function importSqliteBackup(file: File): Promise<SqliteRestoreResul
  * @returns Session and attempt counts for the restore confirmation.
  */
 export async function importSqliteBytes(bytes: Uint8Array): Promise<SqliteRestoreResult> {
+	const result = await restoreSqliteBytes(bytes);
+	// Imported settings must replace the in-memory ones, or the next preference
+	// change would write the old values back over the restored database.
+	await initSettings();
+	await hydrateLatestSession();
+	return result;
+}
+
+/**
+ * Replaces the local database image without touching the in-memory stores.
+ *
+ * Cloud sync rehydrates itself, and the core's restore command rehydrates in
+ * the driver after the command returns; both want the same header check,
+ * storage pre-check and rollback, but only one of them should reload settings
+ * while a bridge command is still in flight.
+ *
+ * @param bytes A snapshot produced by `exportSqliteFile`.
+ * @returns Session and attempt counts for the restore confirmation.
+ */
+export async function restoreSqliteBytes(bytes: Uint8Array): Promise<SqliteRestoreResult> {
 	// Which step is running, so an unexpected browser error (Firefox's bare
 	// "Unknown failure" DOMException, say) says where it came from.
 	let step = 'starting the restore';
@@ -206,10 +226,6 @@ export async function importSqliteBytes(bytes: Uint8Array): Promise<SqliteRestor
 		}
 		step = 'reloading the restored data';
 		const [sessions, attempts] = await Promise.all([db.listSessions(), db.listAllAttempts()]);
-		// Imported settings must replace the in-memory ones, or the next preference
-		// change would write the old values back over the restored database.
-		await initSettings();
-		await hydrateLatestSession();
 		return { sessions: sessions.length, attempts: attempts.length };
 	} catch (error) {
 		if (error instanceof RestoreError || error instanceof StorageFullError) throw error;

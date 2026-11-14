@@ -17,8 +17,17 @@ import {
 } from '#lib/speech/stt/service.js';
 import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/speech/tts/service.js';
 import { isCached } from '#lib/speech/tts/local/cachedFetch.js';
-import { voiceAssets } from '#lib/speech/tts/local/assets.js';
+import { voiceAssets } from '#lib/languages/voices.js';
 import { notify } from '#lib/platform/notifications.js';
+import { useCore } from '#lib/core-client/backend.js';
+import { getCoreClient } from '#lib/core-client/client.js';
+import {
+	languageCancelDownloadCore,
+	languageDownloadCore,
+	languagePlanCore,
+	type LanguagePlanInput
+} from '#lib/core-client/language.js';
+import { isTauri } from '#lib/platform/runtime.js';
 import { appSettings } from './settings';
 import { toast } from './toast';
 
@@ -88,6 +97,8 @@ let jobToken = 0;
 let running: Promise<void> | null = null;
 /** Which part of the running download is in flight; Cancel tears down only that worker. */
 let phase: 'stt' | 'voice' | null = null;
+/** The core emits `download_progress`; subscribe once per page. */
+let coreEventsStarted = false;
 
 /** The local parts the current processing choices require. */
 function requiredParts(): LanguageParts {
@@ -145,9 +156,11 @@ interface VoiceCacheState {
 	bytes: number;
 	/** Missing bytes over the network, counted the same way. */
 	transfer: number;
+	/** Asset URLs already cached, so the core prices only what is left. */
+	cachedUrls: string[];
 }
 
-const NO_VOICE_NEEDED: VoiceCacheState = { installed: true, bytes: 0, transfer: 0 };
+const NO_VOICE_NEEDED: VoiceCacheState = { installed: true, bytes: 0, transfer: 0, cachedUrls: [] };
 
 /**
  * Which of the voice's downloads are not cached yet (a Japanese voice also
@@ -163,7 +176,14 @@ async function voiceCacheState(
 	voice: LanguageVoice | undefined,
 	alreadyCounted: ReadonlySet<string> = new Set()
 ): Promise<VoiceCacheState> {
-	if (!voice) return { installed: false, bytes: Number.POSITIVE_INFINITY, transfer: Number.POSITIVE_INFINITY };
+	if (!voice) {
+		return {
+			installed: false,
+			bytes: Number.POSITIVE_INFINITY,
+			transfer: Number.POSITIVE_INFINITY,
+			cachedUrls: []
+		};
+	}
 
 	const assets = voiceAssets(voice);
 	const cached = await Promise.all(assets.map((asset) => isCached(asset.url)));
@@ -173,7 +193,8 @@ async function voiceCacheState(
 	return {
 		installed: missing.length === 0,
 		bytes: missingHere.reduce((total, asset) => total + asset.bytes, 0),
-		transfer: missingHere.reduce((total, asset) => total + asset.transferBytes, 0)
+		transfer: missingHere.reduce((total, asset) => total + asset.transferBytes, 0),
+		cachedUrls: assets.filter((_, index) => cached[index]).map((asset) => asset.url)
 	};
 }
 
@@ -181,6 +202,44 @@ interface LanguageCheck {
 	required: LanguageParts;
 	installed: LanguageParts;
 	pending: PendingBytes;
+	/** Cached asset URLs, so the core can price a partially cached part exactly. */
+	cachedAssets: string[];
+}
+
+/** The input the core planner needs, from the driver's cache check. */
+function corePlanInput(language: LanguageDefinition, check: LanguageCheck): LanguagePlanInput {
+	const settings = get(appSettings);
+	const voice = check.required.voice ? preferredVoice(language) : undefined;
+	const explanationVoice = check.required.explanationVoice
+		? chosenExplanationVoice()
+		: undefined;
+	return {
+		languageId: language.id,
+		instructionLanguageId: settings.instructionLanguage,
+		native: isTauri(),
+		required: check.required,
+		installed: check.installed,
+		voiceId: voice?.id ?? null,
+		explanationVoiceId: explanationVoice?.id ?? null,
+		cachedAssets: check.cachedAssets
+	};
+}
+
+/** Starts the one core event subscription the progress bar needs. */
+async function ensureCoreDownloadEvents(): Promise<void> {
+	if (coreEventsStarted) return;
+	const client = await getCoreClient();
+	coreEventsStarted = true;
+	client.subscribe((event) => {
+		if (event.event !== 'download_progress') return;
+		if (!running) return;
+		store.update((state) => ({
+			...state,
+			status: 'downloading',
+			progress: event.progress,
+			statusText: event.label || state.statusText
+		}));
+	});
 }
 
 /**
@@ -211,7 +270,8 @@ async function checkLanguage(language: LanguageDefinition): Promise<LanguageChec
 			explanationVoice: explanationMissing.bytes,
 			storage: sttMissing + voiceMissing.bytes + explanationMissing.bytes,
 			transfer: sttMissing + voiceMissing.transfer + explanationMissing.transfer
-		}
+		},
+		cachedAssets: [...voiceMissing.cachedUrls, ...explanationMissing.cachedUrls]
 	};
 }
 
@@ -243,7 +303,18 @@ export async function refreshLanguageData(
 	const check = await checkLanguage(language);
 	if (token !== checkToken) return;
 
-	const ready = allInstalled(check.installed);
+	let pending = check.pending;
+	let ready = allInstalled(check.installed);
+	if (useCore('language')) {
+		try {
+			const plan = await languagePlanCore(corePlanInput(language, check));
+			pending = plan.pending;
+			ready = plan.ready;
+		} catch {
+			// The driver's own cache check stays the fallback if planning fails.
+		}
+		if (token !== checkToken) return;
+	}
 	const nothingRequired = !check.required.stt && !check.required.voice;
 
 	store.update((state) => ({
@@ -256,7 +327,7 @@ export async function refreshLanguageData(
 				: 'Language data installed.'
 			: '',
 		error: null,
-		pending: check.pending,
+		pending,
 		required: check.required,
 		installed: check.installed
 	}));
@@ -336,6 +407,19 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 				...state,
 				downloading: downloadContents(language, missingStt + missingVoice > 0, missingExplanation > 0 ? explanationVoice : undefined)
 			}));
+			if (useCore('language')) {
+				await ensureCoreDownloadEvents();
+				if (token !== jobToken) return;
+				const result = await languageDownloadCore(corePlanInput(language, check));
+				if (token !== jobToken) return;
+				running = null;
+				phase = null;
+				if (result.status === 'cancelled') return;
+				await refreshLanguageData(language.id);
+				announceDownloadFinished(`${language.name} data is ready. You can practise offline now.`);
+				return;
+			}
+
 			const sttShare = missing > 0 ? (missingStt / missing) * 100 : 0;
 			const voiceShare = missing > 0 ? (missingVoice / missing) * 100 : 0;
 			const explanationShare = missing > 0 ? (missingExplanation / missing) * 100 : 0;
@@ -410,6 +494,23 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 /** Aborts an in-flight download by terminating the workers fetching the bytes. */
 export function cancelLanguageDownload(): void {
 	if (!running) return;
+
+	if (useCore('language')) {
+		jobToken++;
+		running = null;
+		phase = null;
+		void languageCancelDownloadCore().catch(() => undefined);
+		store.update((state) => ({
+			...state,
+			status: 'missing',
+			progress: 0,
+			statusText: '',
+			error: null
+		}));
+		void refreshLanguageData();
+		return;
+	}
+
 	const cancelling = phase;
 	jobToken++;
 	running = null;

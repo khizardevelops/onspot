@@ -85,7 +85,16 @@ pub async fn dispatch(core: &Core, command: &str, payload: Value) -> Result<Valu
     match command {
         PING_COMMAND => serialize(ping(core, payload)?),
         other => {
+            if let Some(result) = crate::language::dispatch(core, other, payload.clone()).await {
+                return result;
+            }
             if let Some(result) = crate::practice::dispatch(core, other, payload.clone()).await {
+                return result;
+            }
+            if let Some(result) = crate::portability::dispatch(core, other, payload.clone()).await {
+                return result;
+            }
+            if let Some(result) = crate::sync::dispatch(core, other, payload.clone()).await {
                 return result;
             }
             match crate::storage::dispatch(core, other, payload).await {

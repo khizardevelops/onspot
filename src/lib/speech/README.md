@@ -52,8 +52,8 @@ Supertonic lacks (Persian, Chinese), then cloud speech.
 
 **Adding a voice:** one entry in `languages/voices.ts`. **Adding an engine:** an adapter folder
 next to `piper/` and `supertonic/`, its `engine` value on `LanguageVoice`, one case in
-`local/registry.ts` and one in `local/assets.ts`. Nothing outside `speech/` and `languages/`
-changes.
+`local/registry.ts` and its asset list in `languages/voices.ts`. Nothing outside `speech/` and
+`languages/` changes.
 
 The sherpa-onnx runtime is gitignored; `scripts/sherpa-tts-assets.sh` puts the pinned,
 verified prebuilt in `static/sherpa-onnx/`. Do not build sherpa-onnx from source.

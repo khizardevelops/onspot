@@ -4,7 +4,7 @@ import { ort } from '#lib/ort.js';
 import { BaseTTSAdapter } from '../BaseTtsAdapter';
 import { cachedFetch, isCached } from '../local/cachedFetch';
 import { phonemize } from './phonemize';
-import { PIPER_VOICES_BASE as VOICES_BASE } from '../local/assets';
+import { PIPER_VOICES_BASE as VOICES_BASE } from '#lib/languages/voices.js';
 import type { ModelProgress, TtsChoice, TtsModelConfig } from '#lib/types.js';
 
 

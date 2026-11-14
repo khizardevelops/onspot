@@ -1,5 +1,150 @@
 # Decisions
 
+## P8 cutover: legacy TypeScript is archived, not deleted (2026-11-14)
+
+- **User directive:** when P8 removes the legacy paths, move the TypeScript modules into the
+  top-level `deprecated/` folder instead of deleting them. Use `git mv` and mirror the original
+  path (`deprecated/src/lib/stores/practice.ts`, `deprecated/src/lib/adapters/llm/...`), keeping
+  the SPDX headers and history. The folder is outside `src/`, so Vite, `svelte-check` and
+  `tsconfig` do not compile it; its `#lib`/`$lib` imports are intentionally left dangling.
+- **Live code must not import from `deprecated/`.** P8's "zero references" gate becomes zero
+  imports/references from the live tree (and `scripts/check-boundaries.mjs` should reject a
+  `deprecated/` import), not zero files on disk. Tests and scripts must point at `core-client`,
+  never at the archived copies.
+- **Archival is not a fallback.** `VITE_CORE_BACKEND` and the legacy branches still go away, so
+  the archived code is frozen reference material; delete it only after a later release proves the
+  cutover. The empty `deprecated/` folder already exists at the repo root.
+
+
+## P7 driver host: one install with the core client (2026-11-14)
+
+- **The host belongs to the client, not to Practice.** `getCoreClient` now installs the single
+  `createCoreHost` and answers every `host_request` with `core.host_reply`; practice keeps a
+  reference for its microphone cancel but no longer owns the wiring. The host covers sync
+  (`http.sync`), database bytes (`db.*`), file dialogs (`fs.*`), OAuth (`oauth.*`), language
+  workers and the practice shims. Without this, any screen that used the core before Practice
+  booted (fresh install → Settings → Sync, database export, language download) waited forever for
+  a reply that no listener would send.
+- **The Tauri shell boots the core at startup; the web stays lazy.** On desktop/Android the Rust
+  core already runs in the process, so initialising the client early only subscribes its event
+  channel; it removes the race where the UI can issue a command before a feature screen mounted.
+  The browser build still loads the wasm package only when a core feature asks, per ADR-002.
+- **Reminders keep the driver's notification mechanism.** The core owns the due-state math
+  (`reminders.state`) but `platform/notifications.ts`, the five-minute check, the visibility
+  listener and the snooze keys stay in the webview. A `NotificationScheduler` port would wrap a
+  capability that only exists on the driver (and the browser only notifies while the page is
+  alive), so the useful boundary is the decision, not the scheduler.
+
+- **The desktop restore needs `dialog:allow-open`, not just save.** The capability had
+  `dialog:allow-save` (export) but not `dialog:allow-open`, so `restore.pick` was rejected before
+  the GTK picker appeared and the button looked dead. The dialog plugin adds the chosen path to
+  the filesystem scope at runtime, so the existing `fs:allow-read-file`/`write-file` permissions
+  then cover the read/write; no broad static path scope is needed. `test:portability:desktop`
+  guards the button and both native dialogs.
+- **The desktop smoke waits for the app's first screen.** The old check pinged the bridge and
+  immediately issued `sync.connect`, which could emit `host_request` before settings hydration
+  finished installing the host. The event was lost and the core waited forever. Waiting for the
+  first rendered screen (which settings hydration gates) makes the smoke deterministic.
+
+## P7 sync ports: core policy, driver transport and credentials (2026-11-13)
+
+- **`run_sync` takes the revision, it does not read it.** The content revision and
+  `onspot.sync.synced.*` live in `localStorage`, which the core cannot see on either runtime, so the
+  driver passes both numbers and writes the synced revision after the call
+  (`replaced_local` tells it the import bumped the revision). The core still owns the comparison,
+  the decision and the metadata row through the narrow `SyncStore` port.
+- **OAuth stays in the webview, behind an `OAuthBroker` shim.** Desktop already runs the loopback
+  flow through `src-tauri/src/oauth.rs`; the host shim calls the same `oauth.ts` the legacy path
+  uses, so Drive's token cache, Google Identity Services on web and the refresh token in
+  `localStorage` are unchanged. The core gets only an access token string. The client ids
+  therefore stay `VITE_GOOGLE_CLIENT_ID_*` in the webview rather than moving into `CoreConfig`:
+  the authorization URL, PKCE verifier, loopback redirect and token exchange all happen in the
+  driver, so the core would hold config it cannot use. This is the one P7 config-plumbing item
+  intentionally not moved; the `OAuthBroker` boundary is the useful part.
+- **Binary bodies need their own HTTP method.** `HttpClient::send` returns text, and casting a
+  database image through a string would corrupt it. `send_bytes` uses `http.sync` on both runtimes
+  and base64 on the JSON envelope, mirroring the backup/restore commands.
+- **Corrupt remotes are rejected before either restore path.** `run_sync` checks the header and the
+  onspot tables before `DatabaseFile::import_bytes`, so a foreign image never reaches the web
+  rollback or the native online backup. The driver's restore keeps its own checks as the last line
+  of defence.
+- **WebDAV exists without the `webdav` npm package.** The Rust adapter performs PROPFIND / MKCOL /
+  PUT / GET itself, so the native build (where `webdav@5` hard-wires its own fetch) and the browser
+  send identical requests; CORS stays the browser's problem, documented in the settings copy.
+
+
+## P7 language downloads: core sequencing, worker bytes (2026-11-12)
+
+- **The core sequences, the driver fetches.** `RunLanguageDownload` calls the
+  `LanguageDataInstaller` port; the bridge implementation turns each part into one host call
+  (`language.download_stt` / `language.download_voice`). The worker and Cache API never leave the
+  driver, and Cancel reaches the worker through a `language.cancel` host call because Rust cannot
+  terminate a Web Worker.
+- **Progress flows back through a command, not the host reply.** The driver's `onProgress` calls
+  `language.download_progress` while the download host call is still pending; the core folds the
+  part into the combined figure and emits `download_progress`. This mirrors the practice loop's
+  `audio_level`/`stt_progress` pattern and keeps one event for the existing bar.
+- **Byte counts on the wire are `u32`.** serde-wasm-bindgen turns `u64` into a JS `bigint`, which
+  would break the store's arithmetic (the same reason `UiEvent` sequences are `u32`). The catalog
+  still stores `u64`; the planner clamps into `u32` at the boundary, which covers every approved
+  download.
+- **The planner is authoritative for pending/readiness.** `refreshLanguageData` keeps the driver's
+  cache check for installed booleans and asks `language.plan` for the sizes; if planning fails, the
+  legacy cache-derived pending figures remain the fallback. The checked-in catalog now carries each
+  voice's individual assets, so the core sums them, counts a URL shared by the target and
+  explanation voices once (Supertonic's model, the Japanese dictionary), and keeps `transfer`
+  distinct from `storage` where the CDN compresses a file (Japanese G2P: 60 MB on disk, ~20 MB over
+  the network). Partial caches are priced exactly: the driver passes the cached asset URLs in
+  `cachedAssets`, so a shared model already present (another Supertonic style) or a finished file
+  from an interrupted download is not counted again. The installed booleans stay all-or-nothing
+  readiness; the cached URLs only refine the pending byte counts.
+- **The asset list lives with the registry.** `voiceAssets`/`voiceModelUrl` moved from
+  `speech/tts/local/assets.ts` into `languages/voices.ts` (the module that already owns the voice
+  data), so the export script and the adapters read the same list. `assets.ts` was deleted and its
+  importers now use the registry directly.
+- **The catalog is a generated, checked artefact.** `bun run catalog:export` rewrites
+  `crates/onspot-app/assets/languages.json`; `bun run catalog:check` fails when it differs from the
+  TypeScript registry, alongside `bridge:types` as the generation-diff gate.
+
+## P7 database backups: core flow, driver bytes (2026-11-12)
+
+- **The core owns the flow, the driver owns the bytes.** `export.database`,
+  `restore.pick`, `restore.confirm` and `restore.cancel` live in `onspot-app::portability`;
+  dialogs and files are `FileSystemSink`, the image is `DatabaseFile`. The web host implements
+  the latter over the existing sqlite-wasm worker; desktop supplies `RusqliteDriver` directly.
+- **Restore is two steps.** `restore.pick` validates and stages the chosen file in `Core`;
+  the learner confirms the file name; `restore.confirm` consumes the staged bytes once.
+  This keeps the "never replaces a device without asking" promise while letting the core
+  own the format check.
+- **Native import uses SQLite's online backup, not a file swap.** The legacy adapter had to
+  close its pool, rewrite `onspot.db` and reopen. The core's rusqlite connection shares the
+  file with that pool, so `RusqliteDriver::import_bytes` opens the picked image read-only and
+  copies it through `rusqlite::backup`, then runs the migration chain. Old snapshots still
+  open (the v0.2.4 fixture proves it) and no connection is left pointing at a replaced file.
+- **Backup bytes cross the bridge as base64.** The envelope is JSON on both transports; an
+  array of byte numbers would be much larger and slower. Only the backup and restore commands
+  carry the encoded image.
+- **The web restore reuses `restoreSqliteBytes`.** That split (from `importSqliteBytes`) keeps
+  the header check, storage pre-check, rollback and rescue path, but leaves the in-memory
+  settings/session reload to the driver after the command returns. Sync still calls the
+  rehydrating wrapper.
+
+## P7 session Markdown and wasm clocks (2026-11-12)
+
+- **The document is assembled in the core; only saving is driver-side.** `export.session_markdown`
+  reads the session, attempts and corrections through `RecordsStore`, returns the text and file
+  name, and the existing Tauri/browser save path writes it. This keeps History and Practice on one
+  document builder.
+- **Dates use the learner's local timezone.** The app formats stored ISO timestamps with chrono
+  `Local`; `%B` names are English to match the legacy `en-GB` long date. The footer accepts the
+  current timestamp from `export_timestamp()`.
+- **chrono on wasm needs `wasmbind`.** With only the `clock` feature, `Utc::now()` never returned in
+  the browser bridge and the export command hung; adding `wasmbind` fixed it.
+- **The file stem is part of the core contract.** NFKD + combining-mark removal + lowercase ASCII
+  slug, capped at 60 characters, matching `sessionTranscript.ts`; the driver only opens the save
+  dialog.
+
+
 ## P4 LLM transport and scope (2026-11-12)
 
 - **HTTP is a host capability; the key never crosses the bridge.** `HttpRequest` carries a

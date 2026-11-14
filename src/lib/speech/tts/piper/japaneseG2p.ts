@@ -15,7 +15,7 @@
  */
 import { cachedFetch, forgetCached, sha256Hex } from '../local/cachedFetch';
 import { JAPANESE_G2P_BYTES } from '#lib/languages/voices.js';
-import { JAPANESE_G2P_SHA256 as G2P_SHA256, JAPANESE_G2P_URL as G2P_URL } from '../local/assets';
+import { JAPANESE_G2P_SHA256 as G2P_SHA256, JAPANESE_G2P_URL as G2P_URL } from '#lib/languages/voices.js';
 import initPhonemizer, { WasmPhonemizer } from './vendor/piper-plus-wasm/piper_plus_wasm.js';
 
 let ready: Promise<void> | null = null;

@@ -9,7 +9,7 @@
 import { get, writable } from 'svelte/store';
 import { VOICE_MODELS, VOICE_SAMPLE_SENTENCES, type VoiceModelInfo } from '#lib/languages/voices.js';
 import type { LanguageVoice, VoiceEngine } from '#lib/languages/index.js';
-import { PIPER_VOICES_BASE, voiceAssets } from '#lib/speech/tts/local/assets.js';
+import { PIPER_VOICES_BASE, voiceAssets } from '#lib/languages/voices.js';
 import { isCached } from '#lib/speech/tts/local/cachedFetch.js';
 import { cancelLocalVoiceDownload, preloadLocalVoice, synthesizeVoiceSample } from '#lib/speech/tts/service.js';
 import { refreshLanguageData } from './languageData';

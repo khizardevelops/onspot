@@ -642,8 +642,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -3191,14 +3193,20 @@ dependencies = [
 name = "onspot-adapter-sync-drive"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "futures",
  "onspot-domain",
  "onspot-ports",
+ "serde_json",
 ]
 
 [[package]]
 name = "onspot-adapter-sync-webdav"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "futures",
  "onspot-domain",
  "onspot-ports",
 ]
@@ -3209,6 +3217,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "chrono",
  "futures",
  "futures-channel",
  "once_cell",
@@ -3222,6 +3231,7 @@ dependencies = [
  "thiserror 2.0.21",
  "time",
  "ts-rs",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -3229,11 +3239,14 @@ name = "onspot-bridge"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "futures",
  "futures-timer",
  "js-sys",
  "onspot-adapter-llm-openai",
  "onspot-adapter-repo-sql",
+ "onspot-adapter-sync-drive",
+ "onspot-adapter-sync-webdav",
  "onspot-app",
  "onspot-domain",
  "onspot-ports",

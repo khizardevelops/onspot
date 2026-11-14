@@ -15,6 +15,8 @@ import {
 } from '#lib/adapters/db/index.js';
 import { speakableExplanation } from '#lib/adapters/llm/explanation.js';
 import { isTauri } from '#lib/platform/runtime.js';
+import { useCore } from '#lib/core-client/backend.js';
+import { sessionMarkdownCore } from '#lib/core-client/export.js';
 
 const MARKDOWN_MIME = 'text/markdown';
 
@@ -203,6 +205,11 @@ async function saveMarkdown(fileName: string, markdown: string): Promise<boolean
  * @returns True when a file was saved, false when the learner cancelled.
  */
 export async function exportSessionTranscript(sessionId: string): Promise<boolean> {
+	if (useCore('export')) {
+		const { markdown, fileName } = await sessionMarkdownCore(sessionId);
+		return saveMarkdown(fileName, markdown);
+	}
+
 	const db = await getDatabaseAdapter();
 	const session = await db.getSession(sessionId);
 	if (!session) throw new Error('That session is no longer on this device.');

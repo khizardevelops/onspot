@@ -10,8 +10,11 @@
 
 pub mod commands;
 pub mod error;
+pub mod language;
+pub mod portability;
 pub mod practice;
 pub mod storage;
+pub mod sync;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;
@@ -23,7 +26,15 @@ pub use commands::{
     dispatch, init_response, initialize, InitResponse, PingRequest, PingResponse, PING_COMMAND,
 };
 pub use error::BridgeError;
+pub use language::{
+    LanguageCancelResponse, LanguageDownloadResponse, LanguageProgressResponse,
+    LANGUAGE_CANCEL_DOWNLOAD, LANGUAGE_DOWNLOAD, LANGUAGE_DOWNLOAD_PROGRESS,
+};
 pub use onspot_app::{Core, CoreConfig, EventSink, HostAdapters, UiEvent};
+pub use portability::{
+    ExportDatabaseResponse, RestoreCancelResponse, RestoreConfirmResponse, RestorePickResponse,
+    EXPORT_DATABASE, RESTORE_CANCEL, RESTORE_CONFIRM, RESTORE_PICK,
+};
 pub use practice::{
     AcceptedResponse, OpenResponse, PracticeResponse, ResumeResponse, CORE_HOST_REPLY,
     PRACTICE_AUDIO_LEVEL, PRACTICE_CANCEL_RECORDING, PRACTICE_CLEAR_ERROR, PRACTICE_CONFIGURE,
@@ -37,6 +48,10 @@ pub use storage::{
     AttemptPreviewView, ChangedResponse, HistoryResponse, HistorySessionView, SearchRequest,
     SessionView, SettingView, SettingsResponse, SetupView, HISTORY_DELETE, HISTORY_LIST,
     HISTORY_RENAME, HISTORY_SEARCH, SETTINGS_GET, SETTINGS_LIST, SETTINGS_SET,
+};
+pub use sync::{
+    SyncAccountResponse, SyncConnectResponse, SyncDisconnectResponse, SyncNowResponse, SyncTarget,
+    SYNC_ACCOUNT, SYNC_CONNECT, SYNC_DISCONNECT, SYNC_NOW,
 };
 
 /// The bridge contract's version. Bumped only with a new envelope whose fields

@@ -9,7 +9,7 @@ use onspot_bridge::{
     dispatch, tauri_support::initialize_tauri, BridgeError, Core, CoreConfig, HostAdapters,
     InitResponse,
 };
-use onspot_ports::{HistoryStore, RecordsStore, SettingsStore};
+use onspot_ports::{DatabaseFile, HistoryStore, RecordsStore, SettingsStore};
 use serde_json::Value;
 use tauri::{ipc::Channel, State};
 
@@ -23,11 +23,13 @@ impl BridgeState {
         history: Arc<dyn HistoryStore>,
         settings: Arc<dyn SettingsStore>,
         records: Arc<dyn RecordsStore>,
+        database_file: Arc<dyn DatabaseFile>,
     ) -> Self {
         let hosts = HostAdapters {
             history: Some(history),
             settings: Some(settings),
             records: Some(records),
+            database_file: Some(database_file),
         };
         Self(Arc::new(Core::with_hosts(
             CoreConfig {

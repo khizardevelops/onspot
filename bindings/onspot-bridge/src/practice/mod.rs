@@ -58,6 +58,13 @@ pub const INSIGHTS_BUILD: &str = "insights.build";
 pub const GLOSSES_ENSURE: &str = "glosses.ensure";
 pub const PHRASES_ENSURE: &str = "phrases.ensure";
 pub const USAGE_SNAPSHOT: &str = "usage.snapshot";
+pub const EXPORT_SESSION_MARKDOWN: &str = "export.session_markdown";
+pub const SYNC_DECIDE: &str = "sync.decide";
+pub const REMINDERS_STATE: &str = "reminders.state";
+pub const PROMPTS_CATALOGUE: &str = "prompts.catalogue";
+pub const ONBOARDING_DECIDE: &str = "onboarding.decide";
+pub const LANGUAGE_PLAN: &str = "language.plan";
+pub const LANGUAGE_CATALOG: &str = "language.catalog";
 
 /// `practice.configure` arguments.
 #[derive(Debug, Clone, Deserialize)]
@@ -248,6 +255,15 @@ pub async fn dispatch(
         GLOSSES_ENSURE => ensure_glosses(core, payload).await.and_then(serialize),
         PHRASES_ENSURE => ensure_phrase(core, payload).await.and_then(serialize),
         USAGE_SNAPSHOT => usage_snapshot(core, payload).and_then(serialize),
+        EXPORT_SESSION_MARKDOWN => export_session_markdown(core, payload)
+            .await
+            .and_then(serialize),
+        SYNC_DECIDE => decide_sync_command(payload).and_then(serialize),
+        REMINDERS_STATE => reminder_state_command(payload).and_then(serialize),
+        PROMPTS_CATALOGUE => prompts_catalogue_command(payload).and_then(serialize),
+        ONBOARDING_DECIDE => onboarding_decide_command(payload).and_then(serialize),
+        LANGUAGE_PLAN => language_plan_command(payload).and_then(serialize),
+        LANGUAGE_CATALOG => serialize_catalog(),
         _ => return None,
     };
     Some(result)
@@ -522,6 +538,188 @@ async fn test_connection(
         .await
         .map_err(core_error)?;
     Ok(TestConnectionResponse { reply })
+}
+
+/// `export.session_markdown` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportSessionRequest {
+    pub session_id: String,
+}
+
+/// One session's readable Markdown.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMarkdownResponse {
+    pub markdown: String,
+    pub file_name: String,
+}
+
+async fn export_session_markdown(
+    core: &Core,
+    payload: Value,
+) -> Result<SessionMarkdownResponse, BridgeError> {
+    let request: ExportSessionRequest = parse(EXPORT_SESSION_MARKDOWN, payload)?;
+    let records = core
+        .hosts()
+        .records
+        .as_ref()
+        .ok_or_else(|| BridgeError::unavailable("records"))?;
+    let session = records
+        .get_session(&request.session_id)
+        .await
+        .map_err(store_failed)?
+        .ok_or_else(|| {
+            BridgeError::invalid_payload(EXPORT_SESSION_MARKDOWN, "session not found")
+        })?;
+    let attempts = records
+        .list_attempts(&request.session_id)
+        .await
+        .map_err(store_failed)?;
+    let mut corrections = std::collections::HashMap::new();
+    for attempt in &attempts {
+        corrections.insert(
+            attempt.id.clone(),
+            records
+                .list_corrections(&attempt.id)
+                .await
+                .map_err(store_failed)?,
+        );
+    }
+    let markdown = onspot_app::build_session_markdown(
+        &session,
+        &attempts,
+        &corrections,
+        &onspot_app::export_timestamp(),
+    );
+    let day = session.created_at.get(..10).unwrap_or_default();
+    Ok(SessionMarkdownResponse {
+        markdown,
+        file_name: format!(
+            "onspot-{}-{day}.md",
+            onspot_app::session_file_stem(&session.title)
+        ),
+    })
+}
+
+/// `sync.decide` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncDecideRequest {
+    pub comparison: onspot_app::SyncComparison,
+    #[serde(default)]
+    pub choice: Option<onspot_app::SyncChoice>,
+}
+
+/// The sync policy's answer for the current comparison.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct SyncDecisionResponse {
+    pub decision: String,
+}
+
+fn decide_sync_command(payload: Value) -> Result<SyncDecisionResponse, BridgeError> {
+    let request: SyncDecideRequest = parse(SYNC_DECIDE, payload)?;
+    let decision = onspot_app::decide_with_choice(&request.comparison, request.choice);
+    Ok(SyncDecisionResponse {
+        decision: decision.as_str().to_owned(),
+    })
+}
+
+/// `reminders.state` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderStateRequest {
+    pub enabled: bool,
+    pub last_practised_at_ms: Option<u64>,
+    pub snoozed_until_ms: Option<u64>,
+    pub frequency: onspot_app::ReminderFrequency,
+    pub now_ms: u64,
+}
+
+fn reminder_state_command(payload: Value) -> Result<onspot_app::ReminderState, BridgeError> {
+    let request: ReminderStateRequest = parse(REMINDERS_STATE, payload)?;
+    let input = onspot_app::ReminderInput {
+        enabled: request.enabled,
+        last_practised_at_ms: request.last_practised_at_ms,
+        snoozed_until_ms: request.snoozed_until_ms,
+        frequency: request.frequency,
+        now_ms: request.now_ms,
+    };
+    Ok(onspot_app::reminder_state(&input))
+}
+
+/// `prompts.catalogue` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptsRequest {
+    pub instruction_language: String,
+    pub target_language: String,
+}
+
+/// The bundled prompts for a language pair.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct PromptsResponse {
+    pub prompts: Vec<onspot_app::CataloguePrompt>,
+}
+
+fn prompts_catalogue_command(payload: Value) -> Result<PromptsResponse, BridgeError> {
+    let request: PromptsRequest = parse(PROMPTS_CATALOGUE, payload)?;
+    Ok(PromptsResponse {
+        prompts: onspot_app::catalogue_prompts_for(
+            &request.instruction_language,
+            &request.target_language,
+        ),
+    })
+}
+
+/// `onboarding.decide` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingRequest {
+    #[serde(default)]
+    pub stored: Option<String>,
+}
+
+/// Whether the first-run guide should open.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingResponse {
+    pub status: Option<String>,
+    pub should_offer: bool,
+}
+
+fn onboarding_decide_command(payload: Value) -> Result<OnboardingResponse, BridgeError> {
+    let request: OnboardingRequest = parse(ONBOARDING_DECIDE, payload)?;
+    let status = onspot_app::parse_onboarding_status(request.stored.as_deref());
+    Ok(OnboardingResponse {
+        status: status.map(|status| match status {
+            onspot_app::OnboardingStatus::Done => String::from("done"),
+            onspot_app::OnboardingStatus::Skipped => String::from("skipped"),
+        }),
+        should_offer: status.is_none(),
+    })
+}
+
+/// `language.plan` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanguagePlanRequest {
+    pub input: onspot_app::LanguagePlanInput,
+}
+
+fn language_plan_command(payload: Value) -> Result<onspot_app::LanguagePlan, BridgeError> {
+    let request: LanguagePlanRequest = parse(LANGUAGE_PLAN, payload)?;
+    Ok(onspot_app::plan_language_data(&request.input))
+}
+
+fn serialize_catalog() -> Result<Value, BridgeError> {
+    serialize(onspot_app::catalog())
 }
 
 /// `usage.snapshot` arguments.
@@ -868,6 +1066,10 @@ fn host_reply(core: &Core, payload: Value) -> Result<AcceptedResponse, BridgeErr
 
 fn core_error(error: CoreError) -> BridgeError {
     BridgeError::new(&error.code, error.message)
+}
+
+fn store_failed(error: onspot_ports::StoreError) -> BridgeError {
+    BridgeError::new("bridge.store_failed", error.to_string())
 }
 
 async fn call<T: for<'de> Deserialize<'de>>(

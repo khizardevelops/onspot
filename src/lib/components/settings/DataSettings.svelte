@@ -14,6 +14,8 @@
 	} from '#lib/practice/promptSubmissions.js';
 	import { toast } from '#lib/stores/toast.js';
 	import { exportDatabaseFile, importLegacyJsonBackup } from '#lib/utils/export.js';
+	import { useCore } from '#lib/core-client/backend.js';
+	import { exportDatabaseCore } from '#lib/core-client/export.js';
 	import SettingsSection from '#lib/components/settings/SettingsSection.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
@@ -47,7 +49,12 @@
 	async function exportData(): Promise<void> {
 		exporting = true;
 		try {
-			if (await exportDatabaseFile()) toast('Database exported');
+			if (useCore('export')) {
+				const result = await exportDatabaseCore();
+				if (result.saved) toast('Database exported');
+			} else if (await exportDatabaseFile()) {
+				toast('Database exported');
+			}
 		} catch (error) {
 			toast(error instanceof Error ? error.message : 'Export failed');
 		} finally {

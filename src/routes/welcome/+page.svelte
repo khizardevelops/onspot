@@ -25,7 +25,7 @@
 		testConnection,
 		type LlmEndpoint
 	} from '#lib/adapters/llm/index.js';
-	import { markOnboardingDone, markOnboardingSkipped, onboardingStatus } from '#lib/onboarding.js';
+	import { markOnboardingDone, markOnboardingSkipped, onboardingStatus, onboardingStatusCore } from '#lib/onboarding.js';
 	import { getLanguage } from '#lib/languages/index.js';
 	import SecretInput from '#lib/components/settings/SecretInput.svelte';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
@@ -82,7 +82,8 @@
 		}
 	];
 
-	const returning = onboardingStatus() !== null;
+	let returning = $state(onboardingStatus() !== null);
+	void onboardingStatusCore().then((status) => (returning = status !== null));
 
 	let step = $state<Step>(0);
 	let provider = $state<ProviderChoice>('groq');

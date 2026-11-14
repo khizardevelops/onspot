@@ -5,6 +5,9 @@
  * finishing or skipping it stops the automatic redirect, and Settings can
  * always reopen the page by hand.
  */
+import { useCore } from '#lib/core-client/backend.js';
+import { onboardingDecisionCore } from '#lib/core-client/onboarding.js';
+
 export type OnboardingStatus = 'done' | 'skipped' | null;
 
 const STORAGE_KEY = 'onspot.onboarding.v1';
@@ -37,7 +40,28 @@ export function markOnboardingSkipped(): void {
 	store('skipped');
 }
 
+/** Reads and parses the stored status through the core when it is enabled. */
+export async function onboardingStatusCore(): Promise<OnboardingStatus> {
+	let stored: string | null = null;
+	try {
+		stored = localStorage.getItem(STORAGE_KEY);
+	} catch {
+		stored = null;
+	}
+	if (useCore('onboarding')) return (await onboardingDecisionCore(stored)).status;
+	return onboardingStatus();
+}
+
 /** True until the guide has been finished or skipped. */
-export function shouldOfferOnboarding(): boolean {
+export async function shouldOfferOnboarding(): Promise<boolean> {
+	if (useCore('onboarding')) {
+		let stored: string | null = null;
+		try {
+			stored = localStorage.getItem(STORAGE_KEY);
+		} catch {
+			stored = null;
+		}
+		return (await onboardingDecisionCore(stored)).shouldOffer;
+	}
 	return onboardingStatus() === null;
 }
