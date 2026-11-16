@@ -10,6 +10,18 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### The learner's dev server reloaded mid-clip: "speech failed … error loading dynamically imported module" (2026-11-16)
+- **Cause**: the browser checks' own dev servers (other ports) shared `node_modules/.vite`, so
+  the learner's `bun run dev` rebuilt its cache on restart ("vite config has changed"); the speech
+  worker's deps, which the start-up scan cannot see, were then bundled on first use and Vite
+  force-reloaded the page while the clip loaded. Builds also reloaded the open page by writing HTML
+  into watched folders (build/, target/, src-tauri/gen).
+- **Fix**: `ONSPOT_VITE_CACHE_DIR` for the checks (`node_modules/.vite-checks`);
+  `optimizeDeps.include` for onnxruntime-web, @diffusionstudio/piper-wasm, piper-plus;
+  `server.watch.ignored` for build/, target/, src-tauri/, deprecated/.
+- **Proof**: `test:practice` passes while the learner's cache metadata stays byte-identical; the
+  restarted server lists the three worker deps as pre-bundled.
+
 ### Sync could download over new takes; desktop opened the database twice (2026-11-16)
 - **Symptom**: sync's "has this device changed?" counter (`revision.ts`) was bumped only by the
   TypeScript adapter, but takes, renames and deletions were written by the Rust repositories, so

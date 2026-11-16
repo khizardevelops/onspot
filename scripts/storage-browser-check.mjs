@@ -60,7 +60,8 @@ if (!existsSync('static/core-bridge/onspot_bridge.js')) {
 }
 
 const server = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], {
-	env: { ...process.env },
+	// Its own dependency cache, so a running `bun run dev` is never re-optimised under it.
+	env: { ...process.env, ONSPOT_VITE_CACHE_DIR: 'node_modules/.vite-checks' },
 	stdio: ['ignore', 'pipe', 'pipe']
 });
 let serverLog = '';

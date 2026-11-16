@@ -115,7 +115,9 @@ installed. After switching to a branch with different dependencies, run
   and shows the last three events; `/dev/storage-check/` is the page `test:storage` drives (it marks
   the setup guide skipped first); `/dev/long-takes/` seeds two simulated long takes through
   `restore.legacy_json`. The app always talks to the Rust core.
-- All browser checks launch Chrome with `--mute-audio`.
+- All browser checks launch Chrome with `--mute-audio` and run their dev server with
+  `ONSPOT_VITE_CACHE_DIR=node_modules/.vite-checks`, so the learner's own `bun run dev` on :5173
+  keeps its dependency cache. Any new script that spawns `bun run dev` must do the same.
 
 ## Desktop app (Tauri)
 - **Development, with hot reload: `bun run tauri dev`.** One command: it starts onspot's Vite dev

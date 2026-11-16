@@ -87,6 +87,12 @@ export default defineConfig({
 		port: 5173,
 		strictPort: true,
 		headers: CROSS_ORIGIN_HEADERS,
+		watch: {
+			// Build output is never part of the dev app; its HTML files would
+			// otherwise reload the open page whenever a release, desktop or
+			// Android build writes them.
+			ignored: ['**/build/**', '**/target/**', '**/src-tauri/**', '**/deprecated/**']
+		},
 		fs: {
 			// The lab's eval/ clips live at the repo root and are pulled in by
 			// `import.meta.glob` from the STT benchmark tooling.
@@ -98,8 +104,22 @@ export default defineConfig({
 		strictPort: true,
 		headers: CROSS_ORIGIN_HEADERS
 	},
+	/*
+	 * The browser checks (`scripts/*-browser-check.mjs`) start their own dev
+	 * servers on other ports. Sharing this dependency cache let them re-optimise
+	 * it under a running `bun run dev`, which then reloaded the open page in the
+	 * middle of a request; they point ONSPOT_VITE_CACHE_DIR at their own.
+	 */
+	cacheDir: process.env.ONSPOT_VITE_CACHE_DIR || 'node_modules/.vite',
 	optimizeDeps: {
-		exclude: ['@huggingface/transformers']
+		exclude: ['@huggingface/transformers'],
+		/*
+		 * Imported only inside the speech workers, which the start-up scan does
+		 * not see. Without this, the first clip after a cache rebuild makes Vite
+		 * bundle them and reload the page while the clip is still loading
+		 * ("error loading dynamically imported module").
+		 */
+		include: ['onnxruntime-web', '@diffusionstudio/piper-wasm', 'piper-plus']
 	},
 	css: {
 		preprocessorOptions: {
