@@ -198,7 +198,7 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: |
-          appimage="$(echo src-tauri/target/release/bundle/appimage/*.AppImage)"
+          appimage="$(echo target/release/bundle/appimage/*.AppImage)"
           packaging/appimage/check.sh "$appimage"
           packaging/smoke-test.sh "$appimage"
 
@@ -208,16 +208,17 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: |
-          appimage="$(echo src-tauri/target/release/bundle/appimage/*.AppImage)"
+          appimage="$(echo target/release/bundle/appimage/*.AppImage)"
           docker run --rm --env APPIMAGE_EXTRACT_AND_RUN --volume "$PWD:/work:ro" --workdir /work archlinux:latest \
             bash -c "pacman -Syu --noconfirm --needed mesa libglvnd wayland libx11 libxcb fontconfig freetype2 harfbuzz fribidi ttf-dejavu xorg-server-xvfb xorg-xauth > /dev/null && packaging/smoke-test.sh '$appimage'"
 
-      # A cross build (--target) writes its bundles under target/<triple>/release.
+      # src-tauri is a member of the root Cargo workspace, so bundles land in the
+      # root target/ (a cross build, --target, under target/<triple>/release).
       - name: Collect artifacts
         shell: bash
         run: |
           mkdir -p dist
-          find src-tauri/target -path '*/release/bundle/*' -type f \
+          find target -path '*/release/bundle/*' -type f \
             \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
             -exec cp {} dist/ \;
           ls -lh dist

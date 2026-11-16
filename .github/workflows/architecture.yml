@@ -106,6 +106,13 @@ jobs:
       - name: Build the core bridge for the web
         run: bun run bridge:wasm
 
+      # The schema-9 database the storage check migrates is git-ignored; it is
+      # built from the tracked v9.sql (the Rust tests rebuild it the same way).
+      - name: Build the v0.2.4 database fixture
+        run: |
+          command -v sqlite3 >/dev/null || sudo apt-get install -y sqlite3
+          scripts/make-fixture.sh
+
       # Real Chrome, the wasm package and the dev server: Rust migrations and the
       # storage commands over the existing sqlite-wasm worker (P2).
       - name: Browser storage contract

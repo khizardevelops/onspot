@@ -13,7 +13,7 @@
 # It uses throwaway XDG directories, so it never touches real app data.
 #
 # Usage: packaging/smoke-test.sh <command> [args...]
-#   packaging/smoke-test.sh src-tauri/target/release/onspot
+#   packaging/smoke-test.sh target/release/onspot
 #   APPIMAGE_EXTRACT_AND_RUN=1 packaging/smoke-test.sh ./onspot_0.1.0_amd64.AppImage
 # Needs xvfb-run (and xauth).
 
