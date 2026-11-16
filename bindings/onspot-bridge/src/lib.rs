@@ -13,6 +13,7 @@ pub mod error;
 pub mod language;
 pub mod portability;
 pub mod practice;
+pub mod records;
 pub mod storage;
 pub mod sync;
 

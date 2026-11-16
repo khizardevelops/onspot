@@ -5,7 +5,7 @@
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoInput } from '@dvcol/neo-svelte/inputs';
 	import { NeoPill } from '@dvcol/neo-svelte/pill';
-	import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+	import { syncMetadata } from '#lib/core-client/records.js';
 	import {
 		createSyncProvider,
 		syncNow,
@@ -72,8 +72,7 @@
 		}
 
 		try {
-			const database = await getDatabaseAdapter();
-			const metadata = await database.getSyncMetadata(provider.id);
+			const metadata = await syncMetadata(provider.id);
 			lastSyncedAt = metadata?.lastSyncedAt ?? null;
 		} catch {
 			lastSyncedAt = null;

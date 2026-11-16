@@ -13,7 +13,6 @@ pub fn run() {
     display_backend::prefer_x11_inside_appimage();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_sql::Builder::default().build())
         // Settings → Storage → Export: a native Save dialog and the file write.
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -41,9 +40,8 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             microphone::allow_in_main_window(app)?;
 
-            // The core's storage connection. The legacy SQL plugin keeps its
-            // own pooled connection to the same file until P8 (ADR-005); the
-            // migration chain is idempotent and both paths see the same rows.
+            // The app's one database connection: the core owns the schema,
+            // the migrations and every query.
             let database_path = app.path().app_config_dir()?.join("onspot.db");
             let database = Arc::new(RusqliteDriver::open(&database_path)?);
             tauri::async_runtime::block_on(migrate(database.as_ref()))?;

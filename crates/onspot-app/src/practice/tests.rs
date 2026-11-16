@@ -543,16 +543,29 @@ fn next_prompt_avoids_the_current_prompt_and_waits_between_takes() {
             english_fallback: false,
         },
     ];
-    let chosen = harness
-        .session
-        .next_prompt(&candidates, true)
-        .expect("a prompt is chosen");
+    let chosen =
+        block_on(harness.session.request_prompt(&candidates, true)).expect("a prompt is chosen");
     assert_eq!(chosen.id, "p-2");
     assert!(chosen.english_fallback);
     assert_eq!(harness.session.snapshot().prompt.id, "p-2");
 
     block_on(harness.session.start_recording()).expect("starts");
-    assert!(harness.session.next_prompt(&candidates, false).is_none());
+    assert!(block_on(harness.session.request_prompt(&candidates, false)).is_none());
+}
+
+#[test]
+fn the_next_prompt_seeds_the_catalogue_for_the_session_languages() {
+    let harness = harness(false);
+
+    let chosen = block_on(harness.session.next_prompt()).expect("a prompt is offered");
+
+    let stored = block_on(harness.records.list_prompts(Some("fr"), Some("en"))).expect("prompts");
+    assert!(
+        !stored.is_empty(),
+        "the English catalogue for French was seeded"
+    );
+    assert!(stored.iter().any(|prompt| prompt.id == chosen.id));
+    assert!(!chosen.english_fallback);
 }
 
 #[test]

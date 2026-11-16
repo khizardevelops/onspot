@@ -2,7 +2,7 @@
 
 import type { ChatMessage, EvaluationRequest } from '#lib/adapters/llm/types.js';
 import { evaluationGuidance, levelNote } from './languageGuidance';
-import { EXPLANATION_MAX_MISTAKES } from '#lib/adapters/llm/explanation.js';
+import { EXPLANATION_MAX_MISTAKES } from './explanation.js';
 
 const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
 const SEVERITIES = ['error', 'warning', 'suggestion'] as const;

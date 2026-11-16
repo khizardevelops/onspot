@@ -16,7 +16,6 @@ members = [
 	"crates/adapters/repo-sql",
 	"crates/adapters/sync-drive",
 	"crates/adapters/sync-webdav",
-	"crates/adapters/native-stt",
 	"bindings/onspot-bridge",
 	"drivers/cli",
 	"src-tauri",

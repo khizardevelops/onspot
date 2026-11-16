@@ -10,7 +10,7 @@ import {
 	MAX_VOCABULARY_SUGGESTIONS,
 	type EvaluationPart
 } from './prompt';
-import { EXPLANATION_MAX_MISTAKES } from '#lib/adapters/llm/explanation.js';
+import { EXPLANATION_MAX_MISTAKES } from './explanation.js';
 import { sentenceChunks } from '#lib/utils/textChunks.js';
 import {
 	composeExplanation,
@@ -19,7 +19,7 @@ import {
 	separateFollowUp,
 	speakableExplanation,
 	type FollowUp
-} from '#lib/adapters/llm/explanation.js';
+} from './explanation.js';
 import { sameWords } from '#lib/utils/words.js';
 import { languageIdByName } from '#lib/languages/index.js';
 import { couldBeWrittenIn } from '../../languages/textLanguage.js';

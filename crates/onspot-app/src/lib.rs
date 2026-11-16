@@ -5,7 +5,9 @@
 //! Core crates know nothing about a driver. A driver boots one [`Core`], hands
 //! it an [`EventSink`], and reaches it only through `onspot-bridge`.
 
+pub mod content_revision;
 pub mod core;
+pub mod enrichment;
 pub mod evaluation;
 pub mod events;
 pub mod export;
@@ -35,6 +37,7 @@ pub mod usage_limits;
 pub mod usage_monitor;
 pub mod usage_pacing;
 
+pub use content_revision::ContentRevision;
 pub use core::{Core, CoreConfig};
 pub use evaluation::{EvaluateAttempt, EvaluatorPort, TestLlmConnection};
 pub use events::{EventSink, PacingWait, UiEvent};
@@ -43,7 +46,7 @@ pub use export_validate::{is_onspot_database, is_sqlite_database};
 pub use history::{HistoryError, HistoryService, HistorySession};
 pub use host_rpc::HostRpc;
 pub use hosts::HostAdapters;
-pub use insights::{compute_insights, InsightsData, Pattern};
+pub use insights::{compute_insights, take_numbers, InsightsData, Pattern};
 pub use language::{
     catalog, default_language_id, default_voice, language, plan_language_data, resource_level,
     voices_for, Catalog, InstructionLanguage, Language, LanguageParts, LanguagePlan,
@@ -70,11 +73,12 @@ pub use providers::{
     is_configured, models_for, resolve_endpoint, EndpointSettings, ResolvedEndpoint,
 };
 pub use reminders::{
-    is_reminder_due, reminder_state, ReminderFrequency, ReminderInput, ReminderState,
+    is_reminder_due, last_practised_at, reminder_state, ReminderFrequency, ReminderInput,
+    ReminderState,
 };
 pub use session_setup::{
-    infer_session_setup, parse_session_setup, same_setup, setup_from_settings, usable_setup,
-    SetupAttempt,
+    infer_session_setup, latest_session_setup, open_session_setup, parse_session_setup, same_setup,
+    save_session_setup, setup_from_settings, usable_setup, SetupAttempt,
 };
 pub use settings::{AppSettings, LoadedSettings, PatchedSettings, SettingsService, VoiceTuning};
 pub use sync::{run_sync, SyncOutcome, SyncRequest};

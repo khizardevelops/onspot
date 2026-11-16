@@ -28,7 +28,6 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
-tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
@@ -36,8 +35,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-speech = { path = "plugins/speech" }
 # The core's only door: commands marshal to it, events come back over a channel.
 onspot-bridge = { path = "../bindings/onspot-bridge", features = ["tauri"] }
-# Native SQLite for the core's storage commands (P2). The legacy plugin stays
-# registered until P8, so both paths can write the same database file.
+# Native SQLite for the core: the only connection to the app's database.
 onspot-adapter-repo-sql = { path = "../crates/adapters/repo-sql" }
 onspot-ports = { path = "../crates/onspot-ports" }
 # Loopback OAuth capture in `src/oauth.rs`.

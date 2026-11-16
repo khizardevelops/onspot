@@ -1,53 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
-import { isTauri } from '#lib/platform/runtime.js';
+import { DatabaseImportError, openBrowserDatabase } from '#lib/adapters/db/index.js';
 import { initSettings } from '#lib/stores/settings.js';
 import { toast } from '#lib/stores/toast.js';
-import { DatabaseImportError } from '#lib/adapters/db/types.js';
 import { StorageFullError, requestPersistentStorage, storageRoom } from './storage';
 import { getCoreClient } from '#lib/core-client/client.js';
 import type { LegacyImportResult } from '#lib/core-client/types.gen.js';
 
 const SQLITE_MIME = 'application/vnd.sqlite3';
-const SQLITE_MAGIC = 'SQLite format 3\u0000';
-
-/** True when the bytes start with SQLite's file-format header. */
-export function isSqliteDatabase(data: Uint8Array): boolean {
-	if (data.byteLength < SQLITE_MAGIC.length) return false;
-	for (let i = 0; i < SQLITE_MAGIC.length; i++) {
-		if (data[i] !== SQLITE_MAGIC.charCodeAt(i)) return false;
-	}
-	return true;
-}
-
-/** Tables every onspot database has; their schema text is stored in the file. */
-const REQUIRED_TABLES = [
-	'schema_migrations',
-	'sessions',
-	'attempts',
-	'corrections',
-	'audio_assets',
-	'settings'
-] as const;
-
-/**
- * Rejects a foreign SQLite file before it can replace the local database.
- *
- * SQLite keeps each table's `CREATE TABLE` text in the file, so the schema is
- * visible without opening a connection. The web worker also validates the
- * restored database; this check is the guard for the native (Tauri) path.
- *
- * @param data A SQLite file image.
- * @returns True when every expected onspot table is declared.
- */
-export function isOnspotDatabase(data: Uint8Array): boolean {
-	const text = new TextDecoder('latin1').decode(data);
-
-	return REQUIRED_TABLES.every((table) =>
-		new RegExp(`CREATE TABLE\\s+(IF NOT EXISTS\\s+)?["']?${table}["']?`, 'i').test(text)
-	);
-}
 
 /** How long a restore waits for the user to answer the persistent-storage prompt. */
 const PERSIST_PROMPT_WAIT = 60_000;
@@ -74,17 +34,15 @@ export interface SqliteRestoreResult {
 }
 
 /**
- * Replaces the local database image without touching the in-memory stores.
+ * The browser side of a restore: replaces the page's SQLite file with a
+ * backup the core has already checked, then the core migrates and counts it.
+ * Browser storage is the concern here: making room (persistent storage), and
+ * keeping the previous data when the write fails (a rescue download when it
+ * cannot be put back).
  *
- * Cloud sync rehydrates itself, and the core's restore command rehydrates in
- * the driver after the command returns; both want the same header check,
- * storage pre-check and rollback, but only one of them should reload settings
- * while a bridge command is still in flight.
- *
- * @param bytes A snapshot produced by `exportSqliteFile`.
- * @returns Session and attempt counts for the restore confirmation.
+ * @param bytes A standard SQLite image of an onspot database.
  */
-export async function restoreSqliteBytes(bytes: Uint8Array): Promise<SqliteRestoreResult> {
+export async function restoreSqliteBytes(bytes: Uint8Array): Promise<void> {
 	// Which step is running, so an unexpected browser error (Firefox's bare
 	// "Unknown failure" DOMException, say) says where it came from.
 	let step = 'starting the restore';
@@ -93,38 +51,27 @@ export async function restoreSqliteBytes(bytes: Uint8Array): Promise<SqliteResto
 		// Firefox only prompts for persistent storage then, and a persisted site is
 		// not held to the shared per-site allowance that makes restores fail there.
 		// Not awaited: the promise only settles once the user answers the prompt.
-		const web = !isTauri();
-		const persisting = web ? requestPersistentStorage() : Promise.resolve(false);
-		step = 'checking the backup format';
-		if (!isSqliteDatabase(bytes)) {
-			throw new RestoreError('This is not a SQLite database. Choose an onspot .sqlite backup.');
-		}
-		// The web worker validates the restored schema with SQLite itself. The
-		// native path has no such check, so inspect the schema text there.
-		if (isTauri() && !isOnspotDatabase(bytes)) {
-			throw new RestoreError('This SQLite file is not an onspot backup. Nothing was changed.');
-		}
+		const persisting = requestPersistentStorage();
 		step = 'opening the local database';
-		const db = await getDatabaseAdapter();
+		const database = await openBrowserDatabase();
 		step = 'measuring the local database';
 		// The current database file is freed before the backup is written, so only
 		// growth beyond it needs new room. A site already over its allowance has none.
-		const current = web ? (await db.exportSqliteFile()).byteLength : 0;
+		const current = (await database.exportBytes()).byteLength;
 		const needed = Math.max(0, bytes.byteLength - current) + SAFETY_MARGIN;
-		if (web) {
-			step = 'checking browser storage';
-			let room = await storageRoom();
-			if (room && room.free < needed && !room.persisted) {
-				// Not enough room yet; the browser may be asking to allow persistent storage.
-				toast('Allow persistent storage if your browser asks: this site needs more room to restore.', 8000);
-				await Promise.race([persisting, new Promise((resolve) => setTimeout(resolve, PERSIST_PROMPT_WAIT))]);
-				room = await storageRoom();
-			}
-			if (room && room.free < needed) throw new StorageFullError(room, needed, 'Nothing was changed.');
+		step = 'checking browser storage';
+		let room = await storageRoom();
+		if (room && room.free < needed && !room.persisted) {
+			// Not enough room yet; the browser may be asking to allow persistent storage.
+			toast('Allow persistent storage if your browser asks: this site needs more room to restore.', 8000);
+			await Promise.race([persisting, new Promise((resolve) => setTimeout(resolve, PERSIST_PROMPT_WAIT))]);
+			room = await storageRoom();
 		}
+		if (room && room.free < needed) throw new StorageFullError(room, needed, 'Nothing was changed.');
+
 		step = 'writing the backup into the local database';
 		try {
-			await db.importSqliteFile(bytes);
+			await database.importBytes(bytes);
 		} catch (error) {
 			if (!(error instanceof DatabaseImportError)) throw error;
 			if (error.invalid) throw new RestoreError(`${error.message} Nothing was changed.`);
@@ -138,9 +85,6 @@ export async function restoreSqliteBytes(bytes: Uint8Array): Promise<SqliteResto
 			if (error.storage) throw new StorageFullError(await storageRoom(), needed, outcome);
 			throw new RestoreError(`Restore failed while ${step} (${error.message}). ${outcome}`);
 		}
-		step = 'reloading the restored data';
-		const [sessions, attempts] = await Promise.all([db.listSessions(), db.listAllAttempts()]);
-		return { sessions: sessions.length, attempts: attempts.length };
 	} catch (error) {
 		if (error instanceof RestoreError || error instanceof StorageFullError) throw error;
 		// Unexpected: keep the whole error for the console and name the step in the message.

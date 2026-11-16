@@ -175,8 +175,18 @@ const target = arguments[0];
   const invoke = (cmd, payload) => window.__TAURI_INTERNALS__.invoke('core_command', { cmd, payload });
   const describe = (error) => (error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error));
   try {
-    const first = await invoke('sync.now', { ...target, revision: 0, syncedRevision: null });
-    const second = await invoke('sync.now', { ...target, revision: 0, syncedRevision: 0 });
+    // Practice seeds its prompt catalogue at startup, and that is a content
+    // change sync must count; wait until it has settled on a prompt, so the
+    // second sync compares an idle device.
+    const deadline = Date.now() + 30000;
+    for (;;) {
+      const practice = await invoke('practice.snapshot', null).catch(() => null);
+      if (practice && practice.snapshot && practice.snapshot.prompt && practice.snapshot.prompt.id) break;
+      if (Date.now() > deadline) throw new Error('practice never showed a prompt');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    const first = await invoke('sync.now', target);
+    const second = await invoke('sync.now', target);
     done({ first, second });
   } catch (error) {
     done({ error: describe(error) });
@@ -191,8 +201,8 @@ const target = arguments[0];
   const invoke = (cmd, payload) => window.__TAURI_INTERNALS__.invoke('core_command', { cmd, payload });
   const describe = (error) => (error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error));
   try {
-    const conflict = await invoke('sync.now', { ...target, revision: 0, syncedRevision: 0 });
-    const applied = await invoke('sync.now', { ...target, revision: 0, syncedRevision: 0, choice: 'download' });
+    const conflict = await invoke('sync.now', target);
+    const applied = await invoke('sync.now', { ...target, choice: 'download' });
     const ping = await invoke('core.ping', { note: null });
     done({ conflict, applied, ping });
   } catch (error) {
@@ -209,7 +219,7 @@ const target = arguments[0];
   const describe = (error) => (error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error));
   let message = null;
   try {
-    await invoke('sync.now', { ...target, revision: 0, syncedRevision: null, choice: 'download' });
+    await invoke('sync.now', { ...target, choice: 'download' });
   } catch (error) {
     message = describe(error);
   }

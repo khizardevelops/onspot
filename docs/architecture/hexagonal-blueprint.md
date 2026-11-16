@@ -51,7 +51,6 @@ Exact per-file coupling, ordering and offenders: `coupling-matrix.md`.
 │       ├── repo-sql/             # package onspot-adapter-repo-sql
 │       ├── sync-drive/           # package onspot-adapter-sync-drive
 │       ├── sync-webdav/          # package onspot-adapter-sync-webdav
-│       └── native-stt/           # package onspot-adapter-native-stt
 ├── bindings/
 │   └── onspot-bridge/            # command/event catalog, dispatcher, ts-rs, transports
 ├── drivers/
@@ -116,9 +115,10 @@ Rules:
 Each port starts with the adapter that exists today, so phases land
 independently:
 
-- **Rust-native** (desktop/Android): implement the port directly, e.g.
-  `native-stt` reuses the whisper.cpp engine already in
-  `src-tauri/plugins/speech`.
+- **Rust-native** (desktop/Android): implement the port directly where a
+  driver needs it in-process. Speech recognition on desktop/Android already
+  runs whisper.cpp in Rust (`src-tauri/plugins/speech`); the core reaches it
+  through the webview host like the browser's engines (ADR-013).
 - **Legacy host adapters** (web, temporary): the wasm core calls a small JS shim
   through a `#[wasm_bindgen]` extern, and the shim delegates to the current
   TypeScript implementation (Workers, sqlite-wasm, Web Audio). The core cannot

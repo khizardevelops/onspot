@@ -53,7 +53,7 @@ const { GROQ_PUBLISHED_MODELS, groqPublishedLimits, groqKnownLimits } = await im
 const usageFormat = await import('../src/lib/usage/format.ts');
 const usageLedger = await import('../deprecated/src/lib/usage/ledger.ts');
 const { composeExplanation, normalizeExplanation, separateFollowUp } = await import(
-	'../src/lib/adapters/llm/explanation.ts'
+	'../deprecated/src/lib/adapters/llm/explanation.ts'
 );
 const CAPTURE_LABEL = 'v0.2.4 working tree, 2026-11-12 (P0)';
 

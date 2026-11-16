@@ -8,12 +8,13 @@ use std::sync::{Arc, Mutex};
 use serde::Deserialize;
 use ts_rs::TS;
 
+use crate::content_revision::{ContentRevision, RevisionTrackingHistory, RevisionTrackingRecords};
 use crate::events::{EventSink, UiEvent};
 use crate::host_rpc::{HostDeviceStore, HostRpc};
 use crate::hosts::HostAdapters;
 use crate::usage_ledger::UsageLedger;
 use crate::usage_pacing::RequestPacer;
-use onspot_ports::{ModelProgress, PickedFile};
+use onspot_ports::{HistoryStore, ModelProgress, PickedFile, RecordsStore};
 
 /// What a driver tells the core at boot.
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -90,6 +91,8 @@ pub struct Core {
     /// The one rate-limit pacing (and through it the usage ledger) every LLM
     /// request of this run shares, so requests see each other.
     pacer: Arc<RequestPacer>,
+    /// The device's count of learner-data writes, for sync.
+    revision: Arc<ContentRevision>,
 }
 
 impl Core {
@@ -109,8 +112,25 @@ impl Core {
             .device
             .clone()
             .unwrap_or_else(|| Arc::new(HostDeviceStore::new(host_rpc.clone())));
-        let ledger = Arc::new(UsageLedger::new(device, events.clone()));
+        let ledger = Arc::new(UsageLedger::new(device.clone(), events.clone()));
         let pacer = Arc::new(RequestPacer::new(ledger, events));
+
+        // Every use case writes through the counting repositories, so sync
+        // notices a take, a rename or a deletion whichever path made it.
+        let revision = Arc::new(ContentRevision::new(device));
+        let records = hosts.records.clone().map(|records| {
+            Arc::new(RevisionTrackingRecords::new(records, revision.clone()))
+                as Arc<dyn RecordsStore>
+        });
+        let history = hosts.history.clone().map(|history| {
+            Arc::new(RevisionTrackingHistory::new(history, revision.clone()))
+                as Arc<dyn HistoryStore>
+        });
+        let hosts = HostAdapters {
+            records,
+            history,
+            ..hosts
+        };
 
         Self {
             config,
@@ -121,6 +141,7 @@ impl Core {
             staged_restore: Mutex::new(None),
             language_download: Mutex::new(None),
             pacer,
+            revision,
         }
     }
 
@@ -178,6 +199,11 @@ impl Core {
     /// The device's usage ledger.
     pub fn usage_ledger(&self) -> &Arc<UsageLedger> {
         self.pacer.ledger()
+    }
+
+    /// The device's content revision, which sync compares.
+    pub fn content_revision(&self) -> &Arc<ContentRevision> {
+        &self.revision
     }
 
     /// The open practice session, if the driver has configured one.

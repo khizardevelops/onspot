@@ -75,7 +75,10 @@ try {
 	const page = await browser.newPage();
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));
-	await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+	// The check runs on its dev page; a fresh profile would otherwise be sent
+	// to the first-run setup guide before it mounts.
+	await page.addInitScript(() => localStorage.setItem('onspot.onboarding.v1', 'skipped'));
+	await page.goto(`${BASE}/dev/storage-check/`, { waitUntil: 'domcontentloaded' });
 	await page.waitForSelector('[data-storage-check="pass"], [data-storage-check="fail"]', {
 		timeout: 120_000
 	});

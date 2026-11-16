@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { get } from 'svelte/store';
-import { currentRevision, getSyncedRevision, setSyncedRevision } from '#lib/adapters/db/revision.js';
 import { syncNowCore, type SyncTarget } from '#lib/core-client/sync.js';
 import { appSettings } from '#lib/stores/settings.js';
 import { webdavPassword, webdavUsername } from '#lib/stores/secrets.js';
@@ -72,24 +71,8 @@ async function runSyncThroughCore(
 	choice: SyncChoice | undefined,
 	onProgress?: ProgressCallback
 ): Promise<SyncResult> {
-	// Capture the revision before the transfer, exactly as the legacy path
-	// does: a write during the upload must make the next comparison unsynced.
-	const revision = currentRevision();
-
 	onProgress?.('Checking the cloud backup…');
-	const outcome = await syncNowCore(
-		syncTargetOf(provider),
-		revision,
-		getSyncedRevision(provider.id),
-		choice
-	);
-
-	if (outcome.completed) {
-		// A download imports a new database, which bumps the revision; record
-		// the revision the restored file actually has. An upload synced the
-		// revision captured before it started.
-		setSyncedRevision(provider.id, outcome.replacedLocal ? currentRevision() : revision);
-	}
+	const outcome = await syncNowCore(syncTargetOf(provider), choice);
 
 	return {
 		decision: outcome.decision,

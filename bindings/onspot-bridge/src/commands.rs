@@ -97,6 +97,9 @@ pub async fn dispatch(core: &Core, command: &str, payload: Value) -> Result<Valu
             if let Some(result) = crate::sync::dispatch(core, other, payload.clone()).await {
                 return result;
             }
+            if let Some(result) = crate::records::dispatch(core, other, payload.clone()).await {
+                return result;
+            }
             match crate::storage::dispatch(core, other, payload).await {
                 Some(result) => result,
                 None => Err(BridgeError::unknown_command(other)),

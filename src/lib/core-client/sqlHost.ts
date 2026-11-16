@@ -1,45 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
- * The web SQL host (P2).
+ * The web SQL host.
  *
- * The Rust core holds the schema, migrations and repositories; the browser
- * keeps owning the engine. This object is the only crossing point: Rust sends
- * SQL text and parameters, and every call lands on the existing worker driver
- * through `getDatabaseAdapter()`, so there is still exactly one OPFS
- * connection and one migration owner on the page.
+ * The Rust core holds the schema, the migrations and the repositories; the
+ * browser owns the engine. This object is the only crossing point: Rust sends
+ * SQL text and parameters, and every call lands on the page's one SQLite
+ * worker (`openBrowserDatabase`).
  */
 
-import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
-import type { SqlStatement, SqlValue } from '#lib/adapters/db/types.js';
+import { openBrowserDatabase, type SqlStatement, type SqlValue } from '#lib/adapters/db/index.js';
 
 /** The methods the wasm module looks up on the object passed to `init_core_wasm`. */
 export interface CoreSqlHost {
 	execute(sql: string, params: SqlValue[]): Promise<void>;
 	select(sql: string, params: SqlValue[]): Promise<Record<string, unknown>[]>;
 	batch(statements: SqlStatement[]): Promise<void>;
-	/** A no-op: the page's adapter outlives the core. */
+	/** A no-op: the page's database outlives the core. */
 	close(): Promise<void>;
 }
 
-/**
- * Builds the host over the page's already-open database. The adapter's
- * `init()` has run its own migration chain by the time this resolves, and the
- * Rust migration that follows finds every version applied and writes nothing.
- */
+/** Builds the host over the page's database; the core migrates it on boot. */
 export async function createCoreSqlHost(): Promise<CoreSqlHost> {
-	const adapter = await getDatabaseAdapter();
-	const driver = await adapter.driver();
+	const database = await openBrowserDatabase();
 	return {
-		execute: (sql, params) => driver.execute(sql, params),
-		select: (sql, params) => driver.select<Record<string, unknown>>(sql, params),
-		// The worker's batch is a real transaction; Tauri's plugin has none, so
-		// the fallback keeps the documented order without pretending atomicity.
-		batch: driver.batch
-			? (statements) => driver.batch!(statements)
-			: async (statements) => {
-					for (const statement of statements) await driver.execute(statement.sql, statement.params);
-				},
+		execute: (sql, params) => database.execute(sql, params),
+		select: (sql, params) => database.select<Record<string, unknown>>(sql, params),
+		batch: (statements) => database.batch(statements),
 		close: async () => undefined
 	};
 }

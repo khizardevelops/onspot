@@ -1,36 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
- * Database abstraction for onspot.
+ * The shapes of onspot's stored records, as the screens read them.
  *
- * The app runs in two runtimes with very different storage engines:
- *  - Desktop (Tauri v2): native SQLite through `@tauri-apps/plugin-sql`.
- *  - Web SPA (browser): `@sqlite.org/sqlite-wasm` over OPFS, inside a Worker.
- *
- * Everything above this layer talks only to `IDatabaseAdapter`, so no store or
- * component imports a storage engine directly. The concrete SQL is shared by
- * both runtimes via `SqlDatabaseAdapter`; only the low-level driver differs.
+ * The Rust core owns the database: the schema, the migrations and every
+ * query (`onspot-adapter-repo-sql`). The desktop and Android apps open it
+ * natively; in the browser the core runs its SQL through the page's SQLite
+ * worker (`browserDatabase.ts`). These types describe the rows that cross
+ * the bridge, and the SQL values the worker accepts.
  */
 
 /** SQLite scalar types accepted as bind parameters. */
 export type SqlValue = string | number | null;
 
-/** The subset of a SQL engine the repository layer needs. */
-export interface SqlDriver {
-	/** Run a statement that returns no rows (INSERT/UPDATE/DELETE/DDL). */
-	execute(sql: string, params?: SqlValue[]): Promise<void>;
-	/** Run a query and return rows as plain objects. */
-	select<T>(sql: string, params?: SqlValue[]): Promise<T[]>;
-	/**
-	 * Run statements as one transaction: all of them or none. Optional because
-	 * Tauri's plugin pools connections, so a `BEGIN` sent through it may not
-	 * share a connection with the statements after it.
-	 */
-	batch?(statements: SqlStatement[]): Promise<void>;
-	close(): Promise<void>;
-}
-
-/** One statement of a `SqlDriver.batch`. */
+/** One statement of a transaction the worker runs as a whole. */
 export interface SqlStatement {
 	sql: string;
 	params?: SqlValue[];
@@ -289,94 +272,6 @@ export interface SyncMetadata {
 	updatedAt: string;
 }
 
-/**
- * Unified persistence contract. Implementations: `TauriSqlAdapter`,
- * `OpfsSqliteAdapter`.
- */
-export interface IDatabaseAdapter {
-	/** Which backend is live; surfaced in Settings and logs. */
-	readonly kind: 'tauri-sql' | 'opfs-sqlite';
-
-	/** Open the connection and run migrations. Idempotent. */
-	init(): Promise<void>;
-	/**
-	 * The raw driver, used by the Rust core's host shim. The adapter keeps
-	 * ownership: callers must not close it.
-	 */
-	driver(): Promise<SqlDriver>;
-	close(): Promise<void>;
-
-	// Prompts
-	/**
-	 * All prompts, or only those for one target language, one language of
-	 * instruction, or both, when provided.
-	 */
-	listPrompts(language?: string, instructionLanguage?: string): Promise<Prompt[]>;
-	getPrompt(id: string): Promise<Prompt | null>;
-	putPrompt(prompt: Prompt): Promise<void>;
-	deletePrompt(id: string): Promise<void>;
-
-	// Sessions
-	listSessions(): Promise<Session[]>;
-	getSession(id: string): Promise<Session | null>;
-	putSession(session: Session): Promise<void>;
-	deleteSession(id: string): Promise<void>;
-
-	// Attempts
-	listAttempts(sessionId: string): Promise<Attempt[]>;
-	listAllAttempts(): Promise<Attempt[]>;
-	getAttempt(id: string): Promise<Attempt | null>;
-	putAttempt(attempt: Attempt): Promise<void>;
-	deleteAttempt(id: string): Promise<void>;
-
-	// Corrections (replaced wholesale per attempt — the LLM result is atomic)
-	listCorrections(attemptId: string): Promise<Correction[]>;
-	/** Every correction, for cross-session analytics. */
-	listAllCorrections(): Promise<Correction[]>;
-	replaceCorrections(attemptId: string, corrections: Correction[]): Promise<void>;
-
-	// Audio
-	putAudio(asset: AudioAsset): Promise<void>;
-	getAudio(key: string): Promise<AudioAsset | null>;
-	deleteAudio(key: string): Promise<void>;
-	/** Drop every cached clip last saved for this attempt (recording or read-back). */
-	deleteAttemptAudio(attemptId: string): Promise<void>;
-
-	// Prompt submissions (outbox until the shared database accepts them)
-	/** Pending generated prompts, oldest first. */
-	listPromptSubmissions(): Promise<PromptSubmission[]>;
-	/** Queue a prompt; an already queued prompt keeps its attempt history. */
-	putPromptSubmission(submission: PromptSubmission): Promise<void>;
-	markPromptSubmissionFailed(id: string, error: string, attemptedAt: string): Promise<void>;
-	deletePromptSubmission(id: string): Promise<void>;
-
-	// Settings
-	getSetting(key: string): Promise<string | null>;
-	setSetting(key: string, value: string): Promise<void>;
-	listSettings(): Promise<Setting[]>;
-	deleteSetting(key: string): Promise<void>;
-
-	// Sync metadata
-	getSyncMetadata(provider: string): Promise<SyncMetadata | null>;
-	setSyncMetadata(meta: SyncMetadata): Promise<void>;
-
-	/** Dump the whole database as a portable SQL script (UTF-8 bytes). */
-	export(): Promise<Uint8Array>;
-	/**
-	 * The whole database as a standard `.sqlite` file: every table, including
-	 * recordings and all cached TTS audio. API keys live outside the database
-	 * and are never part of it.
-	 */
-	exportSqliteFile(): Promise<Uint8Array>;
-	/**
-	 * Replace the whole database with a `.sqlite` file produced by
-	 * `exportSqliteFile`, then run migrations and leave it open. Destructive:
-	 * data on this device that is absent from the file is discarded.
-	 */
-	importSqliteFile(data: Uint8Array): Promise<void>;
-	/** Replace the database contents from a dump produced by `export`. */
-	import(data: Uint8Array): Promise<void>;
-}
 
 /**
  * A `.sqlite` restore that failed. `storage` marks a write the browser refused

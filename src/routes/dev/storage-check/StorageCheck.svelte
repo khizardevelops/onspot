@@ -4,14 +4,14 @@
 	/**
 	 * Development readout for P2: proves the wasm bridge can drive the real
 	 * SQLite worker through the Rust migration, settings and history commands.
-	 * Mounted only in dev; the production bundle contains none of it.
+	 * Mounted only in dev, on /dev/storage-check/; the production bundle contains none of it.
 	 */
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import initSqlite from '@sqlite.org/sqlite-wasm';
-	import fixtureUrl from '../../../crates/adapters/repo-sql/tests/fixtures/onspot-v0.2.4.sqlite?url';
-	import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
-	import { getCoreClient } from './client';
+	import fixtureUrl from '../../../../crates/adapters/repo-sql/tests/fixtures/onspot-v0.2.4.sqlite?url';
+	import { openBrowserDatabase } from '#lib/adapters/db/index.js';
+	import { getCoreClient } from '#lib/core-client/client.js';
 
 	type CheckState = 'idle' | 'running' | 'pass' | 'fail' | 'skipped';
 
@@ -160,20 +160,14 @@
 				const history = await client.command<{ sessions: unknown[] }>('history.list');
 				if (!Array.isArray(history.sessions)) throw new Error('history.list did not return a list');
 
-				// Write a synthetic session through the legacy adapter, then rename and
+				// Write a synthetic session through the backup merge, then rename and
 				// delete it through the bridge; the row must be gone afterwards.
-				const db = await getDatabaseAdapter();
 				const sessionId = 'dev-storage-check';
 				const now = new Date().toISOString();
-				await db.putSession({
-					id: sessionId,
-					title: 'Storage check',
-					mode: 'casual',
-					startedAt: now,
-					endedAt: null,
-					createdAt: now,
-					updatedAt: now,
-					setup: null
+				const session = { id: sessionId, title: 'Storage check', mode: 'casual', startedAt: now, createdAt: now, updatedAt: now };
+				await client.command('restore.legacy_json', {
+					json: JSON.stringify({ app: 'onspot', format: 1, sessions: [session] }),
+					now
 				});
 				await client.command('history.rename', { sessionId, title: 'Storage check renamed' });
 				const renamed = await client.command<{ sessions: { session: { id: string; title: string } }[] }>(
@@ -207,7 +201,8 @@
 					key: secretKey
 				});
 				if (secret.value !== null) throw new Error('a secret surfaced through settings.get');
-				const dump = new TextDecoder().decode(await db.export());
+				const database = await openBrowserDatabase();
+				const dump = new TextDecoder().decode(await database.exportBytes());
 				if (dump.includes('secret-value')) throw new Error('a secret leaked into the database export');
 				localStorage.removeItem(secretKey);
 

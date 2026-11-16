@@ -21,7 +21,9 @@ use onspot_app::{
     backup_date, import_legacy_json, Core, ExportDatabase, HostRpc, LegacyImportError,
     LegacyImportResult, PickRestore, RestoreDatabase, StagedRestore,
 };
-use onspot_ports::{CoreError, DatabaseFile, FileSystemSink, PickedFile, RestoreCounts};
+use onspot_ports::{
+    CoreError, DatabaseFile, FileSystemSink, PickedFile, RestoreCounts, SqlDriver, SqlValue,
+};
 
 use crate::commands::serialize;
 use crate::error::BridgeError;
@@ -102,7 +104,7 @@ async fn export_database(core: &Core) -> Result<ExportDatabaseResponse, BridgeEr
     let database: &dyn DatabaseFile = match native.as_deref() {
         Some(database) => database,
         None => {
-            host_database = HostDatabaseFile::new(core.host_rpc().clone());
+            host_database = HostDatabaseFile::new(core);
             &host_database
         }
     };
@@ -183,7 +185,7 @@ async fn restore_confirm(core: &Core) -> Result<RestoreConfirmResponse, BridgeEr
     let database: &dyn DatabaseFile = match native.as_deref() {
         Some(database) => database,
         None => {
-            host_database = HostDatabaseFile::new(core.host_rpc().clone());
+            host_database = HostDatabaseFile::new(core);
             &host_database
         }
     };
@@ -192,6 +194,8 @@ async fn restore_confirm(core: &Core) -> Result<RestoreConfirmResponse, BridgeEr
         .execute(&staged.bytes)
         .await
         .map_err(core_error)?;
+    // The restored data is new to every sync provider.
+    core.content_revision().mark_changed().await;
 
     Ok(RestoreConfirmResponse {
         sessions: u32::try_from(sessions).unwrap_or(u32::MAX),
@@ -268,13 +272,60 @@ async fn pick_via_host(rpc: &HostRpc) -> Result<Option<PickedFile>, CoreError> {
 /// The database image over a host call, for drivers without a native port.
 pub struct HostDatabaseFile {
     rpc: Arc<HostRpc>,
+    /// The engine the host's database runs on, migrated after an import.
+    sql: Option<Arc<dyn SqlDriver>>,
 }
 
 impl HostDatabaseFile {
-    /// Creates the database image over the core's host-call registry.
-    pub fn new(rpc: Arc<HostRpc>) -> Self {
-        Self { rpc }
+    /// Creates the database image over the core's host calls and its engine.
+    pub fn new(core: &Core) -> Self {
+        Self {
+            rpc: core.host_rpc().clone(),
+            sql: core.hosts().sql.clone(),
+        }
     }
+
+    /// Replaces the database through the host, then brings the restored
+    /// schema up to date (a backup may predate this build) and counts it.
+    async fn import(&self, bytes: &[u8]) -> Result<RestoreCounts, CoreError> {
+        self.rpc
+            .call(
+                "db.import_bytes",
+                json!({ "bytesBase64": BASE64.encode(bytes) }),
+            )
+            .await?;
+        let Some(sql) = &self.sql else {
+            return Err(CoreError::new(
+                "restore.unavailable",
+                "this driver cannot read a restored database",
+            ));
+        };
+        onspot_adapter_repo_sql::migrate(sql.as_ref())
+            .await
+            .map_err(|error| CoreError::new("storage.migration_failed", error.message))?;
+        Ok(RestoreCounts {
+            sessions: count_rows(sql.as_ref(), "sessions").await?,
+            attempts: count_rows(sql.as_ref(), "attempts").await?,
+        })
+    }
+}
+
+/// The number of rows in one of the database's own tables.
+async fn count_rows(sql: &dyn SqlDriver, table: &'static str) -> Result<usize, CoreError> {
+    let rows = sql
+        .select(&format!("SELECT count(*) AS count FROM {table}"), &[])
+        .await
+        .map_err(|error| CoreError::new("restore.count_failed", error.message))?;
+    let count = rows
+        .first()
+        .and_then(|row| row.get("count"))
+        .and_then(|value| match value {
+            SqlValue::Integer(count) => usize::try_from(*count).ok(),
+            SqlValue::Real(count) => Some(*count as usize),
+            _ => None,
+        })
+        .unwrap_or(0);
+    Ok(count)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -285,7 +336,7 @@ impl DatabaseFile for HostDatabaseFile {
     }
 
     async fn import_bytes(&self, bytes: &[u8]) -> Result<RestoreCounts, CoreError> {
-        import_via_host(&self.rpc, bytes).await
+        self.import(bytes).await
     }
 }
 
@@ -297,7 +348,7 @@ impl DatabaseFile for HostDatabaseFile {
     }
 
     async fn import_bytes(&self, bytes: &[u8]) -> Result<RestoreCounts, CoreError> {
-        import_via_host(&self.rpc, bytes).await
+        self.import(bytes).await
     }
 }
 
@@ -305,20 +356,6 @@ async fn export_via_host(rpc: &HostRpc) -> Result<Vec<u8>, CoreError> {
     let reply = rpc.call("db.export_bytes", json!({})).await?;
     let response: ExportBytesReply = parse_reply("db.export_bytes", reply)?;
     decode("db.export_bytes", &response.bytes_base64)
-}
-
-async fn import_via_host(rpc: &HostRpc, bytes: &[u8]) -> Result<RestoreCounts, CoreError> {
-    let reply = rpc
-        .call(
-            "db.import_bytes",
-            json!({ "bytesBase64": BASE64.encode(bytes) }),
-        )
-        .await?;
-    let response: ImportReply = parse_reply("db.import_bytes", reply)?;
-    Ok(RestoreCounts {
-        sessions: response.sessions as usize,
-        attempts: response.attempts as usize,
-    })
 }
 
 fn decode(method: &str, value: &str) -> Result<Vec<u8>, CoreError> {
@@ -362,13 +399,6 @@ struct PickReplyFile {
 #[serde(rename_all = "camelCase")]
 struct ExportBytesReply {
     bytes_base64: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ImportReply {
-    sessions: u32,
-    attempts: u32,
 }
 
 #[cfg(test)]

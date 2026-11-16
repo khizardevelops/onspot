@@ -159,3 +159,32 @@ pub fn compute_insights(
 
     InsightsData { totals, patterns }
 }
+
+/// Each take's 1-based position inside its session, by take id: the "Take 3"
+/// an insight occurrence links to.
+pub fn take_numbers(attempts: &[Attempt]) -> std::collections::BTreeMap<String, u32> {
+    let mut by_session: HashMap<&str, Vec<&Attempt>> = HashMap::new();
+    for attempt in attempts {
+        by_session
+            .entry(attempt.session_id.as_str())
+            .or_default()
+            .push(attempt);
+    }
+
+    let mut numbers = std::collections::BTreeMap::new();
+    for takes in by_session.values_mut() {
+        // Stable: takes with the same time keep their stored order.
+        takes.sort_by_key(|attempt| {
+            chrono::DateTime::parse_from_rfc3339(&attempt.created_at)
+                .map(|time| time.timestamp_millis())
+                .unwrap_or(i64::MAX)
+        });
+        for (position, attempt) in takes.iter().enumerate() {
+            numbers.insert(
+                attempt.id.clone(),
+                u32::try_from(position + 1).unwrap_or(u32::MAX),
+            );
+        }
+    }
+    numbers
+}

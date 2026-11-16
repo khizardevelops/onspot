@@ -69,6 +69,14 @@ const TYPE_ORDER = [
 	'AcceptedResponse',
 	'TestConnectionResponse',
 	'ListModelsResponse',
+	// Record reads and writes outside a practice run.
+	'LatestSetupResponse',
+	'OpenSetupResponse',
+	'LastPractisedResponse',
+	'AudioAsset',
+	'AudioResponse',
+	'SyncMetadata',
+	'SyncMetadataResponse',
 	// The device's usage ledger: what driver-side cloud engines report.
 	'CallReport',
 	'RefusalReport',

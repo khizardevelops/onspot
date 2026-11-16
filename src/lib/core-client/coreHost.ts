@@ -11,7 +11,7 @@
  */
 
 import { get } from 'svelte/store';
-import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+import { openBrowserDatabase } from '#lib/adapters/db/index.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
 import { VoiceRecorder } from '#lib/utils/recorder.js';
 import { isTauri } from '#lib/platform/runtime.js';
@@ -286,8 +286,8 @@ export function createCoreHost(client: CoreClient): CoreHost {
 				}
 				case 'db.export_bytes': {
 					try {
-						const database = await getDatabaseAdapter();
-						const bytes = await database.exportSqliteFile();
+						const database = await openBrowserDatabase();
+						const bytes = await database.exportBytes();
 						return { bytesBase64: encodeBase64(bytes) };
 					} catch (error) {
 						throw hostError('storage.export_failed', error);
@@ -299,8 +299,9 @@ export function createCoreHost(client: CoreClient): CoreHost {
 						// Dynamic import: `utils/export.ts` imports the practice store,
 						// which imports this module; a static edge would be a cycle.
 						const { restoreSqliteBytes } = await import('#lib/utils/export.js');
-						const result = await restoreSqliteBytes(decodeBase64(request.bytesBase64));
-						return { sessions: result.sessions, attempts: result.attempts };
+						// The core migrates and counts the restored database itself.
+						await restoreSqliteBytes(decodeBase64(request.bytesBase64));
+						return {};
 					} catch (error) {
 						throw hostError('storage.restore_failed', error);
 					}

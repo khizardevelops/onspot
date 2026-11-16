@@ -49,12 +49,8 @@ const SVELTE_STORE_ALLOWED = [
 const TAURI_ALLOWED = [
 	'src/lib/core-client/',
 	'src/lib/platform/',
-	'src/lib/adapters/db/schema.ts',
-	'src/lib/adapters/db/TauriSqlAdapter.ts',
-	'src/lib/adapters/db/types.ts',
 	'src/lib/adapters/sync/',
 	'src/lib/speech/stt/native/nativeEngine.ts',
-	'src/lib/utils/export.ts',
 	'src/lib/components/WindowBar.svelte'
 ];
 

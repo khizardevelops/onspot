@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { getDatabaseAdapter, type CorrectionCategory, type CorrectionSeverity, type ExamStatus, type FollowUp } from '#lib/adapters/db/index.js';
+import type { FollowUp } from '#lib/adapters/db/index.js';
+import { getCoreClient } from '#lib/core-client/client.js';
 import takes from './longTakes.json';
 
 /**
@@ -41,23 +42,26 @@ const SESSION_ID_PREFIX = 'session-long-takes-';
  * @returns The session's id.
  */
 export async function longTakesSession(): Promise<string> {
-	const db = await getDatabaseAdapter();
-	const existing = (await db.listSessions()).find((session) => session.id.startsWith(SESSION_ID_PREFIX));
-	return existing?.id ?? addLongTakes();
+	const client = await getCoreClient();
+	const history = await client.command<{ sessions: { session: { id: string } }[] }>('history.list');
+	const existing = history.sessions.find((entry) => entry.session.id.startsWith(SESSION_ID_PREFIX));
+	return existing?.session.id ?? addLongTakes();
 }
 
 /**
- * Adds both takes as a new session.
+ * Adds both takes as a new session, through the same merge a format-1 JSON
+ * backup uses, so the tool writes nothing the app itself could not. That
+ * format has no follow-up questions, so the simulated takes show none.
  *
  * @returns The new session's id.
  */
 async function addLongTakes(): Promise<string> {
-	const db = await getDatabaseAdapter();
 	const started = Date.now();
 	const sessionId = `${SESSION_ID_PREFIX}${started}`;
 	const at = (offsetMs: number) => new Date(started + offsetMs).toISOString();
+	const simulated = takes as SimulatedTake[];
 
-	await db.putSession({
+	const session = {
 		id: sessionId,
 		title: 'Long takes (simulated)',
 		mode: 'casual',
@@ -74,51 +78,35 @@ async function addLongTakes(): Promise<string> {
 			explanationVoice: '',
 			targetSpeechPace: 0.9
 		}
-	});
-
-	for (const [index, take] of (takes as SimulatedTake[]).entries()) {
-		const id = `attempt-long-takes-${started}-${index}`;
+	};
+	const attempts = simulated.map((take, index) => {
 		const createdAt = at(index * 30_000);
-		await db.putAttempt({
-			id,
+		return {
+			id: `attempt-long-takes-${started}-${index}`,
 			sessionId,
-			promptId: null,
 			promptText: take.prompt,
 			transcript: take.transcript,
 			correctedText: take.correctedText,
-			translation: null,
-			translations: null,
-			ttsVoice: null,
 			explanation: take.explanation,
-			followUp: take.followUp,
-			wordGlosses: null,
 			durationSec: take.durationSec,
 			wordCount: take.wordCount,
-			audioKey: null,
 			createdAt,
 			updatedAt: createdAt
-		});
-		await db.replaceCorrections(
-			id,
-			take.corrections.map((correction, sortOrder) => ({
-				id: `${id}-correction-${sortOrder}`,
-				attemptId: id,
-				category: correction.category as CorrectionCategory,
-				severity: correction.severity as CorrectionSeverity,
-				label: correction.label,
-				original: correction.original,
-				replacement: correction.replacement,
-				replacementTranslation: correction.replacementTranslation,
-				start: null,
-				end: null,
-				explanation: correction.explanation,
-				speakText: null,
-				examStatus: correction.examStatus as ExamStatus | null,
-				formalAlternatives: [],
-				sortOrder,
-				createdAt
-			}))
-		);
-	}
+		};
+	});
+	const corrections = simulated.flatMap((take, index) =>
+		take.corrections.map((correction, sortOrder) => ({
+			...correction,
+			id: `${attempts[index].id}-correction-${sortOrder}`,
+			attemptId: attempts[index].id,
+			formalAlternatives: [],
+			sortOrder,
+			createdAt: attempts[index].createdAt
+		}))
+	);
+
+	const backup = { app: 'onspot', format: 1, sessions: [session], attempts, corrections };
+	const client = await getCoreClient();
+	await client.command('restore.legacy_json', { json: JSON.stringify(backup), now: at(0) });
 	return sessionId;
 }

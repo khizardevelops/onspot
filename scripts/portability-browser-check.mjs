@@ -104,45 +104,34 @@ async function waitForPractice(page) {
 	);
 }
 
-/** One session and one take inserted through the app's own database adapter. */
+/** One session and one take written through the core (the same merge a JSON backup uses). */
 async function seedHistory(page) {
 	return page.evaluate(async () => {
-		const { getDatabaseAdapter } = await import('/src/lib/adapters/db/index.ts');
-		const database = await getDatabaseAdapter();
+		const { getCoreClient } = await import('/src/lib/core-client/client.ts');
+		const client = await getCoreClient();
 		const now = new Date().toISOString();
-		await database.putSession({
-			id: 'portability-check-session',
-			title: 'Portability check',
-			mode: 'exam',
-			startedAt: now,
-			endedAt: null,
-			createdAt: now,
-			updatedAt: now,
-			setup: null
-		});
-		await database.putAttempt({
-			id: 'portability-check-attempt',
-			sessionId: 'portability-check-session',
-			promptId: null,
-			promptText: 'Racontez votre matinée au marché.',
-			transcript: 'Bonjour je vais au marché ce matin',
-			correctedText: 'Bonjour, je vais au marché ce matin.',
-			translation: null,
-			translations: null,
-			ttsVoice: null,
-			explanation: null,
-			followUp: null,
-			wordGlosses: null,
-			durationSec: 1.2,
-			wordCount: 7,
-			audioKey: null,
-			createdAt: now,
-			updatedAt: now
-		});
-		return {
-			sessions: (await database.listSessions()).length,
-			attempts: (await database.listAttempts('portability-check-session')).length
+		const backup = {
+			app: 'onspot',
+			format: 1,
+			sessions: [
+				{ id: 'portability-check-session', title: 'Portability check', mode: 'exam', startedAt: now, createdAt: now, updatedAt: now }
+			],
+			attempts: [
+				{
+					id: 'portability-check-attempt',
+					sessionId: 'portability-check-session',
+					promptText: 'Racontez votre matinée au marché.',
+					transcript: 'Bonjour je vais au marché ce matin',
+					correctedText: 'Bonjour, je vais au marché ce matin.',
+					durationSec: 1.2,
+					wordCount: 7,
+					createdAt: now,
+					updatedAt: now
+				}
+			]
 		};
+		const imported = await client.command('restore.legacy_json', { json: JSON.stringify(backup), now });
+		return { sessions: imported.sessions, attempts: imported.attempts };
 	});
 }
 

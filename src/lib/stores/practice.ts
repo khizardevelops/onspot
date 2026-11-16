@@ -2,14 +2,12 @@
 
 import { derived, get, writable } from 'svelte/store';
 import {
-	getDatabaseAdapter,
 	type Correction,
 	type RunMode,
 	type FollowUp,
 	type TextGlosses,
 	type TranslationSet,
 	type WordGlosses,
-	type IDatabaseAdapter,
 	TRANSLATION_SET_VERSION
 } from '#lib/adapters/db/index.js';
 import { appSettings, setSetting, settingsReady, type AppSettings } from './settings';
@@ -31,16 +29,14 @@ import {
 	type SynthesizeOptions
 } from '#lib/speech/tts/service.js';
 import { base64ToBlob } from '#lib/utils/base64.js';
-import { ensureEnglishPromptsSeeded, ensurePromptsSeeded } from '#lib/practice/prompts.js';
 import { startPromptSubmissionSync } from '#lib/practice/promptSubmissions.js';
+import { sameSetup, setupFromSettings, type SessionSetup } from '#lib/practice/sessionSetup.js';
 import {
-	inferSessionSetup,
-	parseSessionSetup,
-	sameSetup,
-	setupFromSettings,
-	usableSetup,
-	type SessionSetup
-} from '#lib/practice/sessionSetup.js';
+	getAudio,
+	latestSessionSetup,
+	openSessionSetup as openSessionSetupCore,
+	saveSessionSetup
+} from '#lib/core-client/records.js';
 import {
 	DEFAULT_INSTRUCTION_LANGUAGE_ID,
 	defaultInstructionLanguageFor,
@@ -139,7 +135,6 @@ if (typeof document !== 'undefined') {
 	});
 }
 
-let db: IDatabaseAdapter | null = null;
 const glossJobs = new Map<string, Promise<void>>();
 const phraseJobs = new Map<string, Promise<string>>();
 let initialization: Promise<void> | null = null;
@@ -420,15 +415,9 @@ async function configureCore(): Promise<void> {
 	applyCoreSnapshot((await coreApi.configure(coreConfig())).snapshot);
 }
 
-async function ensureLegacyDb(): Promise<IDatabaseAdapter> {
-	if (!db) db = await getDatabaseAdapter();
-	return db;
-}
-
 async function hydrateCorePractice(): Promise<void> {
 	await ensureCore();
-	const database = await ensureLegacyDb();
-	// Prompt submissions are driver-side in P3; drain prompts generated earlier.
+	// Send prompts generated earlier that were not shared yet.
 	startPromptSubmissionSync();
 	const state = get(store);
 	if (!state.sessionId && state.attempts.length === 0) {
@@ -440,49 +429,26 @@ async function hydrateCorePractice(): Promise<void> {
 	if (!get(store).prompt.id) {
 		await requestPromptCore();
 	}
-	// Opening the database above also serves the P5 translation/gloss paths.
-	void database;
 }
 
+/** Reopens the newest session at startup, when it is in the languages Settings has now. */
 async function hydrateLatestSessionCore(): Promise<boolean> {
-	const database = await ensureLegacyDb();
-	const [newest] = await database.listSessions();
-	if (!newest) return false;
+	const latest = await latestSessionSetup();
+	if (!latest) return false;
 	const settings = get(appSettings);
-	const setup =
-		parseSessionSetup(newest.setup) ??
-		(await inferSessionSetup(await database.listAttempts(newest.id), settings));
 	const sameLanguages =
-		setup.targetLanguage === settings.targetLanguage &&
-		setup.instructionLanguage === settings.instructionLanguage;
+		latest.setup.targetLanguage === settings.targetLanguage &&
+		latest.setup.instructionLanguage === settings.instructionLanguage;
 	if (!sameLanguages) return false;
-	await openSessionCore(newest.id, { restoreSetup: false });
+	await openSessionCore(latest.sessionId, { restoreSetup: false });
 	return true;
 }
 
 async function requestPromptCore(): Promise<void> {
 	await ensureCore();
 	const request = ++promptRequest;
-	const database = await ensureLegacyDb();
-	const settings = get(appSettings);
-	const targetLanguageId = settings.targetLanguage;
-	const instructionLanguageId = settings.instructionLanguage ?? DEFAULT_INSTRUCTION_LANGUAGE_ID;
-	const stored = await ensurePromptsSeeded(database, targetLanguageId, instructionLanguageId);
-	if (request !== promptRequest) return;
-
-	const english = stored.length > 0 ? [] : await ensureEnglishPromptsSeeded(database, targetLanguageId);
-	if (request !== promptRequest) return;
-	const source = stored.length > 0 ? stored : english;
 	await configureCore();
-	const response = await coreApi!.nextPrompt(
-		source.map((prompt) => ({
-			id: prompt.id,
-			title: prompt.title,
-			text: prompt.text,
-			englishFallback: false
-		})),
-		stored.length === 0
-	);
+	const response = await coreApi!.nextPrompt();
 	if (request !== promptRequest) return;
 	applyCoreSnapshot(response.snapshot);
 }
@@ -542,23 +508,14 @@ async function openSessionCore(
 	{ restoreSetup = true } = {}
 ): Promise<void> {
 	await ensureCore();
-	const database = await ensureLegacyDb();
 	promptRequest++;
 	promptGeneration?.abort();
-	const [session, attempts] = await Promise.all([
-		database.getSession(sessionId),
-		database.listAttempts(sessionId)
-	]);
 
 	openSessionSetup = null;
-	const recorded = parseSessionSetup(session?.setup);
-	const setup = restoreSetup
-		? usableSetup(recorded ?? (await inferSessionSetup(attempts, get(appSettings))))
-		: setupFromSettings(get(appSettings));
+	// The core works out the setup (recorded, inferred, or the current
+	// settings) and saves it on the session; Settings take it on here.
+	const setup = (await openSessionSetupCore(sessionId, restoreSetup)) ?? setupFromSettings(get(appSettings));
 	if (restoreSetup) await adoptSessionSetup(setup);
-	if (session && (!recorded || !sameSetup(recorded, setup))) {
-		await database.putSession({ ...session, setup });
-	}
 
 	await configureCore();
 	const response = await coreApi!.openSession(sessionId);
@@ -849,20 +806,17 @@ export function ensurePhraseMeaning(
 }
 
 /**
- * Fetches the hover translations around the word the learner is pointing at:
- * the section of the text it is in (`glossSections`, about a paragraph), in
- * one small LLM call, and saves them on the attempt so later hovers are
- * instant and work offline. The rest of a long take is fetched only where
- * the learner points, and the other text (transcript or correct version)
- * only if they point at it too. Concurrent hovers in one section share one
- * request.
+ * Fetches the hover translations of a text the learner points at, in one LLM
+ * call through the core, which saves them on the attempt so later hovers are
+ * instant and work offline. The other text (transcript or correct version)
+ * is fetched only if they point at it too. Concurrent hovers on one text
+ * share one request.
  *
  * @param attemptId The attempt whose words were hovered.
  * @param text The transcript or the correct version.
- * @param wordIndex The word pointed at (`glossWords` index).
  * @throws With a readable message when the LLM call fails.
  */
-export function ensureWordGlosses(attemptId: string, text: string, wordIndex: number): Promise<void> {
+export function ensureWordGlosses(attemptId: string, text: string): Promise<void> {
 	const attempt = get(store).attempts.find((item) => item.id === attemptId);
 	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
 
@@ -875,7 +829,7 @@ export function ensureWordGlosses(attemptId: string, text: string, wordIndex: nu
 		const response = await client.command<{
 			key: string;
 			glosses: TextGlosses;
-		}>('glosses.ensure', { attemptId, text, wordIndex, withPos: get(appSettings).showWordPos });
+		}>('glosses.ensure', { attemptId, text, withPos: get(appSettings).showWordPos });
 		update({
 			attempts: get(store).attempts.map((item) =>
 				item.id === attemptId
@@ -1246,9 +1200,8 @@ export async function playRecording(id: string): Promise<void> {
 
 /** Plays stored audio by attempt id, without needing it loaded in the store. */
 export async function playStoredAudio(attemptId: string): Promise<void> {
-	if (!db) db = await getDatabaseAdapter();
 	const request = ++speechRequest;
-	const stored = await db.getAudio(`attempt:${attemptId}`);
+	const stored = await getAudio(`attempt:${attemptId}`);
 	if (request !== speechRequest) return;
 	if (!stored) {
 		toast('No audio stored for this attempt.');
@@ -1354,10 +1307,5 @@ function keepOpenSessionSetupCurrent(settings: AppSettings): void {
 	setupSaveTimer = setTimeout(() => void saveSessionSetup(open.sessionId, current), SETUP_SAVE_DELAY_MS);
 }
 
-async function saveSessionSetup(sessionId: string, setup: SessionSetup): Promise<void> {
-	if (!db) db = await getDatabaseAdapter();
-	const session = await db.getSession(sessionId);
-	if (session) await db.putSession({ ...session, setup, updatedAt: new Date().toISOString() });
-}
 
 appSettings.subscribe(keepOpenSessionSetupCurrent);

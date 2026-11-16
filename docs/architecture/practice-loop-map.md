@@ -118,7 +118,7 @@ Private helpers move with their callers:
 | Module | What `practice.ts` uses | Destination |
 | --- | --- | --- |
 | `utils/recorder.ts` (`VoiceRecorder`) | microphone, Opus blob, 16 kHz PCM, duration, level | `AudioCapture` host shim both runtimes. The webview still records on desktop, so the Tauri shim calls this same TS path through the driver until a native capture port exists. |
-| `speech/stt/service.ts` | local Transformers.js or Groq | `SttEngine` port: web host shim now; `onspot-adapter-native-stt` for desktop/Android. |
+| `speech/stt/service.ts` | local Transformers.js or Groq | `SttEngine` port through the host on every runtime; desktop/Android's host calls whisper.cpp in `tauri-plugin-speech` (ADR-013). |
 | `speech/tts/service.ts` | local/cloud synthesis, stored clips, explanations | `TtsEngine` port: host shims both runtimes in P3. |
 | `stores/audio.ts` | shared player, loading, prime, stop | `AudioPlayback` host shim. |
 | `stores/processing.ts` | readiness gate before recording | Driver-side precondition until setup moves; the core receives a ready/missing result. |
@@ -225,10 +225,9 @@ Moving the language-data installation state itself remains P7 work.
    `openSession` are in the God store but not in the phase's short use-case
    list. Recommendation: port them with the session state (they are already
    repository-only) so no practice action remains in the God store.
-4. **Native STT.** The `native-stt` crate is a registered stub. P3 must either
-   implement the whisper.cpp adapter or explicitly keep desktop on the host
-   shim; recommendation: implement it, because the phase gate requires the
-   desktop core path.
+4. **Native STT.** Resolved by ADR-013: desktop keeps the host shim, whose
+   engine is already Rust (whisper.cpp in `tauri-plugin-speech`); the unused
+   `native-stt` stub was removed.
 5. **Cloud STT.** Keep it in the host `SttEngine` shim in P3; the Rust Groq
    adapter follows the LLM HTTP client in P4.
 

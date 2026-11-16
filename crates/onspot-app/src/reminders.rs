@@ -2,6 +2,7 @@
 
 //! Reminder due-state decisions, ported from `src/lib/stores/reminders.ts`.
 
+use onspot_ports::{HistoryStore, RecordsStore, StoreError};
 use serde::{Deserialize, Serialize};
 
 const DAY_MS: u64 = 86_400_000;
@@ -95,6 +96,32 @@ fn civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
         year += 1;
     }
     (year, month, day)
+}
+
+/// When the learner last practised: the newest session's start (its first
+/// take) or its latest take, whichever is later. A session's `updated_at`
+/// follows renames, so it cannot mark practice on its own.
+///
+/// @returns Milliseconds since the epoch, or `None` before any practice.
+pub async fn last_practised_at(
+    history: &dyn HistoryStore,
+    records: &dyn RecordsStore,
+) -> Result<Option<u64>, StoreError> {
+    let Some(newest) = history.list_sessions().await?.into_iter().next() else {
+        return Ok(None);
+    };
+    let attempts = records.list_attempts(&newest.id).await?;
+    let latest_take = attempts
+        .last()
+        .and_then(|attempt| epoch_ms(&attempt.created_at));
+    let started = epoch_ms(&newest.created_at);
+    Ok(started.max(latest_take))
+}
+
+/// An RFC 3339 time as milliseconds since the epoch.
+fn epoch_ms(value: &str) -> Option<u64> {
+    let parsed = chrono::DateTime::parse_from_rfc3339(value).ok()?;
+    u64::try_from(parsed.timestamp_millis()).ok()
 }
 
 #[cfg(test)]

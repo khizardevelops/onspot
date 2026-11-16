@@ -23,7 +23,8 @@ export interface PracticeApi {
 	snapshot(): Promise<PracticeResponse>;
 	newSession(): Promise<PracticeResponse>;
 	setPrompt(prompt: PromptView): Promise<PracticeResponse>;
-	nextPrompt(candidates: PromptView[], englishFallback: boolean): Promise<PracticeResponse>;
+	/** Offers the next prompt; the core gathers the stored and catalogue candidates. */
+	nextPrompt(): Promise<PracticeResponse>;
 	startRecording(): Promise<PracticeResponse>;
 	stopAndAnalyze(): Promise<PracticeResponse>;
 	cancelRecording(): Promise<PracticeResponse>;
@@ -58,8 +59,7 @@ export function practiceApi(client: CoreClient): PracticeApi {
 		snapshot: () => command<PracticeResponse>('snapshot'),
 		newSession: () => command<PracticeResponse>('new_session'),
 		setPrompt: (prompt) => command<PracticeResponse>('set_prompt', { prompt }),
-		nextPrompt: (candidates, englishFallback) =>
-			command<PracticeResponse>('next_prompt', { candidates, englishFallback }),
+		nextPrompt: () => command<PracticeResponse>('next_prompt'),
 		startRecording: () => command<PracticeResponse>('start_recording'),
 		stopAndAnalyze: () => command<PracticeResponse>('stop_and_analyze'),
 		cancelRecording: () => command<PracticeResponse>('cancel_recording'),

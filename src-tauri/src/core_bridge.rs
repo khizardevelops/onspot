@@ -32,6 +32,8 @@ impl BridgeState {
             database_file: Some(database_file),
             // The usage ledger stays in the webview's storage, next to the keys.
             device: None,
+            // The native `DatabaseFile` restores and migrates in Rust itself.
+            sql: None,
         };
         Self(Arc::new(Core::with_hosts(
             CoreConfig {

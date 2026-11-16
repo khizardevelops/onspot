@@ -19,6 +19,9 @@ onspot-ports = { path = "../../crates/onspot-ports" }
 onspot-adapter-llm-openai = { path = "../../crates/adapters/llm-openai" }
 onspot-adapter-sync-webdav = { path = "../../crates/adapters/sync-webdav" }
 onspot-adapter-sync-drive = { path = "../../crates/adapters/sync-drive" }
+# The schema and migration chain, without the native rusqlite driver: the web
+# host's SQLite and a database restored through it are migrated here.
+onspot-adapter-repo-sql = { path = "../../crates/adapters/repo-sql", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = "12"
@@ -37,9 +40,6 @@ js-sys = "0.3"
 serde-wasm-bindgen = "0.6"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-# The web SQL host runs the same stores and migration chain over the existing
-# sqlite-wasm worker; only the native rusqlite driver is left out.
-onspot-adapter-repo-sql = { path = "../../crates/adapters/repo-sql", default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tauri = { version = "2", optional = true }

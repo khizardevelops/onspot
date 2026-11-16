@@ -8,7 +8,7 @@
  * checked when it opens, becomes visible again, or every few minutes.
  */
 import { get, writable } from 'svelte/store';
-import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+import { lastPractisedAt } from '#lib/core-client/records.js';
 import { getLanguage } from '#lib/languages/index.js';
 import { notify } from '#lib/platform/notifications.js';
 import { appSettings } from './settings';
@@ -80,22 +80,10 @@ function parseTime(value: string | null): number | null {
 	return Number.isFinite(time) ? time : null;
 }
 
-/** The newest saved session's time, which advances when the first take of a session is saved. */
+/** When the learner last practised, from the saved sessions (the core reads them). */
 async function lastSavedPracticeTime(): Promise<number | null> {
 	try {
-		const db = await getDatabaseAdapter();
-		const sessions = await db.listSessions();
-		const newest = sessions.at(0);
-		if (!newest) return null;
-
-		// `updatedAt` follows renames, so it cannot mark practice on its own; the
-		// session's own start covers its first take, and attempts carry later ones.
-		const attempts = await db.listAttempts(newest.id);
-		const latestAttempt = attempts.at(-1);
-		return Math.max(
-			parseTime(newest.createdAt) ?? 0,
-			parseTime(latestAttempt?.createdAt ?? null) ?? 0
-		) || null;
+		return await lastPractisedAt();
 	} catch {
 		return null;
 	}

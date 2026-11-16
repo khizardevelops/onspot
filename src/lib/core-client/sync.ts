@@ -30,7 +30,7 @@ export interface SyncCoreOutcome {
 	decision: SyncDecision;
 	comparison: SyncComparison;
 	completed: boolean;
-	/** True after a download: the driver must record the restored revision. */
+	/** True when the remote copy replaced this device's data. */
 	replacedLocal: boolean;
 }
 
@@ -49,24 +49,16 @@ function syncErrorFrom(error: unknown): SyncError {
  * Runs one whole-database sync in the core.
  *
  * @param target The configured destination.
- * @param revision This device's content revision before the transfer.
- * @param syncedRevision The revision last synced with this provider.
  * @param choice An explicit learner choice after a conflict.
  * @returns The decision, the comparison and whether anything was written.
  */
-export async function syncNowCore(
-	target: SyncTarget,
-	revision: number,
-	syncedRevision: number | null,
-	choice?: SyncChoice
-): Promise<SyncCoreOutcome> {
+export async function syncNowCore(target: SyncTarget, choice?: SyncChoice): Promise<SyncCoreOutcome> {
 	const client = await getCoreClient();
 
 	try {
+		// The core compares its own content revision with what this provider last saw.
 		return await client.command<SyncCoreOutcome>('sync.now', {
 			...target,
-			revision,
-			syncedRevision,
 			choice: choice ?? null
 		});
 	} catch (error) {

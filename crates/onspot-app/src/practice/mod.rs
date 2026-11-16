@@ -104,49 +104,10 @@ impl RunPracticeSession {
         }
     }
 
-    /// Shows a prompt chosen by the driver or by `next_prompt`.
+    /// Shows a prompt chosen by the driver.
     pub fn set_prompt(&self, prompt: PromptView) {
         self.lock().snapshot.prompt = prompt;
         self.emit_state();
-    }
-
-    /// Chooses a prompt from stored candidates, avoiding the current one.
-    ///
-    /// Catalogue data and generation stay in the driver during P3; the core
-    /// owns the "may the prompt change now?" guard and the choice.
-    pub fn next_prompt(
-        &self,
-        candidates: &[PromptView],
-        english_fallback: bool,
-    ) -> Option<PromptView> {
-        if candidates.is_empty() {
-            return None;
-        }
-        let mut inner = self.lock();
-        if !matches!(
-            inner.snapshot.phase,
-            PracticePhase::Idle | PracticePhase::Error
-        ) {
-            return None;
-        }
-
-        let current = inner.snapshot.prompt.id.clone();
-        let pool: Vec<&PromptView> = candidates
-            .iter()
-            .filter(|candidate| candidate.id != current)
-            .collect();
-        let pool = if pool.is_empty() {
-            candidates.iter().collect()
-        } else {
-            pool
-        };
-        let index = self.ports.ids.random_index(pool.len()).min(pool.len() - 1);
-        let mut chosen = pool[index].clone();
-        chosen.english_fallback = english_fallback;
-        inner.snapshot.prompt = chosen.clone();
-        drop(inner);
-        self.emit_state();
-        Some(chosen)
     }
 
     /// Loads a stored session and its takes, the resume path after a restart.
@@ -217,6 +178,39 @@ impl RunPracticeSession {
             .await
             .map_err(persist::store)?;
         self.resume_session(session, attempts).await
+    }
+
+    /// Offers the next prompt: a new one from the learner's model, or one of
+    /// the stored prompts for the session's languages (the catalogue is seeded
+    /// on first use, and English stands in when the language of instruction
+    /// has none).
+    pub async fn next_prompt(&self) -> Option<PromptView> {
+        let config = self.lock().config.clone();
+        let now = now_rfc3339(self.ports.clock.now_ms());
+        let candidates = match crate::prompts::prompt_candidates(
+            self.ports.records.as_ref(),
+            &config.target_language_id,
+            &config.instruction_language_id,
+            &now,
+        )
+        .await
+        {
+            Ok(candidates) => candidates,
+            Err(error) => {
+                eprintln!(
+                    "[practice] could not read the stored prompts: {}",
+                    error.message
+                );
+                crate::prompts::PromptCandidates {
+                    prompts: Vec::new(),
+                    english_fallback: false,
+                }
+            }
+        };
+
+        let views: Vec<PromptView> = candidates.prompts.iter().map(PromptView::from).collect();
+        self.request_prompt(&views, candidates.english_fallback)
+            .await
     }
 
     /// Asks the driver's model for a prompt, falling back to a stored choice.

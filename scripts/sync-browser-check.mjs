@@ -178,19 +178,15 @@ try {
 	// A second device rewrites the same bytes (the etag changes, content does
 	// not), and this device writes a session, so both sides diverged.
 	await writeRemote(await remoteBytes());
+	// Written through the core, so its content revision must notice it.
 	await page.evaluate(async () => {
-		const { getDatabaseAdapter } = await import('/src/lib/adapters/db/index.ts');
-		const database = await getDatabaseAdapter();
+		const { getCoreClient } = await import('/src/lib/core-client/client.ts');
+		const client = await getCoreClient();
 		const now = new Date().toISOString();
-		await database.putSession({
-			id: 'diverged-local-session',
-			title: 'Diverged local edit',
-			mode: 'exam',
-			startedAt: now,
-			endedAt: null,
-			createdAt: now,
-			updatedAt: now,
-			setup: null
+		const session = { id: 'diverged-local-session', title: 'Diverged local edit', mode: 'exam', startedAt: now, createdAt: now, updatedAt: now };
+		await client.command('restore.legacy_json', {
+			json: JSON.stringify({ app: 'onspot', format: 1, sessions: [session] }),
+			now
 		});
 	});
 
@@ -210,11 +206,13 @@ try {
 	}
 
 	const healthy = await page.evaluate(async () => {
-		const { getDatabaseAdapter } = await import('/src/lib/adapters/db/index.ts');
-		const database = await getDatabaseAdapter();
-		const metadata = await database.getSyncMetadata('webdav');
-		const bytes = await database.exportSqliteFile();
-		return { bytes: bytes.byteLength, etag: metadata?.etag ?? null, sessions: (await database.listSessions()).length };
+		const { openBrowserDatabase } = await import('/src/lib/adapters/db/index.ts');
+		const { syncMetadata } = await import('/src/lib/core-client/records.ts');
+		const { getCoreClient } = await import('/src/lib/core-client/client.ts');
+		const metadata = await syncMetadata('webdav');
+		const bytes = await (await openBrowserDatabase()).exportBytes();
+		const history = await (await getCoreClient()).command('history.list');
+		return { bytes: bytes.byteLength, etag: metadata?.etag ?? null, sessions: history.sessions.length };
 	});
 	if (healthy.bytes <= 0) throw new Error('the restored database is empty');
 	if (healthy.sessions !== 0) throw new Error(`the cloud restore did not replace the diverged local edit: ${JSON.stringify(healthy)}`);
@@ -233,9 +231,8 @@ try {
 		} catch (error) {
 			message = error instanceof Error ? error.message : String(error);
 		}
-		const { getDatabaseAdapter } = await import('/src/lib/adapters/db/index.ts');
-		const database = await getDatabaseAdapter();
-		const bytes = await database.exportSqliteFile();
+		const { openBrowserDatabase } = await import('/src/lib/adapters/db/index.ts');
+		const bytes = await (await openBrowserDatabase()).exportBytes();
 		return { message, bytes: bytes.byteLength };
 	});
 

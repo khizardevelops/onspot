@@ -18,6 +18,25 @@ impl EventSink for HostReplies {
     }
 }
 
+/// The device's own values (usage ledger, sync revision), in memory.
+#[derive(Default)]
+struct MemoryDevice(Mutex<std::collections::BTreeMap<String, String>>);
+
+#[async_trait::async_trait]
+impl onspot_ports::DeviceStore for MemoryDevice {
+    async fn read(&self, key: &str) -> Result<Option<String>, onspot_ports::CoreError> {
+        Ok(self.0.lock().expect("device").get(key).cloned())
+    }
+
+    async fn write(&self, key: &str, value: &str) -> Result<(), onspot_ports::CoreError> {
+        self.0
+            .lock()
+            .expect("device")
+            .insert(key.to_owned(), value.to_owned());
+        Ok(())
+    }
+}
+
 fn core() -> (Core, Arc<HostReplies>) {
     let driver = Arc::new(RusqliteDriver::open_in_memory().expect("database"));
     futures::executor::block_on(migrate(driver.as_ref())).expect("migrate");
@@ -25,6 +44,7 @@ fn core() -> (Core, Arc<HostReplies>) {
         history: Some(Arc::new(SqlHistoryStore::new(driver.clone()))),
         settings: None,
         records: Some(Arc::new(SqlRecordsStore::new(driver))),
+        device: Some(Arc::new(MemoryDevice::default())),
         ..HostAdapters::default()
     };
     let core = Core::with_hosts(
@@ -84,16 +104,7 @@ fn a_prompt_choice_falls_back_when_the_model_cannot_write_one() {
     let _ = futures::executor::block_on(dispatch(&core, PRACTICE_CONFIGURE, config()))
         .expect("configure");
 
-    let caller = dispatch(
-        &core,
-        PRACTICE_NEXT_PROMPT,
-        json!({
-            "candidates": [
-                { "id": "p-1", "title": "Le marché", "text": "Racontez votre matinée.", "englishFallback": false }
-            ],
-            "englishFallback": false
-        }),
-    );
+    let caller = dispatch(&core, PRACTICE_NEXT_PROMPT, json!({}));
     // The host has no stored usage ledger, and the provider refuses the
     // request outright (a 400 is not retried; a 5xx or 429 would be).
     let replier = async {
@@ -132,7 +143,12 @@ fn a_prompt_choice_falls_back_when_the_model_cannot_write_one() {
     };
     let (result, ()) = futures::executor::block_on(async { futures::join!(caller, replier) });
     let result = result.expect("next prompt");
-    assert_eq!(result["snapshot"]["prompt"]["id"], "p-1");
+    // The model refused, so a seeded catalogue prompt for French taught in
+    // English stands in.
+    let prompt_id = result["snapshot"]["prompt"]["id"]
+        .as_str()
+        .expect("prompt id");
+    assert!(prompt_id.starts_with("en-"), "{prompt_id}");
 }
 
 #[test]
@@ -145,15 +161,6 @@ fn an_unknown_host_reply_is_reported_not_panicking() {
     ))
     .expect("reply command");
     assert_eq!(response["accepted"], false);
-}
-
-#[test]
-fn gloss_cache_keys_match_the_legacy_hash() {
-    use super::{gloss_key, hash_text};
-    assert_eq!(hash_text("Bonjour je vais"), "ed9c0c8e-f");
-    assert_eq!(hash_text("Bonjour je vais é"), "d966b3b9-h");
-    assert_eq!(gloss_key("Bonjour je vais", "en"), "numbered:ed9c0c8e-f");
-    assert_eq!(gloss_key("Bonjour je vais", "es"), "numbered:es:ed9c0c8e-f");
 }
 
 #[test]

@@ -422,6 +422,54 @@ export type TestConnectionResponse = { reply: string, };
  */
 export type ListModelsResponse = { models: Array<string>, };
 
+
+/**
+ * The newest session and the setup it was practised with.
+ */
+export type LatestSetupResponse = {
+/**
+ * Null before the first session.
+ */
+sessionId: string | null, setup: SessionSetup | null, };
+
+
+/**
+ * The setup a session opens with; null when no session has that id.
+ */
+export type OpenSetupResponse = { setup: SessionSetup | null, };
+
+/**
+ * When the learner last practised.
+ */
+export type LastPractisedResponse = {
+/**
+ * Milliseconds since the epoch; null before any practice. A timestamp
+ * fits a JS number exactly.
+ */
+atMs: number | null, };
+
+/**
+ * Stored microphone audio. Base64 text keeps both drivers portable.
+ */
+export type AudioAsset = { key: string, attemptId: string | null, mime: string, dataBase64: string, createdAt: string, };
+
+
+/**
+ * One cached clip; null when nothing is stored under the key.
+ */
+export type AudioResponse = { asset: AudioAsset | null, };
+
+/**
+ * Sync bookkeeping for one BYOC provider.
+ */
+export type SyncMetadata = { provider: string, remoteFileId: string | null, etag: string | null, lastSyncedAt: string | null, cursor: string | null, updatedAt: string, };
+
+
+/**
+ * What this device last knew about a provider's copy.
+ */
+export type SyncMetadataResponse = { metadata: SyncMetadata | null, };
+
 /**
  * What one successful cloud call used, as the adapter that made it reports it.
  */
@@ -467,7 +515,11 @@ export type TranslationResponse = { translations: TranslationSet, };
 /**
  * The Insights page payload.
  */
-export type InsightsResponse = { data: InsightsData, };
+export type InsightsResponse = { data: InsightsData,
+/**
+ * Each take's 1-based position in its session, by take id.
+ */
+takeNumbers: { [key in string]: number }, };
 
 
 /**

@@ -12,7 +12,7 @@ import { speakPieces, type PieceVoice, type SynthesizePcm } from './speechPieces
 import { splitForSpeech } from './textPieces';
 import { decodeSpeech, isWav } from './cloud/speechAudio';
 import { hashText } from '#lib/utils/hash.js';
-import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+import { getAudio, putAudio } from '#lib/core-client/records.js';
 import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
 import {
 	getExplanationVoice,
@@ -502,8 +502,7 @@ async function liveClip(cacheKey: string): Promise<LivePieces | undefined> {
 }
 
 async function loadStoredSpeech(cacheKey: string): Promise<GeneratedSpeech | null> {
-	const db = await getDatabaseAdapter();
-	const hit = await db.getAudio(cacheKey);
+	const hit = await getAudio(cacheKey);
 	return hit ? { audio: base64ToBlob(hit.dataBase64, hit.mime), model: 'cache', durationSec: 0 } : null;
 }
 
@@ -605,8 +604,7 @@ async function storeSpeech(key: string, speech: GeneratedSpeech, attemptId?: str
 			: null;
 		const audio = compressed ?? speech.audio;
 
-		const db = await getDatabaseAdapter();
-		await db.putAudio({
+		await putAudio({
 			key,
 			attemptId: attemptId ?? null,
 			mime: audio.type || 'audio/wav',

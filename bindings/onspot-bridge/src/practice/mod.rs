@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use onspot_adapter_llm_openai::client::OpenAiEvaluator;
+use onspot_app::enrichment::{EnrichTake, PhraseSelection};
 use onspot_app::practice::{
     PracticeConfig, PracticePorts, PracticeSnapshot, PromptView, RunPracticeSession,
 };
@@ -87,15 +88,6 @@ pub struct ConfigureRequest {
 #[serde(rename_all = "camelCase")]
 pub struct SetPromptRequest {
     pub prompt: PromptView,
-}
-
-/// `practice.next_prompt` arguments.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NextPromptRequest {
-    pub candidates: Vec<PromptView>,
-    #[serde(default)]
-    pub english_fallback: bool,
 }
 
 /// `practice.audio_level` arguments.
@@ -239,7 +231,7 @@ pub async fn dispatch(
         PRACTICE_SNAPSHOT => snapshot(core).and_then(serialize),
         PRACTICE_NEW_SESSION => new_session(core).await.and_then(serialize),
         PRACTICE_SET_PROMPT => set_prompt(core, payload).and_then(serialize),
-        PRACTICE_NEXT_PROMPT => next_prompt(core, payload).await.and_then(serialize),
+        PRACTICE_NEXT_PROMPT => next_prompt(core).await.and_then(serialize),
         PRACTICE_START_RECORDING => start_recording(core).await.and_then(serialize),
         PRACTICE_STOP_AND_ANALYZE => stop_and_analyze(core).await.and_then(serialize),
         PRACTICE_CANCEL_RECORDING => cancel_recording(core).await.and_then(serialize),
@@ -363,12 +355,10 @@ fn set_prompt(core: &Core, payload: Value) -> Result<PracticeResponse, BridgeErr
     })
 }
 
-async fn next_prompt(core: &Core, payload: Value) -> Result<PracticeResponse, BridgeError> {
-    let request: NextPromptRequest = parse(PRACTICE_NEXT_PROMPT, payload)?;
+/// Offers the next prompt; the core gathers the candidates itself.
+async fn next_prompt(core: &Core) -> Result<PracticeResponse, BridgeError> {
     let session = practice(core)?;
-    let _ = session
-        .request_prompt(&request.candidates, request.english_fallback)
-        .await;
+    let _ = session.next_prompt().await;
     Ok(PracticeResponse {
         snapshot: session.snapshot(),
     })
@@ -919,8 +909,10 @@ async fn list_models(core: &Core, payload: Value) -> Result<ListModelsResponse, 
 #[serde(rename_all = "camelCase")]
 pub struct GlossesRequest {
     pub attempt_id: String,
+    /// The transcript or the correct version. The whole text is glossed in
+    /// one request: a take is at most a minute long, about two of the
+    /// paragraph-sized sections the web driver once fetched separately.
     pub text: String,
-    pub word_index: i64,
     #[serde(default)]
     pub with_pos: bool,
 }
@@ -953,157 +945,55 @@ pub struct PhraseResponse {
     pub meaning: String,
 }
 
-fn gloss_key(text: &str, instruction_language: &str) -> String {
-    let text_key = if instruction_language == "en" {
-        hash_text(text)
-    } else {
-        format!("{instruction_language}:{}", hash_text(text))
-    };
-    format!("numbered:{text_key}")
-}
-
-fn hash_text(text: &str) -> String {
-    let mut hash: u32 = 0x811c_9dc5;
-    for unit in text.encode_utf16() {
-        hash ^= u32::from(unit);
-        hash = hash.wrapping_mul(0x0100_0193);
-    }
-    let mut length = text.encode_utf16().count() as u64;
-    let mut base36 = String::new();
-    if length == 0 {
-        base36.push('0');
-    }
-    while length > 0 {
-        let digit = length % 36;
-        base36.insert(0, char::from_digit(digit as u32, 36).unwrap_or('0'));
-        length /= 36;
-    }
-    format!("{hash:08x}-{base36}")
-}
-
 async fn ensure_glosses(core: &Core, payload: Value) -> Result<GlossesResponse, BridgeError> {
     let request: GlossesRequest = parse(GLOSSES_ENSURE, payload)?;
-    let session = practice(core)?;
-    let config = session.config();
-    let records = core
-        .hosts()
-        .records
-        .clone()
-        .ok_or_else(|| BridgeError::unavailable("storage"))?;
-    let mut attempt = records
-        .get_attempt(&request.attempt_id)
-        .await
-        .map_err(|error| BridgeError::new("glosses.persistence_failed", error.message))?
-        .ok_or_else(|| {
-            BridgeError::new("practice.attempt_not_found", "the attempt is not stored")
-        })?;
-    let key = gloss_key(&request.text, &config.instruction_language_id);
-    let mut glosses_by_text = attempt.word_glosses.clone().unwrap_or_default();
-    if let Some(existing) = glosses_by_text.get(&key) {
-        if existing.sections.is_some() || !existing.words.is_empty() {
-            return Ok(GlossesResponse {
-                key,
-                glosses: existing.clone(),
-            });
-        }
-    }
-
+    let config = practice(core)?.config();
+    let records = records(core)?;
     let evaluator = rust_evaluator(core);
-    let glosses = evaluator
-        .gloss(
-            &request.text,
-            &config.llm_endpoint,
-            &config.target_language_name,
-            &config.instruction_language_name,
-            request.with_pos,
-            &CancelToken::new(),
-        )
+    let now = now_rfc3339(SystemClock.now_ms());
+
+    let (key, glosses) = EnrichTake::new(records.as_ref(), evaluator.as_ref(), &config)
+        .glosses(&request.attempt_id, &request.text, request.with_pos, &now)
         .await
         .map_err(core_error)?;
-    glosses_by_text.insert(key.clone(), glosses.clone());
-    attempt.word_glosses = Some(glosses_by_text);
-    attempt.updated_at = now_rfc3339(SystemClock.now_ms());
-    records
-        .put_attempt(&attempt)
-        .await
-        .map_err(|error| BridgeError::new("glosses.persistence_failed", error.message))?;
     core.emit(UiEvent::GlossesReady {
         attempt_id: request.attempt_id,
         key: key.clone(),
         glosses: glosses.clone(),
     });
-    let _ = request.word_index;
     Ok(GlossesResponse { key, glosses })
 }
 
 async fn ensure_phrase(core: &Core, payload: Value) -> Result<PhraseResponse, BridgeError> {
     let request: PhraseRequest = parse(PHRASES_ENSURE, payload)?;
-    let session = practice(core)?;
-    let config = session.config();
-    let records = core
-        .hosts()
-        .records
-        .clone()
-        .ok_or_else(|| BridgeError::unavailable("storage"))?;
-    let mut attempt = records
-        .get_attempt(&request.attempt_id)
-        .await
-        .map_err(|error| BridgeError::new("phrases.persistence_failed", error.message))?
-        .ok_or_else(|| {
-            BridgeError::new("practice.attempt_not_found", "the attempt is not stored")
-        })?;
-    let key = gloss_key(&request.text, &config.instruction_language_id);
-    let mut glosses_by_text = attempt.word_glosses.clone().unwrap_or_default();
-    if let Some(existing) = glosses_by_text.get(&key) {
-        if let Some(saved) = existing.phrases.iter().find(|phrase| {
-            phrase.origin == "selection"
-                && phrase.start == request.start
-                && phrase.end == request.end
-        }) {
-            return Ok(PhraseResponse {
-                meaning: saved.meaning.clone(),
-            });
-        }
-    }
-
+    let config = practice(core)?.config();
+    let records = records(core)?;
     let evaluator = rust_evaluator(core);
-    let meaning = evaluator
-        .phrase(
-            &request.phrase,
-            &request.text,
-            &config.llm_endpoint,
-            &config.target_language_name,
-            &config.instruction_language_name,
-            &CancelToken::new(),
-        )
-        .await
-        .map_err(core_error)?;
-    let entry = glosses_by_text
-        .entry(key)
-        .or_insert_with(|| onspot_domain::TextGlosses {
-            words: Vec::new(),
-            phrases: Vec::new(),
-            pos: None,
-            pos_sections: None,
-            sections: None,
-        });
-    entry.phrases.push(onspot_domain::PhraseGloss {
+    let now = now_rfc3339(SystemClock.now_ms());
+
+    let selection = PhraseSelection {
+        text: &request.text,
         start: request.start,
         end: request.end,
-        meaning: meaning.clone(),
-        origin: String::from("selection"),
-    });
-    attempt.word_glosses = Some(glosses_by_text);
-    attempt.updated_at = now_rfc3339(SystemClock.now_ms());
-    records
-        .put_attempt(&attempt)
+        phrase: &request.phrase,
+    };
+    let meaning = EnrichTake::new(records.as_ref(), evaluator.as_ref(), &config)
+        .phrase(&request.attempt_id, &selection, &now)
         .await
-        .map_err(|error| BridgeError::new("phrases.persistence_failed", error.message))?;
+        .map_err(core_error)?;
     core.emit(UiEvent::PhraseReady {
         attempt_id: request.attempt_id,
         meaning: meaning.clone(),
     });
     Ok(PhraseResponse { meaning })
+}
+
+/// The records repository this core was booted with.
+fn records(core: &Core) -> Result<Arc<dyn onspot_ports::RecordsStore>, BridgeError> {
+    core.hosts()
+        .records
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))
 }
 
 /// The Insights page payload.
@@ -1112,6 +1002,8 @@ async fn ensure_phrase(core: &Core, payload: Value) -> Result<PhraseResponse, Br
 #[serde(rename_all = "camelCase")]
 pub struct InsightsResponse {
     pub data: onspot_app::InsightsData,
+    /// Each take's 1-based position in its session, by take id.
+    pub take_numbers: std::collections::BTreeMap<String, u32>,
 }
 
 async fn build_insights(core: &Core) -> Result<InsightsResponse, BridgeError> {
@@ -1139,6 +1031,7 @@ async fn build_insights(core: &Core) -> Result<InsightsResponse, BridgeError> {
         .map_err(|error| BridgeError::new("insights.persistence_failed", error.message))?;
     Ok(InsightsResponse {
         data: onspot_app::compute_insights(&sessions, &attempts, &corrections),
+        take_numbers: onspot_app::take_numbers(&attempts),
     })
 }
 
@@ -1162,44 +1055,15 @@ async fn ensure_translations(
     payload: Value,
 ) -> Result<TranslationResponse, BridgeError> {
     let request: AttemptRequest = parse(TRANSLATIONS_ENSURE, payload)?;
-    let session = practice(core)?;
-    let config = session.config();
-    let records = core
-        .hosts()
-        .records
-        .clone()
-        .ok_or_else(|| BridgeError::unavailable("storage"))?;
-    let mut attempt = records
-        .get_attempt(&request.attempt_id)
-        .await
-        .map_err(|error| BridgeError::new("translations.persistence_failed", error.message))?
-        .ok_or_else(|| {
-            BridgeError::new("practice.attempt_not_found", "the attempt is not stored")
-        })?;
-    let text = attempt
-        .corrected_text
-        .clone()
-        .filter(|text| !text.trim().is_empty())
-        .unwrap_or_else(|| attempt.transcript.clone());
+    let config = practice(core)?.config();
+    let records = records(core)?;
     let evaluator = rust_evaluator(core);
-    let mut translations = evaluator
-        .translate(
-            &text,
-            &config.llm_endpoint,
-            &config.target_language_name,
-            &config.instruction_language_name,
-            &CancelToken::new(),
-        )
+    let now = now_rfc3339(SystemClock.now_ms());
+
+    let translations = EnrichTake::new(records.as_ref(), evaluator.as_ref(), &config)
+        .translations(&request.attempt_id, &now)
         .await
         .map_err(core_error)?;
-    translations.instruction_language = Some(config.instruction_language_id.clone());
-    attempt.translation = Some(translations.idiomatic.clone());
-    attempt.translations = Some(translations.clone());
-    attempt.updated_at = now_rfc3339(SystemClock.now_ms());
-    records
-        .put_attempt(&attempt)
-        .await
-        .map_err(|error| BridgeError::new("translations.persistence_failed", error.message))?;
     core.emit(UiEvent::TranslationsReady {
         attempt_id: request.attempt_id,
         translations: translations.clone(),

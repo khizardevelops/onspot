@@ -1,6 +1,6 @@
 # ADR-005 — Native SQL driver: rusqlite, one SQLite, plugin-sql kept
 
-Status: accepted (P2, 2026-11-12)
+Status: accepted (P2, 2026-11-12); plugin-sql removed by ADR-012 (2026-11-16). The rusqlite pin is no longer forced and can move with a deliberate upgrade.
 
 ## Context
 

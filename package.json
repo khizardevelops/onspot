@@ -55,7 +55,6 @@
 		"@tauri-apps/plugin-fs": "^2.7.1",
 		"@tauri-apps/plugin-http": "^2.9.0",
 		"@tauri-apps/plugin-opener": "^2.7.3",
-		"@tauri-apps/plugin-sql": "^2.6.0",
 		"browser-fs-access": "^0.38.0",
 		"diff": "^9.0.0",
 		"mediabunny": "1.61.6",

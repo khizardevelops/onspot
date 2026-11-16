@@ -9,7 +9,9 @@
 //! `SqlDriver`, and a test can supply an in-memory implementation.
 use std::sync::Arc;
 
-use onspot_ports::{DatabaseFile, DeviceStore, HistoryStore, RecordsStore, SettingsStore};
+use onspot_ports::{
+    DatabaseFile, DeviceStore, HistoryStore, RecordsStore, SettingsStore, SqlDriver,
+};
 
 /// The host implementations a driver supplies at boot.
 #[derive(Clone, Default)]
@@ -28,4 +30,8 @@ pub struct HostAdapters {
     /// ledger). A driver without its own leaves it unset and the core asks
     /// the host through `device.read`/`device.write`.
     pub device: Option<Arc<dyn DeviceStore>>,
+    /// The engine the repositories run on, when the driver hosts it (the
+    /// browser's SQLite worker). A whole-file import through the host is
+    /// migrated over it before the restored data is read.
+    pub sql: Option<Arc<dyn SqlDriver>>,
 }

@@ -7,8 +7,8 @@
 	 * layout only in dev builds; `bun run build` contains none of it.
 	 */
 	import { onMount } from 'svelte';
-	import { getCoreClient } from './client';
-	import type { InitResponse, PingResponse, UiEvent } from './types.gen';
+	import { getCoreClient } from '#lib/core-client/client.js';
+	import type { InitResponse, PingResponse, UiEvent } from '#lib/core-client/types.gen.js';
 
 	let transport = $state('starting…');
 	let init = $state<InitResponse | null>(null);

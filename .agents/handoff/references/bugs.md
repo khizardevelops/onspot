@@ -4,16 +4,22 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Active (found by the 2026-11-16 migration review, unfixed)
 
-### Desktop opens `onspot.db` through two SQLite stacks
-- `src-tauri/src/lib.rs` still registers `tauri_plugin_sql` (TS `SqlDatabaseAdapter`, own
-  migration runner) next to the core's `RusqliteDriver` on the same file. ADR-005 said "until P8";
-  P8 did not remove it. `busy_timeout` 5 s is the only guard.
-
 ### `native-stt` adapter is unused
 - `crates/adapters/native-stt` (`WhisperCppStt`) has no dependents; desktop STT still goes
   TS `speech/stt/native/nativeEngine.ts` → `plugin:speech`.
 
 ## Fixed
+
+### Sync could download over new takes; desktop opened the database twice (2026-11-16)
+- **Symptom**: sync's "has this device changed?" counter (`revision.ts`) was bumped only by the
+  TypeScript adapter, but takes, renames and deletions were written by the Rust repositories, so
+  sync could treat a device with new takes as unchanged and, with a changed remote, replace them.
+  The desktop also opened `onspot.db` through sqlx (plugin-sql) and rusqlite at once.
+- **Fix**: ADR-012. The core owns the revision (`onspot-app::content_revision`, repositories
+  wrapped) and every query; plugin-sql and the TS adapters/migrations are gone; the web keeps only
+  the sqlite-wasm worker, and the core migrates after a host import.
+- **Proof**: content-revision unit tests; `test:sync` writes a session through the core and gets
+  `needs-choice` before the download; `test:portability` export → wipe → restore.
 
 ### The core's LLM requests were unpaced, uncounted and sent with the wrong options (2026-11-16)
 - **Symptom**: the usage monitor missed every evaluation/translation/gloss/prompt-topic call;

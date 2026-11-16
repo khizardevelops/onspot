@@ -170,8 +170,9 @@ pub async fn init_core_wasm(
                 driver.clone(),
             ))),
             records: Some(Arc::new(onspot_adapter_repo_sql::SqlRecordsStore::new(
-                driver,
+                driver.clone(),
             ))),
+            sql: Some(driver),
             ..HostAdapters::default()
         }
     };

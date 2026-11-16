@@ -84,7 +84,7 @@ pub struct SyncNowResponse {
     pub decision: String,
     pub comparison: SyncComparison,
     pub completed: bool,
-    /// True when the driver must mark the restored revision as synced.
+    /// True when the remote copy replaced this device's data.
     pub replaced_local: bool,
 }
 
@@ -177,10 +177,16 @@ async fn sync_now(core: &Core, payload: Value) -> Result<SyncNowResponse, Bridge
     let database: &dyn DatabaseFile = match native.as_deref() {
         Some(database) => database,
         None => {
-            host_database = HostDatabaseFile::new(core.host_rpc().clone());
+            host_database = crate::portability::HostDatabaseFile::new(core);
             &host_database
         }
     };
+
+    // Captured before the transfer: a write during the upload must make the
+    // next comparison unsynced.
+    let content = core.content_revision();
+    let revision = content.current().await;
+    let synced_revision = content.synced(&request.target.provider).await;
 
     let outcome = run_sync(
         provider.as_ref(),
@@ -188,13 +194,25 @@ async fn sync_now(core: &Core, payload: Value) -> Result<SyncNowResponse, Bridge
         database,
         &SystemClock,
         &SyncRequest {
-            revision: request.revision,
-            synced_revision: request.synced_revision,
+            revision,
+            synced_revision,
             choice: request.choice,
         },
     )
     .await
     .map_err(core_error)?;
+
+    if outcome.completed {
+        // A download replaced the local data: that is a new revision, and the
+        // provider holds exactly it. An upload synced the captured revision.
+        let synced = if outcome.replaced_local {
+            content.mark_changed().await;
+            content.current().await
+        } else {
+            revision
+        };
+        content.set_synced(&request.target.provider, synced).await;
+    }
 
     Ok(SyncNowResponse {
         decision: outcome.decision.as_str().to_owned(),
@@ -292,9 +310,6 @@ impl OAuthAccount {
 struct SyncNowRequest {
     #[serde(flatten)]
     target: SyncTarget,
-    revision: u64,
-    #[serde(default)]
-    synced_revision: Option<u64>,
     #[serde(default)]
     choice: Option<SyncChoice>,
 }
@@ -439,62 +454,7 @@ struct AccessTokenReply {
     access_token: String,
 }
 
-/// The database image over a host call, for the browser driver.
-struct HostDatabaseFile {
-    rpc: Arc<onspot_app::HostRpc>,
-}
-
-impl HostDatabaseFile {
-    fn new(rpc: Arc<onspot_app::HostRpc>) -> Self {
-        Self { rpc }
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[async_trait]
-impl DatabaseFile for HostDatabaseFile {
-    async fn export_bytes(&self) -> Result<Vec<u8>, CoreError> {
-        export_via_host(&self.rpc).await
-    }
-
-    async fn import_bytes(&self, bytes: &[u8]) -> Result<onspot_ports::RestoreCounts, CoreError> {
-        import_via_host(&self.rpc, bytes).await
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[async_trait(?Send)]
-impl DatabaseFile for HostDatabaseFile {
-    async fn export_bytes(&self) -> Result<Vec<u8>, CoreError> {
-        export_via_host(&self.rpc).await
-    }
-
-    async fn import_bytes(&self, bytes: &[u8]) -> Result<onspot_ports::RestoreCounts, CoreError> {
-        import_via_host(&self.rpc, bytes).await
-    }
-}
-
-async fn export_via_host(rpc: &onspot_app::HostRpc) -> Result<Vec<u8>, CoreError> {
-    let reply: ExportBytesReply = call(rpc, "db.export_bytes", json!({})).await?;
-    decode(&reply.bytes_base64)
-}
-
-async fn import_via_host(
-    rpc: &onspot_app::HostRpc,
-    bytes: &[u8],
-) -> Result<onspot_ports::RestoreCounts, CoreError> {
-    let reply: ImportReply = call(
-        rpc,
-        "db.import_bytes",
-        json!({ "bytesBase64": BASE64.encode(bytes) }),
-    )
-    .await?;
-    Ok(onspot_ports::RestoreCounts {
-        sessions: reply.sessions as usize,
-        attempts: reply.attempts as usize,
-    })
-}
-
+/// Bytes the host sent as base64 (a binary sync body).
 fn decode(value: &str) -> Result<Vec<u8>, CoreError> {
     BASE64.decode(value).map_err(|error| {
         CoreError::new(
@@ -502,19 +462,6 @@ fn decode(value: &str) -> Result<Vec<u8>, CoreError> {
             format!("the driver's sync bytes were not base64: {error}"),
         )
     })
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExportBytesReply {
-    bytes_base64: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ImportReply {
-    sessions: u32,
-    attempts: u32,
 }
 
 /// The host clock in the RFC 3339 form the sync metadata stores.
@@ -565,14 +512,12 @@ mod tests {
                 "username": "me",
                 "password": "secret"
             },
-            "revision": 4,
-            "syncedRevision": 3,
             "choice": "download"
         }))
         .expect("request");
 
+        // The revisions are the core's own (`ContentRevision`); a driver sends none.
         assert_eq!(request.target.provider, "webdav");
-        assert_eq!(request.revision, 4);
         assert_eq!(request.choice, Some(SyncChoice::Download));
     }
 

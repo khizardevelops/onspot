@@ -5,23 +5,22 @@
 //!
 //! Ported from `src/lib/practice/sessionSetup.ts`. A session records its setup
 //! when it starts (migration 10); sessions from before that have none, and the
-//! setup is worked out once from their takes and the current settings. The
-//! driver still owns the settings document; this module owns validation, the
-//! usable-voice fallback and the inference rules.
+//! setup is worked out once from their takes and the current settings. This
+//! module owns validation, the usable-voice fallback, the inference rules and
+//! the reads and writes of a session's setup; putting a setup into Settings
+//! (and telling the learner) stays with the driver.
 
-use onspot_domain::SessionSetup;
+use onspot_domain::{Attempt, SessionSetup};
+use onspot_ports::{HistoryStore, RecordsStore, StoreError};
 use serde::{Deserialize, Serialize};
 
+use crate::enrichment::GLOSS_KEY_PREFIX;
 use crate::language::{catalog, default_instruction_language_for, language, voices_for};
 use crate::settings::{AppSettings, DEFAULT_TARGET_SPEECH_PACE, SPEECH_PACES};
 
 /// The languages offered before sessions recorded their setup, in the order an
 /// old take's letters decide between them (Latin script: French).
 const LANGUAGES_BEFORE_SETUPS: [&str; 3] = ["fr", "fa", "ja"];
-
-/// The prefix of a word-gloss map key: `numbered:<hash>` (English) or
-/// `numbered:<language>:<hash>`.
-const GLOSS_KEY_PREFIX: &str = "numbered:";
 
 /// The setup the settings describe now: what a new session records.
 pub fn setup_from_settings(settings: &AppSettings) -> SessionSetup {
@@ -271,6 +270,116 @@ fn gloss_key_language(key: &str) -> Option<String> {
         .then(|| language.to_owned())
 }
 
+impl From<&Attempt> for SetupAttempt {
+    /// What the inference reads from a stored take. The gloss keys come back
+    /// in key order, not insertion order; only sessions from before setups
+    /// were recorded, glossed in several instruction languages, can tell.
+    fn from(attempt: &Attempt) -> Self {
+        Self {
+            transcript: attempt.transcript.clone(),
+            tts_voice: attempt.tts_voice.clone(),
+            translation_language: attempt
+                .translations
+                .as_ref()
+                .and_then(|translations| translations.instruction_language.clone()),
+            word_gloss_keys: attempt
+                .word_glosses
+                .as_ref()
+                .map(|glosses| glosses.keys().cloned().collect())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// A session's recorded setup, or the one its takes imply.
+async fn recorded_or_inferred(
+    records: &dyn RecordsStore,
+    session_id: &str,
+    recorded: Option<&SessionSetup>,
+    settings: &AppSettings,
+) -> Result<SessionSetup, StoreError> {
+    if let Some(recorded) = recorded {
+        return Ok(recorded.clone());
+    }
+    let attempts = records.list_attempts(session_id).await?;
+    let takes: Vec<SetupAttempt> = attempts.iter().map(SetupAttempt::from).collect();
+    Ok(infer_session_setup(&takes, settings))
+}
+
+/// The newest session and the setup it was practised with, for reopening it
+/// at startup; `None` when there is no session yet.
+pub async fn latest_session_setup(
+    history: &dyn HistoryStore,
+    records: &dyn RecordsStore,
+    settings: &AppSettings,
+) -> Result<Option<(String, SessionSetup)>, StoreError> {
+    let Some(newest) = history.list_sessions().await?.into_iter().next() else {
+        return Ok(None);
+    };
+    let setup = recorded_or_inferred(records, &newest.id, newest.setup.as_ref(), settings).await?;
+    Ok(Some((newest.id, setup)))
+}
+
+/// The setup a session opens with, saved on the session when it differs from
+/// what it recorded (a session from before setups, a voice no longer offered).
+///
+/// @param restore True to take the session's own setup (a voice no longer
+///   offered is repaired); false to keep the current settings, which the
+///   session then takes on.
+/// @returns `None` when no session has that id.
+pub async fn open_session_setup(
+    records: &dyn RecordsStore,
+    settings: &AppSettings,
+    session_id: &str,
+    restore: bool,
+) -> Result<Option<SessionSetup>, StoreError> {
+    let Some(session) = records.get_session(session_id).await? else {
+        return Ok(None);
+    };
+    let recorded = session.setup.clone();
+    let setup = if restore {
+        let own = recorded_or_inferred(records, session_id, recorded.as_ref(), settings).await?;
+        usable_setup(&own)
+    } else {
+        setup_from_settings(settings)
+    };
+
+    let unchanged = recorded
+        .as_ref()
+        .is_some_and(|recorded| same_setup(recorded, &setup));
+    if !unchanged {
+        records
+            .put_session(&onspot_domain::Session {
+                setup: Some(setup.clone()),
+                ..session
+            })
+            .await?;
+    }
+    Ok(Some(setup))
+}
+
+/// Saves a setup chosen while the session is open as its own.
+///
+/// @param now The change time (RFC 3339), stamped as the session's update.
+/// @returns False when no session has that id.
+pub async fn save_session_setup(
+    records: &dyn RecordsStore,
+    session_id: &str,
+    setup: &SessionSetup,
+    now: &str,
+) -> Result<bool, StoreError> {
+    let Some(session) = records.get_session(session_id).await? else {
+        return Ok(false);
+    };
+    records
+        .put_session(&onspot_domain::Session {
+            setup: Some(setup.clone()),
+            updated_at: now.to_owned(),
+            ..session
+        })
+        .await?;
+    Ok(true)
+}
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,6 @@
 	import { pageHref } from '#lib/pages.js';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 	import type { InsightsData, Occurrence, Session } from '#lib/core-client/types.gen.js';
 	import { openSession } from '#lib/stores/practice.js';
 	import { toast } from '#lib/stores/toast.js';
@@ -25,6 +24,7 @@
 	let loadError = $state('');
 	let selectedKey = $state<string | null>(null);
 	let scroller = $state<HTMLElement | null>(null);
+	/** Each take's 1-based position inside its session, by take id. */
 	let attemptIndex = $state<Record<string, number>>({});
 
 	const selected = $derived(data?.patterns.find((pattern) => pattern.key === selectedKey) ?? null);
@@ -48,12 +48,12 @@
 		loading = true;
 		loadError = '';
 		try {
-			const db = await getDatabaseAdapter();
 			const client = await getCoreClient();
-			const response = await client.command<{ data: InsightsData }>('insights.build');
-			const attempts = await db.listAllAttempts();
+			const response = await client.command<{ data: InsightsData; takeNumbers: Record<string, number> }>(
+				'insights.build'
+			);
 			data = response.data;
-			attemptIndex = indexAttempts(attempts);
+			attemptIndex = response.takeNumbers;
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'The local database could not be opened.';
 		} finally {
@@ -62,25 +62,6 @@
 	}
 
 	onMount(load);
-
-	/** Each take's 1-based position inside its session. */
-	function indexAttempts(
-		attempts: Array<{ id: string; sessionId: string; createdAt: string }>
-	): Record<string, number> {
-
-		const index: Record<string, number> = {};
-		const grouped = new Map<string, typeof attempts>();
-		for (const attempt of attempts) {
-			const list = grouped.get(attempt.sessionId) ?? [];
-			list.push(attempt);
-			grouped.set(attempt.sessionId, list);
-		}
-		for (const list of grouped.values()) {
-			list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-			list.forEach((attempt, position) => (index[attempt.id] = position + 1));
-		}
-		return index;
-	}
 
 	/** Opening or leaving a pattern starts at the top, not at the old scroll offset. */
 	function select(key: string | null): void {

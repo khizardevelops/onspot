@@ -184,6 +184,6 @@ driver type behind.
 
 `src/lib/core-client/` also holds `transport.ts` (the `CoreClient` interface with
 `WasmCoreClient` and `TauriCoreClient`, selected by `isTauri()`) and
-`CoreBridgeProbe.svelte` (dev-only readout, dropped from production builds).
+`/dev/bridge/` (dev-only readout of `core.ping` and recent events, dropped from production builds).
 ADR-002's toggle and `backend.ts` are gone; the pre-cutover copy is archived under
 `deprecated/`.

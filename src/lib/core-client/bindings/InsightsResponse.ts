@@ -4,4 +4,8 @@ import type { InsightsData } from "./InsightsData";
 /**
  * The Insights page payload.
  */
-export type InsightsResponse = { data: InsightsData, };
+export type InsightsResponse = { data: InsightsData, 
+/**
+ * Each take's 1-based position in its session, by take id.
+ */
+takeNumbers: { [key in string]: number }, };
