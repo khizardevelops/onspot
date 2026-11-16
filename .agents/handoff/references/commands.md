@@ -111,9 +111,11 @@ installed. After switching to a branch with different dependencies, run
   the checked-in schema-9 fixture through an in-memory sqlite-wasm host), settings persistence,
   history read/write and the secret-leak regression. Needs `bun run bridge:wasm` first and
   `CHROME_PATH` when Chrome is not in a standard location.
-- The dev probe (bottom-left, `data-testid="core-bridge-probe"`) runs `core.ping` and shows the last
-  three events. It exists only in dev builds. The legacy backend toggle and its allowlist are
-  gone; the app always talks to the Rust core.
+- Dev pages (dev builds only, never mounted by the product layout): `/dev/bridge/` runs `core.ping`
+  and shows the last three events; `/dev/storage-check/` is the page `test:storage` drives (it marks
+  the setup guide skipped first); `/dev/long-takes/` seeds two simulated long takes through
+  `restore.legacy_json`. The app always talks to the Rust core.
+- All browser checks launch Chrome with `--mute-audio`.
 
 ## Desktop app (Tauri)
 - **Development, with hot reload: `bun run tauri dev`.** One command: it starts onspot's Vite dev

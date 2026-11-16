@@ -1,5 +1,18 @@
 # Decisions
 
+## Migration completion (2026-11-16)
+
+- **ADR-011:** the usage ledger and the LLM rate-limit pacing live in `onspot-app`, one per `Core`;
+  `onspot-adapter-llm-openai` depends on `onspot-app` (still inward). Device-local values go through
+  the new `DeviceStore` port, under the keys the web driver already used.
+- **ADR-012:** one database connection per runtime; the core owns every query, the migrations and the
+  sync content revision (repositories wrapped so prompt/session/take writes count).
+- **ADR-013:** speech engines stay behind the host; the never-used `native-stt` stub is removed.
+- **Key slots, not hosts:** an endpoint's `provider` names which stored key the host adds; a URL
+  never decides which key is sent.
+- **Dev harnesses live on `/dev/` routes**, never in the product layout (constraints: no test-only
+  branches in product routes).
+
 ## P8 follow-up: prompt generation and legacy import live in Rust (2026-11-15)
 
 - **Prompt-topic generation moved, not the fallback.** `llm-openai::prompt_topic` owns the
@@ -35,7 +48,12 @@
   the archived code is frozen reference material; delete it only after a later release proves the
   cutover. The empty `deprecated/` folder already exists at the repo root.
 
-## P8 boundaries: explicit host-shim allowlists (2026-11-14)
+## P8 boundaries: explicit host-shim allowlists (2026-11-14, narrowed 2026-11-16)
+
+- **2026-11-16:** the lists now name the exact files that import `svelte/store` or Tauri outside
+  the view layer and `core-client` (no whole `usage/`, `platform/` or `adapters/sync/` folders for
+  `svelte/store`; only `transport.ts`/`coreHost.ts` in `core-client` for Tauri). A new importer
+  must be added by name, which is the review moment.
 
 - `svelte/store` is allowed in `src/lib/stores/`, `core-client/`, `platform/`, `usage/`, the
   prompt-submission store, the TTS service, `adapters/llm/pacing.ts`, `adapters/sync/`, components

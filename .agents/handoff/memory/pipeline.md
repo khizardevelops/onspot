@@ -110,16 +110,20 @@ another port has the bytes. Cloud-only configurations skip the gate.
 ## Runtime split
 
 ```
-Desktop (Tauri v2)                    Web SPA
-  window.__TAURI_INTERNALS__            no Tauri
-  TauriSqlAdapter                       OpfsSqliteAdapter
-  @tauri-apps/plugin-sql                sqlite-wasm + OPFS (Worker)
+Desktop / Android (Tauri v2)          Web SPA
+  Rust core in the app process          Rust core as wasm in the page
+  rusqlite: the only connection         sqlite-wasm + OPFS worker (browserDatabase.ts),
+  to onspot.db                          reached through the core's SqlDriver host
       \_______________________________/
                      |
-             IDatabaseAdapter (getDatabaseAdapter())
+   onspot-app use cases + onspot-adapter-repo-sql (schema, migrations, queries)
                      |
-            stores / components (never SQL directly)
+   core-client commands  ->  stores / components (never SQL directly)
 ```
+
+Device-local values (usage ledger `onspot.usage.v1`, sync revision `onspot.db.revision` and
+`onspot.sync.synced.<provider>`) live in the webview's `localStorage`, reached by the core through
+`device.read`/`device.write` host calls; the CLI keeps them in a JSON file (ADR-011, ADR-012).
 
 ## Weight loading (carried from the lab, still true)
 

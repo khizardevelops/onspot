@@ -1,5 +1,20 @@
 # Tasks
 
+## Migration completion (2026-11-16)
+- [x] Review P0–P8 independently; log defects in `references/bugs.md`.
+- [x] Core-owned usage ledger and LLM pacing; client per-caller options; long-take/translation
+      parts; key slots; pacing notice (ADR-011).
+- [x] Storage cutover: remove plugin-sql and the TS adapters/migrations; core commands for every
+      remaining read/write; core-owned sync revision (ADR-012).
+- [x] Remove the unused `native-stt` stub (ADR-013).
+- [x] Move bridge use-case logic (translations/glosses/phrases, prompt seeding) into `onspot-app`.
+- [x] Narrow boundary allowlists; move dev harnesses out of the product layout; mute test browsers.
+- [x] Desktop release build + desktop portability/sync checks.
+- [ ] Install and smoke-test the arm64 debug APK on the learner's phone (the phone was not
+      visible over USB this session: no `adb` device, nothing in `lsusb`).
+- [ ] Release: version bump is the maintainer's; then tag to exercise `release.yml`/`android.yml`.
+- [ ] Optional: word-gloss sections per ~90 words if takes ever exceed a minute.
+
 ## Rust/TS parity follow-up (2026-11-15, uncommitted)
 - [x] Port prompt-topic generation/validation to `llm-openai::prompt_topic`; export language
       `scripts`; LLM-backed `PromptSource`; `PracticeConfig.llmConfigured`; remove host

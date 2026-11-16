@@ -27,6 +27,26 @@ silent, which prompt to show or when to sync, that rule belongs in the core.
    The mapping lives in the driver (see `BRIDGE.md`); the core never returns
    learner-facing prose.
 
+## Host adapters
+
+`onspot_app::HostAdapters` is what a driver hands the core at boot. Leave a
+field unset when the platform cannot provide it; commands that need it answer
+`bridge.unavailable` instead of panicking.
+
+| Field | What it is | Who sets it |
+|---|---|---|
+| `history`, `settings`, `records` | The repositories over the driver's `SqlDriver` (`onspot-adapter-repo-sql`) | every driver with storage; the core wraps `history`/`records` to count sync-relevant writes |
+| `database_file` | Whole-database export/replace | native drivers (rusqlite); the browser leaves it unset and the core uses `db.export_bytes`/`db.import_bytes` host calls |
+| `sql` | The engine itself, when the driver hosts it | the browser, so a restored or synced-down database is migrated |
+| `device` | Device-local values that never enter the database (usage ledger, sync revision) | the CLI (a JSON file); unset means the core asks the host with `device.read`/`device.write` |
+
+Engines the core reaches through `host_request` events (the driver replies
+with `core.host_reply`): `capture.*`, `stt.transcribe`, `tts.synthesize`,
+`http.request` (add the key of the request's `provider` slot; honour
+`timeoutMs`), `http.sync`, `fs.save`/`fs.pick`, `oauth.*`, `language.*`, and
+the `device.*`/`db.*` calls above. Keys never cross into the core: requests
+name a key slot and carry only a key hash (`keyId`) for the usage ledger.
+
 ## Per-platform transports
 
 | Platform | Use |
@@ -50,6 +70,9 @@ is deliberately boring:
   provider bearer token driver-side from `CliSecrets`; the core only sees an
   `HttpRequest`. Requests run on a worker thread and the loop polls
   `CancelToken`, so Ctrl-C cancels an in-flight call.
+- `src/device.rs` is the CLI `DeviceStore`: a JSON file beside the keyfile
+  holding the usage ledger, so `evaluate` is paced and counted like the GUI
+  (`main.rs` builds the core's `UsageLedger` and `RequestPacer` over it).
 - `src/secrets.rs` is the CLI `SecretStore`: environment variables first, then a
   JSON keyfile (`--keys-file`, `ONSPOT_KEYS_FILE`, or the default under the
   config directory). Keys never enter the database, a prompt, an export or the

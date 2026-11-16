@@ -1,5 +1,48 @@
 # State
 
+## Migration completed (2026-11-16, commits `a8ad303`, `71dd15c`, `8b895e3` + the closeout commit)
+
+- **Review → fixes.** An independent review of P0–P8 found the core real and tested but the cutover
+  incomplete and several silent regressions. All fixed and verified this session:
+  - **LLM usage, pacing, options (ADR-011).** `onspot-app` owns the usage ledger (`UsageLedger`,
+    `DeviceStore` port, same `onspot.usage.v1` record) and the rate-limit pacing (`RequestPacer`, a
+    port of `pacing.ts`), one per `Core`. The LLM client honours per-caller temperature/JSON/budget/
+    patience/timeout, splits long takes (260 words) and translations (60 words) with the
+    golden-pinned `onspot-dsp::segments::sentence_chunks`, uses the frozen connection-test prompt
+    and model labels in error copy. Driver-side cloud STT/TTS report via `usage.record_call`/
+    `usage.record_refusal`. `pacing_wait_changed` restores the Practice "per-minute limit" notice.
+  - **Key slots.** `LlmEndpoint.provider` is the key slot (`local`, `groq`, `deepseek`, `custom`) and
+    `keyId` the key hash; one rule (`llmKeySlotFor` / `resolve_endpoint`), pinned by
+    `request-endpoints.json`. A local server no longer receives the custom provider's key. The setup
+    guide tests an unsaved key through a transient `candidate` slot.
+  - **One database connection (ADR-012).** `tauri-plugin-sql`/`@tauri-apps/plugin-sql`, the TS
+    adapters and the TS migration chain are gone. Every query is the core's; new thin commands
+    (`sessions.latest_setup/open_setup/save_setup`, `reminders.last_practised`, `audio.get/put`,
+    `sync.metadata`; `insights.build` returns `takeNumbers`). The web keeps only the sqlite-wasm
+    worker (`adapters/db/browserDatabase.ts`); the core migrates at boot and after a host import.
+  - **Sync data-loss path fixed.** The content revision moved into the core
+    (`onspot-app::content_revision`, repositories wrapped); takes written by the core now count, so
+    sync no longer treats a changed device as unchanged.
+  - **Bridge thinned.** Translations/glosses/phrases are `onspot-app::enrichment::EnrichTake`;
+    prompt seeding is `practice.next_prompt` in the core; duplicate `HostDatabaseFile` and hash code
+    removed. Earlier phrase selections survive a later word-gloss fetch (TS behaviour).
+  - **Removed:** unused `native-stt` stub (ADR-013; desktop STT is whisper.cpp in Rust behind the
+    host); TS explanation composer, client, pacer, ledger, rate-limit tables, prompt seeding,
+    session-setup inference wrappers (archived under `deprecated/`).
+  - **Hygiene:** `golden:capture` works again (archived imports fixed); every test browser runs with
+    `--mute-audio`; dev harnesses moved from the product layout to `/dev/bridge/` and
+    `/dev/storage-check/`; boundary allowlists name exact files.
+- **Verified 2026-11-16:** `cargo fmt --check`, clippy `-D warnings`, `cargo test --workspace`
+  **308 passed**; `bun run check` 0 errors; production build; `test:storage`, `test:practice`
+  (asserts every LLM/STT call is in the ledger), `test:portability`, `test:sync`; desktop release
+  build (no plugin-sql), `test:portability:desktop`, `test:sync:desktop`; boundaries, SPDX, coupling,
+  endpoint parity, golden capture reproduces every fixture.
+- **Still driver-side by design:** speech engines and audio (host ports), OAuth, API keys, the
+  browser's SQLite engine, reminders' scheduler, the language/provider catalog sources (TS, exported
+  to JSON and CI-checked), `stores/llm.ts` endpoint composition (pinned by the parity fixture).
+- **Known deviation:** word glosses are fetched for a whole text in one request (the TS store fetched
+  ~90-word sections); takes are capped at 60 s, so this is at most two sections.
+
 ## Hexagonal migration: P8 acceptance gates closed (2026-11-16, uncommitted)
 
 - **CLI driver done:** `drivers/cli` implements `settings get/set`, `sessions list/show`, `evaluate`,

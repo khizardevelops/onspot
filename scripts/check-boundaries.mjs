@@ -30,26 +30,31 @@ const ADAPTER_DIRECTORY = 'src/lib/adapters';
 const DEPRECATED_DIRECTORY = 'deprecated/';
 
 /**
- * `svelte/store` belongs to view state. These are the view-state stores and
- * the host shims that read them; everything else must take data as arguments.
+ * `svelte/store` belongs to view state: the view-state stores, the views
+ * themselves, the core client's event-fed stores, and the few host shims that
+ * publish state to a view. Everything else takes data as arguments.
  */
 const SVELTE_STORE_ALLOWED = [
 	'src/lib/stores/',
+	'src/lib/components/',
+	'src/routes/',
 	'src/lib/core-client/',
-	'src/lib/platform/',
-	'src/lib/usage/',
+	'src/lib/usage/coreMonitor.ts',
 	'src/lib/practice/promptSubmissions.ts',
 	'src/lib/speech/tts/service.ts',
-	'src/lib/adapters/sync/',
-	'src/lib/components/',
-	'src/routes/'
+	'src/lib/platform/pwa.ts',
+	'src/lib/adapters/sync/service.ts',
+	'src/lib/adapters/sync/webdav.ts',
+	'src/lib/adapters/sync/google/oauth.ts'
 ];
 
-/** Desktop and speech plugins stay behind the transport and platform shims. */
+/** Desktop and speech plugins stay behind the transport and the platform shims. */
 const TAURI_ALLOWED = [
-	'src/lib/core-client/',
+	'src/lib/core-client/transport.ts',
+	'src/lib/core-client/coreHost.ts',
 	'src/lib/platform/',
-	'src/lib/adapters/sync/',
+	'src/lib/adapters/sync/http.ts',
+	'src/lib/adapters/sync/google/oauth.ts',
 	'src/lib/speech/stt/native/nativeEngine.ts',
 	'src/lib/components/WindowBar.svelte'
 ];

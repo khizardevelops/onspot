@@ -1,19 +1,26 @@
 # Last Session
 
-## 2026-11-16: independent review of the hex-arch migration (read-only)
+## 2026-11-16: migration completed after an independent review
 
-- Re-ran gates myself: `cargo fmt --check`, clippy `-D warnings`, `cargo test --workspace`
-  (**282 passed**), `bun run check` (0 errors), `lint:boundaries` (green). Claims match.
-- Moving old TS to `deprecated/` instead of deleting it is the maintainer's decision (see
-  `decisions.md`); not a defect.
-- New defects logged under **Active** in `references/bugs.md`: dropped LLM temperature, core LLM
-  calls missing from the usage ledger, simplified Rust pacing, two SQLite stacks on desktop,
-  unused `native-stt`.
-- Other observations: TS in `src/` did not shrink overall (45.4k → 47.9k lines incl. ~2.9k of new
-  `core-client` glue and the new `/about` and `/dummy` routes); `stores/practice.ts` is still 1,380
-  lines; the `svelte/store` and `@tauri-apps` boundary allowlists cover most of `src/`, so
-  "green" is weaker than P8 asked. P8 and the parity follow-up (102 tracked files) are still
-  uncommitted.
+- **Review first.** Verified the agents' claims (tests/clippy/check all green) and found what they
+  missed: core LLM calls uncounted and unpaced (fresh client per request), dropped temperatures/JSON
+  mode/token budgets, no long-take splitting, the pacing notice gone, a local LLM server sent the
+  custom provider's key, desktop opening `onspot.db` twice, `native-stt` unused, `golden:capture`
+  broken, unmuted test browsers, dev harnesses in the product layout, and a **sync data-loss path**
+  (the "device changed" revision was only bumped by TS writes).
+- **Fixed, in three commits:** `a8ad303` (P8 as the agents left it), `71dd15c` (ledger + pacing +
+  client parity, ADR-011), `8b895e3` (one database connection, core-owned revision, enrichment and
+  prompt seeding in the core, `native-stt` removed, ADR-012/013), then this closeout (allowlists,
+  docs, handoff). Details in `state.md` and `bugs.md`.
+- **Verification:** 308 Rust tests; all four browser checks (practice now asserts the ledger); both
+  desktop checks against a fresh release build; boundaries/SPDX/coupling/endpoint parity; golden
+  capture reproduces every fixture.
+- **Not done here:** the phone test. The learner said the phone was connected with USB debugging,
+  but neither `adb devices` nor `lsusb` saw it (charge-only cable or USB mode, most likely). The arm64
+  debug APK is built for it (installs as `app.onspot.desktop.debug`, beside the release app).
+- **Disk:** `/mnt/data` filled to 100% once (target/ grew to 44 GB). Cleared `target/debug`
+  (regenerable); the Android cache lives in `/mnt/data/not_synced/dev-cache/onspot-target`.
+- **Maintainer's decision kept:** legacy TS is archived under `deprecated/`, never deleted.
 
 ## 2026-11-16: P8 acceptance gates actually closed
 
