@@ -28,10 +28,14 @@
   `restore.legacy_json`, parses and merges format-1 backups through the repositories. The driver
   only reads the file and supplies `now`; settings are reloaded driver-side when the result says
   any were imported.
-- **Historic capture exception.** The archived `evaluate.ts`/`prompt.ts` under `deprecated/` now
-  import live modules through `#lib/...`, so `scripts/capture-golden.mjs` can still reproduce the
-  P0 fixtures. This is the one place an archived module points at live code; the live tree still
-  has zero `deprecated/` imports.
+- **Nothing depends on `deprecated/` (user directive, 2026-11-16).** The former "historic capture
+  exception" is gone: `scripts/capture-golden.mjs` regenerates only the fixtures whose TypeScript
+  source is still live (history search, capWords, sameWords, usage format, sentence chunks). The
+  fixtures of retired TypeScript are frozen P0 captures that the Rust tests replay; nothing
+  rebuilds them. CI, scripts and the build would pass with the folder deleted.
+- **GitHub language stats:** `.gitattributes` marks `deprecated/` not detectable, the ts-rs
+  bindings and `src-tauri/gen/` generated, and `prototype/` documentation, so Linguist counts the
+  shipping code (Rust largest).
 
 ## P8 cutover: legacy TypeScript is archived, not deleted (2026-11-14)
 

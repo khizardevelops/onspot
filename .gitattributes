@@ -1,0 +1,16 @@
+# GitHub's language statistics (Linguist) should describe the code that ships.
+
+# The TypeScript retired by the move to the Rust core: kept for reference,
+# never built, never imported.
+deprecated/** linguist-detectable=false
+
+# Generated from the Rust types by `bun run bridge:types` (ts-rs); also
+# collapsed in pull-request diffs.
+src/lib/core-client/bindings/** linguist-generated
+src/lib/core-client/types.gen.ts linguist-generated
+
+# The Android project Tauri generates.
+src-tauri/gen/** linguist-generated
+
+# Static design mockups, not app code.
+prototype/** linguist-documentation
