@@ -69,6 +69,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: ${{ runner.temp }}/release-notes.md
+          # A tag with a suffix (v0.2.4-rust.1) is a preview: a pre-release that
+          # never replaces the latest stable release the README links to.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   bundle:
     needs: verify
@@ -232,6 +235,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          # A tag with a suffix (v0.2.4-rust.1) is a preview: a pre-release that
+          # never replaces the latest stable release the README links to.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   # Repackages each Linux job's .deb as a Flatpak on the GNOME runtime
   # (packaging/flatpak/app.onspot.desktop.yml), natively on each architecture.
@@ -292,3 +298,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.stage.outputs.bundle }}
+          # A tag with a suffix (v0.2.4-rust.1) is a preview: a pre-release that
+          # never replaces the latest stable release the README links to.
+          prerelease: ${{ contains(github.ref_name, '-') }}

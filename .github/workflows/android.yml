@@ -126,6 +126,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.apk.outputs.path }}
+          # A tag with a suffix (v0.2.4-rust.1) is a preview: a pre-release that
+          # never replaces the latest stable release the README links to.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
       - name: Remove signing material
         if: always()
