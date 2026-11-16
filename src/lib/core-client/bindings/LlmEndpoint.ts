@@ -18,4 +18,10 @@ provider: string, model: string,
 /**
  * Models to continue with when the preferred one is out of room.
  */
-fallbackModels: Array<string>, };
+fallbackModels: Array<string>, 
+/**
+ * A short hash of the key the host will add (`keyIdOf` in the driver),
+ * never the key itself. The usage ledger and the rate-limit pacing count
+ * per key, so two accounts on one provider never share a budget.
+ */
+keyId: string, };

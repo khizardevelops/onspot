@@ -28,6 +28,11 @@ pub struct LlmEndpoint {
     /// Models to continue with when the preferred one is out of room.
     #[serde(default)]
     pub fallback_models: Vec<String>,
+    /// A short hash of the key the host will add (`keyIdOf` in the driver),
+    /// never the key itself. The usage ledger and the rate-limit pacing count
+    /// per key, so two accounts on one provider never share a budget.
+    #[serde(default)]
+    pub key_id: String,
 }
 
 /// What the core asks an evaluation adapter to judge.

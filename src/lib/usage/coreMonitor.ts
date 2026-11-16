@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
- * The usage monitor through the Rust core (P6). Keys and account probes stay in
- * the driver; the bridge receives resolved settings, meter data and account
- * readings, never credentials.
+ * The usage monitor through the Rust core. The core keeps the device's usage
+ * ledger and counts every LLM request itself; keys and the account probes
+ * (ElevenLabs, DeepSeek) stay in the driver, so the bridge receives resolved
+ * settings, key hashes and account readings, never credentials.
  */
 
 import { derived, get, readable, writable } from 'svelte/store';
@@ -16,7 +17,7 @@ import { getModelOptions } from '#lib/adapters/llm/index.js';
 import { fetchElevenLabsSubscription } from '#lib/speech/tts/cloud/elevenLabsAccount.js';
 import { fetchDeepSeekBalance } from '#lib/adapters/llm/deepseekBalance.js';
 import { getCoreClient } from '#lib/core-client/client.js';
-import { keyIdOf, usageLedger } from './ledger.js';
+import { keyIdOf } from '#lib/core-client/usage.js';
 import type { ServiceUsage, UsageWarning } from './types.js';
 
 interface AccountReading<T> {
@@ -113,7 +114,6 @@ async function recompute(): Promise<void> {
 		elevenlabsKeyId: keyIdOf(get(elevenLabsApiKey)),
 		isTauri: isTauri(),
 		now: Date.now(),
-		ledger: get(usageLedger),
 		elevenlabs: ready ? elevenlabs : null,
 		deepseek: ready ? deepseek : null,
 		groqModels: getModelOptions('groq').map((option) => option.id),
@@ -135,11 +135,32 @@ const clock = readable(Date.now(), (set) => {
 	return () => clearInterval(timer);
 });
 
+/** Bumped whenever the core's ledger records a call or a refusal. */
+const ledgerChanges = readable(0, (set) => {
+	let changes = 0;
+	let unsubscribe: (() => void) | null = null;
+	let stopped = false;
+
+	void getCoreClient()
+		.then((client) => {
+			if (stopped) return;
+			unsubscribe = client.subscribe((event) => {
+				if (event.event === 'usage_changed') set(++changes);
+			});
+		})
+		.catch(() => undefined);
+
+	return () => {
+		stopped = true;
+		unsubscribe?.();
+	};
+});
+
 /** Starts the core-backed monitor; only called when the usage feature is on. */
 export function startCoreMonitor(): void {
 	let signature = '';
 	derived(
-		[settingsReady, appSettings, groqApiKey, deepseekApiKey, elevenLabsApiKey, openaiApiKey, usageLedger, clock],
+		[settingsReady, appSettings, groqApiKey, deepseekApiKey, elevenLabsApiKey, openaiApiKey, ledgerChanges, clock],
 		(values) => values
 	).subscribe(([ready, settings, groqKey, deepKey, elevenKey, openaiKey]) => {
 		const next = `${ready}|${keyIdOf(groqKey)}|${keyIdOf(deepKey)}|${keyIdOf(elevenKey)}|${keyIdOf(openaiKey)}|${settings.ttsCloudProvider}|${settings.llmProvider}`;

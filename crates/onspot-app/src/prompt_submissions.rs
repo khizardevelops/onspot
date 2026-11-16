@@ -153,6 +153,7 @@ pub async fn flush(
         headers,
         body: wire_body(&batch).to_string(),
         provider: None,
+        timeout_ms: None,
     };
 
     let message = match http.send(&http_request, &CancelToken::new()).await {

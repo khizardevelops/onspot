@@ -15,6 +15,8 @@
  * directly.
  */
 
+import type { LlmKeySlot as SettingsKeySlot } from '#lib/adapters/llm/providers.js';
+
 const PREFIX = 'onspot.key.';
 
 /** The names are stable: they are the stored keys, not display names. */
@@ -65,6 +67,37 @@ export const browserSecretStore: SecretStore = {
 /** Reads one secret from the active store. */
 export function readSecret(name: SecretName): string {
 	return browserSecretStore.get(name);
+}
+
+/**
+ * Which stored key an LLM request uses: the provider's, or the local
+ * server's. `candidate` is a key being tried before it is kept (the setup
+ * guide tests a key and saves it only once it answers).
+ */
+export type LlmKeySlot = SettingsKeySlot | 'candidate';
+
+/** The key under test, held in memory only and never stored. */
+let candidateKey = '';
+
+/**
+ * Runs `use` with `key` answering for the `candidate` slot, then forgets it.
+ *
+ * @param key A key typed but not yet saved.
+ * @param use The request(s) that should carry it.
+ */
+export async function withCandidateKey<T>(key: string, use: () => Promise<T>): Promise<T> {
+	candidateKey = key.trim();
+	try {
+		return await use();
+	} finally {
+		candidateKey = '';
+	}
+}
+
+/** The key for one LLM key slot; empty when none is kept. */
+export function readLlmKey(slot: LlmKeySlot): string {
+	if (slot === 'candidate') return candidateKey;
+	return readSecret(`llm.${slot}`);
 }
 
 /** Writes or clears one secret (an empty value removes it). */

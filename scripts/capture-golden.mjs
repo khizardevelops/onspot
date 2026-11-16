@@ -24,7 +24,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { repairJson } from '../src/lib/adapters/llm/jsonRepair.ts';
+import { repairJson } from '../deprecated/src/lib/adapters/llm/jsonRepair.ts';
 import { MAX_ATTEMPT_WORDS, capWords } from '../src/lib/config.ts';
 import { sameWords } from '../src/lib/utils/words.ts';
 import { sentenceChunks } from '../src/lib/utils/textChunks.ts';
@@ -45,13 +45,13 @@ plugin({
 
 const { buildEvaluationMessages } = await import('../deprecated/src/lib/adapters/llm/prompt.ts');
 const { normalizeEvaluation, extractJson } = await import('../deprecated/src/lib/adapters/llm/evaluate.ts');
-const { stripThinking } = await import('../src/lib/adapters/llm/client.ts');
+const { stripThinking } = await import('../deprecated/src/lib/adapters/llm/client.ts');
 const { computeInsights } = await import('../deprecated/src/lib/insights.ts');
 const { translationRules } = await import('../deprecated/src/lib/adapters/llm/translationPrompt.ts');
-const { parseDuration, parseRefusal } = await import('../src/lib/usage/rateLimits.ts');
-const { GROQ_PUBLISHED_MODELS, groqPublishedLimits, groqKnownLimits } = await import('../src/lib/usage/publishedLimits.ts');
+const { parseDuration, parseRefusal } = await import('../deprecated/src/lib/usage/rateLimits.ts');
+const { GROQ_PUBLISHED_MODELS, groqPublishedLimits, groqKnownLimits } = await import('../deprecated/src/lib/usage/publishedLimits.ts');
 const usageFormat = await import('../src/lib/usage/format.ts');
-const usageLedger = await import('../src/lib/usage/ledger.ts');
+const usageLedger = await import('../deprecated/src/lib/usage/ledger.ts');
 const { composeExplanation, normalizeExplanation, separateFollowUp } = await import(
 	'../src/lib/adapters/llm/explanation.ts'
 );

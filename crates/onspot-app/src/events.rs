@@ -82,6 +82,12 @@ pub enum UiEvent {
         provider: String,
         message_code: String,
     },
+    /// The device's usage ledger recorded a call or a refusal; drivers that
+    /// show the usage monitor ask for a new `usage.snapshot`.
+    UsageChanged,
+    /// The longest request waiting for room under a provider's per-minute
+    /// limit, or `None` when nothing is waiting. Short waits are not announced.
+    PacingWaitChanged { wait: Option<PacingWait> },
     /// The core asks the driver to perform one host operation and reply.
     HostRequest {
         id: u32,
@@ -89,6 +95,20 @@ pub enum UiEvent {
         /// JSON-encoded arguments.
         payload: String,
     },
+}
+
+/// An LLM request paused for room under a provider's per-minute limit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct PacingWait {
+    /// Whose limit it is waiting for, e.g. `Groq`.
+    pub provider: String,
+    pub model: String,
+    /// When the request will be sent (ms since epoch). A timestamp fits a JS
+    /// number exactly, and both transports send it as one.
+    #[ts(type = "number")]
+    pub until: u64,
 }
 
 /// Where the core delivers its events.

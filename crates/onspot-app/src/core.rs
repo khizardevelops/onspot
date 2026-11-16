@@ -9,8 +9,10 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::events::{EventSink, UiEvent};
-use crate::host_rpc::HostRpc;
+use crate::host_rpc::{HostDeviceStore, HostRpc};
 use crate::hosts::HostAdapters;
+use crate::usage_ledger::UsageLedger;
+use crate::usage_pacing::RequestPacer;
 use onspot_ports::{ModelProgress, PickedFile};
 
 /// What a driver tells the core at boot.
@@ -85,6 +87,9 @@ pub struct Core {
     practice: Mutex<Option<Arc<crate::practice::RunPracticeSession>>>,
     staged_restore: Mutex<Option<PickedFile>>,
     language_download: Mutex<Option<Arc<crate::language_download::RunLanguageDownload>>>,
+    /// The one rate-limit pacing (and through it the usage ledger) every LLM
+    /// request of this run shares, so requests see each other.
+    pacer: Arc<RequestPacer>,
 }
 
 impl Core {
@@ -97,7 +102,16 @@ impl Core {
     /// Creates a core with the host adapters a driver can supply.
     pub fn with_hosts(config: CoreConfig, hosts: HostAdapters) -> Self {
         let bus = Arc::new(EventBus::new());
-        let host_rpc = Arc::new(HostRpc::new(bus.clone() as Arc<dyn EventSink>));
+        let events = bus.clone() as Arc<dyn EventSink>;
+        let host_rpc = Arc::new(HostRpc::new(events.clone()));
+
+        let device = hosts
+            .device
+            .clone()
+            .unwrap_or_else(|| Arc::new(HostDeviceStore::new(host_rpc.clone())));
+        let ledger = Arc::new(UsageLedger::new(device, events.clone()));
+        let pacer = Arc::new(RequestPacer::new(ledger, events));
+
         Self {
             config,
             hosts,
@@ -106,6 +120,7 @@ impl Core {
             practice: Mutex::new(None),
             staged_restore: Mutex::new(None),
             language_download: Mutex::new(None),
+            pacer,
         }
     }
 
@@ -153,6 +168,16 @@ impl Core {
     /// The host request/response registry.
     pub fn host_rpc(&self) -> &Arc<HostRpc> {
         &self.host_rpc
+    }
+
+    /// The rate-limit pacing every LLM request of this run goes through.
+    pub fn pacer(&self) -> &Arc<RequestPacer> {
+        &self.pacer
+    }
+
+    /// The device's usage ledger.
+    pub fn usage_ledger(&self) -> &Arc<UsageLedger> {
+        self.pacer.ledger()
     }
 
     /// The open practice session, if the driver has configured one.

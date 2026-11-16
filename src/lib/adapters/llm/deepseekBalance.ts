@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { fetchWithTimeout } from './client';
+import { fetchWithTimeout } from '#lib/platform/fetchWithTimeout.js';
 
 /**
  * DeepSeek bills per token from a prepaid balance and does not rate-limit, so

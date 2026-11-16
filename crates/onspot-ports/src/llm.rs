@@ -25,6 +25,10 @@ pub struct HttpRequest {
     pub body: String,
     /// Provider id whose stored key the host adds, or null for a local server.
     pub provider: Option<String>,
+    /// Give up after this long, so a stalled provider cannot leave the learner
+    /// waiting forever. `None` keeps the host's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 /// The host's HTTP response.

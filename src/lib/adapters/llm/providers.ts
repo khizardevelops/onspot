@@ -186,6 +186,19 @@ export interface EndpointSettings {
 	languageLevel: LanguageResourceLevel;
 }
 
+/** Which stored key an endpoint uses: a provider's, or the local server's. */
+export type LlmKeySlot = LlmProviderId | 'local';
+
+/**
+ * The key slot for the settings' endpoint: the local server's in local mode,
+ * otherwise the chosen provider's (a custom URL keeps the custom key even when
+ * it points at a known host). The core's `resolve_endpoint` returns the same
+ * slot as `provider`, and `request-endpoints.json` pins both.
+ */
+export function llmKeySlotFor(settings: Pick<EndpointSettings, 'correctionMode' | 'llmProvider'>): LlmKeySlot {
+	return settings.correctionMode === 'local' ? 'local' : settings.llmProvider;
+}
+
 /**
  * The endpoint to call, given Settings and the language level. The driver adds
  * the key: this function is the one policy the Rust core mirrors

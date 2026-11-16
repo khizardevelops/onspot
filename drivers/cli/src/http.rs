@@ -19,6 +19,17 @@ use crate::secrets::CliSecrets;
 
 type RawResponse = (u16, BTreeMap<String, String>, Vec<u8>);
 
+/// One request as the worker thread sends it: text and binary bodies alike.
+struct RawRequest {
+    method: String,
+    url: String,
+    headers: BTreeMap<String, String>,
+    body: Vec<u8>,
+    /// The key slot whose key is added, or `None` for an unauthenticated call.
+    provider: Option<String>,
+    timeout: Option<Duration>,
+}
+
 pub struct NativeHttp {
     client: Client,
     secrets: Arc<CliSecrets>,
@@ -36,16 +47,20 @@ impl NativeHttp {
     /// Sends on a worker thread so Ctrl-C can cancel while the socket is open.
     fn send_blocking(
         &self,
-        method: String,
-        url: String,
-        headers: BTreeMap<String, String>,
-        body: Vec<u8>,
-        provider: Option<String>,
+        request: RawRequest,
         token: &CancelToken,
     ) -> Result<RawResponse, CoreError> {
         if token.is_cancelled() {
             return Err(token.error());
         }
+        let RawRequest {
+            method,
+            url,
+            headers,
+            body,
+            provider,
+            timeout,
+        } = request;
 
         let client = self.client.clone();
         let secrets = self.secrets.clone();
@@ -54,7 +69,14 @@ impl NativeHttp {
             let result = (|| {
                 let method = reqwest::Method::from_bytes(method.as_bytes())
                     .map_err(|error| CoreError::new("cli.http_method", error.to_string()))?;
-                let mut request = client.request(method, url);
+                let host = reqwest::Url::parse(&url)
+                    .ok()
+                    .and_then(|parsed| parsed.host_str().map(str::to_owned))
+                    .unwrap_or_else(|| url.clone());
+                let mut request = client.request(method, url.as_str());
+                if let Some(timeout) = timeout {
+                    request = request.timeout(timeout);
+                }
 
                 let mut names: Vec<HeaderName> = Vec::new();
                 for (name, value) in &headers {
@@ -77,7 +99,7 @@ impl NativeHttp {
                 let response = request
                     .body(body)
                     .send()
-                    .map_err(|error| CoreError::new("cli.http", error.to_string()))?;
+                    .map_err(|error| readable_send_error(&error, &host, timeout))?;
                 let status = response.status().as_u16();
                 let headers = response_headers(response.headers());
                 let body = response
@@ -114,14 +136,15 @@ impl HttpClient for NativeHttp {
         if token.is_cancelled() {
             return Err(token.error());
         }
-        let (status, headers, bytes) = self.send_blocking(
-            request.method.clone(),
-            request.url.clone(),
-            request.headers.clone(),
-            request.body.clone().into_bytes(),
-            request.provider.clone(),
-            token,
-        )?;
+        let raw = RawRequest {
+            method: request.method.clone(),
+            url: request.url.clone(),
+            headers: request.headers.clone(),
+            body: request.body.clone().into_bytes(),
+            provider: request.provider.clone(),
+            timeout: request.timeout_ms.map(Duration::from_millis),
+        };
+        let (status, headers, bytes) = self.send_blocking(raw, token)?;
         Ok(HttpResponse {
             status,
             headers,
@@ -137,14 +160,15 @@ impl HttpClient for NativeHttp {
         if token.is_cancelled() {
             return Err(token.error());
         }
-        let (status, headers, body) = self.send_blocking(
-            request.method.clone(),
-            request.url.clone(),
-            request.headers.clone(),
-            request.body.clone(),
-            None,
-            token,
-        )?;
+        let raw = RawRequest {
+            method: request.method.clone(),
+            url: request.url.clone(),
+            headers: request.headers.clone(),
+            body: request.body.clone(),
+            provider: None,
+            timeout: None,
+        };
+        let (status, headers, body) = self.send_blocking(raw, token)?;
         Ok(HttpBytesResponse {
             status,
             headers,
@@ -189,4 +213,19 @@ impl Clock for SystemClock {
         }
         !token.is_cancelled()
     }
+}
+
+/// A failed send as the learner should read it: a stall, or a host that
+/// could not be reached, rather than the HTTP library's wording.
+fn readable_send_error(error: &reqwest::Error, host: &str, timeout: Option<Duration>) -> CoreError {
+    let message = match timeout {
+        Some(limit) if error.is_timeout() => {
+            format!("{host} did not respond within {}s.", limit.as_secs())
+        }
+        _ if error.is_connect() || error.is_request() => {
+            format!("Could not reach {host}. Check your connection and the provider URL.")
+        }
+        _ => error.to_string(),
+    };
+    CoreError::new("cli.http", message)
 }

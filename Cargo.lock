@@ -3158,6 +3158,7 @@ dependencies = [
  "fancy-regex",
  "futures",
  "once_cell",
+ "onspot-app",
  "onspot-domain",
  "onspot-dsp",
  "onspot-ports",

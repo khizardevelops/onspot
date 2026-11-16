@@ -71,3 +71,48 @@ fn is_silent_matches_every_golden_case() {
         );
     }
 }
+
+#[derive(Deserialize)]
+struct ChunkFixture {
+    cases: Vec<ChunkCase>,
+}
+
+#[derive(Deserialize)]
+struct ChunkCase {
+    name: String,
+    input: ChunkInput,
+    expected: Vec<Utf16Span>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChunkInput {
+    text: String,
+    max_words: usize,
+}
+
+/// A span as the TypeScript capture wrote it: UTF-16 offsets.
+#[derive(Debug, Deserialize, PartialEq)]
+struct Utf16Span {
+    start: usize,
+    end: usize,
+}
+
+#[test]
+fn sentence_chunks_match_every_golden_case() {
+    let fixture: ChunkFixture = serde_json::from_str(include_str!("golden/sentenceChunks.json"))
+        .expect("sentenceChunks golden");
+    for case in fixture.cases {
+        let text = &case.input.text;
+        let utf16_offset = |byte: usize| text[..byte].encode_utf16().count();
+        let actual: Vec<Utf16Span> =
+            onspot_dsp::segments::sentence_chunks(text, case.input.max_words)
+                .into_iter()
+                .map(|span| Utf16Span {
+                    start: utf16_offset(span.start),
+                    end: utf16_offset(span.end),
+                })
+                .collect();
+        assert_eq!(actual, case.expected, "{}", case.name);
+    }
+}

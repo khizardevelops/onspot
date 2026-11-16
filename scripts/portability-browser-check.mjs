@@ -348,7 +348,7 @@ try {
 	browser = await chromium.launch({
 		executablePath: chromePath(),
 		headless: true,
-		args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required']
+		args: ['--no-sandbox', '--mute-audio', '--autoplay-policy=no-user-gesture-required']
 	});
 
 	await exportRestoreCheck(browser, profile);

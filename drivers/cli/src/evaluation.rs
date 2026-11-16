@@ -5,6 +5,7 @@ use onspot_domain::{EvaluationRequest, EvaluationResult, LlmEndpoint};
 use onspot_ports::{CancelToken, LlmProvider};
 
 use crate::error::CliError;
+use crate::secrets::CliSecrets;
 
 pub const DEFAULT_PROMPT: &str = "Tell me about your morning routine.";
 
@@ -104,17 +105,27 @@ pub fn build_request(
             provider,
             model,
             fallback_models,
+            // Filled by `evaluate_with`, which holds the keys.
+            key_id: String::new(),
         },
     })
 }
 
+/// Evaluates a transcript with the endpoint the settings and options choose.
+///
+/// @param secrets The keys, only to identify the one in use for the usage
+///   ledger; the transport adds the key itself.
 pub async fn evaluate_with(
     settings: &AppSettings,
     options: &EvaluateOptions,
+    secrets: &CliSecrets,
     evaluator: &dyn LlmProvider,
     token: &CancelToken,
 ) -> Result<(EvaluationRequest, EvaluationResult), CliError> {
-    let request = build_request(settings, options)?;
+    let mut request = build_request(settings, options)?;
+    let key = secrets.key(&request.endpoint.provider).unwrap_or_default();
+    request.endpoint.key_id = onspot_app::key_id(&key);
+
     let result = EvaluateAttempt::new(evaluator)
         .execute(&request, token)
         .await?;

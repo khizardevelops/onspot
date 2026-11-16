@@ -18,17 +18,17 @@ Score = Svelte × 3 + Tauri × 3 + browser globals × 1 + cross-layer × 6.
 The score ranks where to start, not correctness: a view that uses stores and the DOM to draw
 something is doing its job.
 
-Totals across 308 files: 81 Svelte imports, 17 Tauri imports,
-216 browser-global references, 0 cross-layer imports.
+Totals across 308 files: 80 Svelte imports, 17 Tauri imports,
+214 browser-global references, 0 cross-layer imports.
 
 ## Before and after the migration
 
 | Metric | P0/P3 baseline (`baa6f5f`) | Final (`9a08523` + P8 cutover) |
 |---|---:|---:|
 | Source files counted | 232 | 308 |
-| Svelte imports | 78 | 81 |
+| Svelte imports | 78 | 80 |
 | Tauri imports | 16 | 17 |
-| Browser-global references | 215 | 216 |
+| Browser-global references | 215 | 214 |
 | Cross-layer imports | 0 | 0 |
 | Domain knowledge in `src/lib/adapters` and `src/lib/stores` | settings, evaluation, history, insights, sync, usage, export | core-client calls and host shims only; the old bodies are archived under `deprecated/` |
 
@@ -44,9 +44,9 @@ counts here or re-run the script.
 |---|---|---|---|---|---|---|---|---|
 | 1 | `src/lib/adapters/sync/google/oauth.ts` | 424 | 1 | 2 | 9 | 0 | 18 | — |
 | 2 | `src/lib/platform/pwa.ts` | 161 | 1 | 0 | 14 | 0 | 17 | — |
-| 3 | `src/lib/components/FeedbackPanel.svelte` | 1456 | 3 | 0 | 4 | 0 | 13 | — |
-| 4 | `src/lib/components/PermissionsPrompt.svelte` | 224 | 1 | 0 | 9 | 0 | 12 | — |
-| 5 | `src/lib/core-client/coreHost.ts` | 390 | 1 | 3 | 0 | 0 | 12 | — |
+| 3 | `src/lib/core-client/coreHost.ts` | 440 | 1 | 3 | 2 | 0 | 14 | — |
+| 4 | `src/lib/components/FeedbackPanel.svelte` | 1456 | 3 | 0 | 4 | 0 | 13 | — |
+| 5 | `src/lib/components/PermissionsPrompt.svelte` | 224 | 1 | 0 | 9 | 0 | 12 | — |
 | 6 | `src/lib/components/AttemptStream.svelte` | 613 | 3 | 0 | 2 | 0 | 11 | — |
 | 7 | `src/lib/gestures/pressFeedback.ts` | 95 | 0 | 0 | 10 | 0 | 10 | — |
 | 8 | `src/lib/stores/voiceLibrary.ts` | 269 | 1 | 0 | 7 | 0 | 10 | — |
@@ -62,23 +62,23 @@ counts here or re-run the script.
 | 18 | `src/lib/stores/elevenLabsVoice.ts` | 93 | 1 | 0 | 4 | 0 | 7 | — |
 | 19 | `src/lib/stores/reminders.ts` | 191 | 1 | 0 | 4 | 0 | 7 | — |
 | 20 | `src/lib/stores/ttsPreview.ts` | 299 | 1 | 0 | 4 | 0 | 7 | — |
-| 21 | `src/lib/usage/ledger.ts` | 251 | 1 | 0 | 4 | 0 | 7 | — |
-| 22 | `src/routes/history/+page.svelte` | 617 | 1 | 0 | 4 | 0 | 7 | — |
-| 23 | `src/lib/components/AppHeader.svelte` | 330 | 2 | 0 | 0 | 0 | 6 | — |
-| 24 | `src/lib/components/AttemptTrack.svelte` | 265 | 2 | 0 | 0 | 0 | 6 | — |
-| 25 | `src/lib/components/PlaybackSpeed.svelte` | 156 | 2 | 0 | 0 | 0 | 6 | — |
-| 26 | `src/lib/components/PracticeScreen.svelte` | 1299 | 2 | 0 | 0 | 0 | 6 | — |
-| 27 | `src/lib/components/settings/VoicePicker.svelte` | 362 | 1 | 0 | 3 | 0 | 6 | — |
-| 28 | `src/lib/components/Transcript.svelte` | 505 | 0 | 0 | 6 | 0 | 6 | — |
-| 29 | `src/lib/components/wordSelection.ts` | 417 | 0 | 0 | 6 | 0 | 6 | — |
-| 30 | `src/lib/core-client/CoreStorageCheck.svelte` | 276 | 1 | 0 | 3 | 0 | 6 | — |
-| 31 | `src/lib/neo.ts` | 252 | 2 | 0 | 0 | 0 | 6 | — |
-| 32 | `src/lib/platform/backButton.svelte.ts` | 82 | 0 | 2 | 0 | 0 | 6 | — |
-| 33 | `src/lib/platform/saveDocument.ts` | 58 | 0 | 2 | 0 | 0 | 6 | — |
-| 34 | `src/lib/stores/practiceSession.ts` | 39 | 2 | 0 | 0 | 0 | 6 | — |
-| 35 | `src/lib/utils/audio.ts` | 330 | 0 | 0 | 6 | 0 | 6 | — |
-| 36 | `src/routes/+layout.svelte` | 262 | 2 | 0 | 0 | 0 | 6 | — |
-| 37 | `src/routes/about/+page.svelte` | 1444 | 1 | 0 | 3 | 0 | 6 | — |
-| 38 | `src/routes/dummy/+page.svelte` | 649 | 1 | 0 | 3 | 0 | 6 | — |
-| 39 | `src/lib/stores/theme.svelte.ts` | 70 | 0 | 0 | 5 | 0 | 5 | — |
-| 40 | `src/routes/settings/+page.svelte` | 381 | 1 | 0 | 2 | 0 | 5 | — |
+| 21 | `src/routes/history/+page.svelte` | 617 | 1 | 0 | 4 | 0 | 7 | — |
+| 22 | `src/lib/components/AppHeader.svelte` | 330 | 2 | 0 | 0 | 0 | 6 | — |
+| 23 | `src/lib/components/AttemptTrack.svelte` | 265 | 2 | 0 | 0 | 0 | 6 | — |
+| 24 | `src/lib/components/PlaybackSpeed.svelte` | 156 | 2 | 0 | 0 | 0 | 6 | — |
+| 25 | `src/lib/components/PracticeScreen.svelte` | 1307 | 2 | 0 | 0 | 0 | 6 | — |
+| 26 | `src/lib/components/settings/VoicePicker.svelte` | 362 | 1 | 0 | 3 | 0 | 6 | — |
+| 27 | `src/lib/components/Transcript.svelte` | 505 | 0 | 0 | 6 | 0 | 6 | — |
+| 28 | `src/lib/components/wordSelection.ts` | 417 | 0 | 0 | 6 | 0 | 6 | — |
+| 29 | `src/lib/core-client/CoreStorageCheck.svelte` | 276 | 1 | 0 | 3 | 0 | 6 | — |
+| 30 | `src/lib/neo.ts` | 252 | 2 | 0 | 0 | 0 | 6 | — |
+| 31 | `src/lib/platform/backButton.svelte.ts` | 82 | 0 | 2 | 0 | 0 | 6 | — |
+| 32 | `src/lib/platform/saveDocument.ts` | 58 | 0 | 2 | 0 | 0 | 6 | — |
+| 33 | `src/lib/stores/practiceSession.ts` | 39 | 2 | 0 | 0 | 0 | 6 | — |
+| 34 | `src/lib/utils/audio.ts` | 330 | 0 | 0 | 6 | 0 | 6 | — |
+| 35 | `src/routes/+layout.svelte` | 262 | 2 | 0 | 0 | 0 | 6 | — |
+| 36 | `src/routes/about/+page.svelte` | 1444 | 1 | 0 | 3 | 0 | 6 | — |
+| 37 | `src/routes/dummy/+page.svelte` | 649 | 1 | 0 | 3 | 0 | 6 | — |
+| 38 | `src/lib/stores/theme.svelte.ts` | 70 | 0 | 0 | 5 | 0 | 5 | — |
+| 39 | `src/routes/settings/+page.svelte` | 381 | 1 | 0 | 2 | 0 | 5 | — |
+| 40 | `src/lib/adapters/db/index.ts` | 91 | 0 | 0 | 4 | 0 | 4 | — |

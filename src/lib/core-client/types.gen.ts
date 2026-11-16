@@ -176,7 +176,13 @@ provider: string, model: string,
 /**
  * Models to continue with when the preferred one is out of room.
  */
-fallbackModels: Array<string>, };
+fallbackModels: Array<string>,
+/**
+ * A short hash of the key the host will add (`keyIdOf` in the driver),
+ * never the key itself. The usage ledger and the rate-limit pacing count
+ * per key, so two accounts on one provider never share a budget.
+ */
+keyId: string, };
 
 
 /**
@@ -411,6 +417,46 @@ export type AcceptedResponse = { accepted: boolean, };
  */
 export type TestConnectionResponse = { reply: string, };
 
+/**
+ * The chat models an endpoint's key can use.
+ */
+export type ListModelsResponse = { models: Array<string>, };
+
+/**
+ * What one successful cloud call used, as the adapter that made it reports it.
+ */
+export type CallReport = {
+/**
+ * Provider host, e.g. `api.groq.com`.
+ */
+host: string, model: string,
+/**
+ * `keyIdOf` of the key that made the call, never the key.
+ */
+keyId: string,
+/**
+ * Tokens the call used (prompt + reply).
+ */
+tokens: bigint,
+/**
+ * Tokens the provider set aside to admit the call: the prompt plus the
+ * requested `max_tokens`. Zero for calls without a reply budget.
+ */
+reservedTokens: bigint, audioSeconds: number, characters: bigint,
+/**
+ * The response headers, for the `x-ratelimit-*` budgets when readable.
+ */
+headers: { [key in string]: string }, };
+
+/**
+ * A refused call (HTTP 413/429), for the limit its body may name.
+ */
+export type RefusalReport = { host: string, model: string, keyId: string,
+/**
+ * The response body, which carries the provider's own wording.
+ */
+body: string, };
+
 
 /**
  * The generated translation set.
@@ -479,12 +525,26 @@ export type Pattern = { key: string, label: string, category: string, severity: 
  */
 export type Occurrence = { session: Session | null, attempt: Attempt, correction: Correction, };
 
+/**
+ * An LLM request paused for room under a provider's per-minute limit.
+ */
+export type PacingWait = {
+/**
+ * Whose limit it is waiting for, e.g. `Groq`.
+ */
+provider: string, model: string,
+/**
+ * When the request will be sent (ms since epoch). A timestamp fits a JS
+ * number exactly, and both transports send it as one.
+ */
+until: number, };
+
 
 /**
  * Something a driver shows or records. Serialized with a `event` tag, e.g.
  * `{ "event": "pong", "seq": 2 }`.
  */
-export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "translations_ready", attempt_id: string, translations: TranslationSet, } | { "event": "glosses_ready", attempt_id: string, key: string, glosses: TextGlosses, } | { "event": "phrase_ready", attempt_id: string, meaning: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "download_progress", target: string, loaded_bytes: number, total_bytes: number, label: string, progress: number, } | { "event": "usage_warning", kind: string, provider: string, message_code: string, } | { "event": "host_request", id: number, method: string,
+export type UiEvent = { "event": "pong", seq: number, } | { "event": "error", code: string, message: string, } | { "event": "settings_changed", seq: number, } | { "event": "history_changed", seq: number, } | { "event": "practice_state_changed", snapshot: PracticeSnapshot, } | { "event": "audio_level", level: number, } | { "event": "transcription_progress", progress: number, status: string, } | { "event": "evaluation_started" } | { "event": "evaluation_finished", ok: boolean, } | { "event": "attempt_persisted", attempt_id: string, } | { "event": "take_silent" } | { "event": "speak_track", attempt_id: string, kind: string, } | { "event": "translations_ready", attempt_id: string, translations: TranslationSet, } | { "event": "glosses_ready", attempt_id: string, key: string, glosses: TextGlosses, } | { "event": "phrase_ready", attempt_id: string, meaning: string, } | { "event": "play_segment", attempt_id: string, text: string, index: number, } | { "event": "speak_text", text: string, } | { "event": "play_recording", attempt_id: string, } | { "event": "download_progress", target: string, loaded_bytes: number, total_bytes: number, label: string, progress: number, } | { "event": "usage_warning", kind: string, provider: string, message_code: string, } | { "event": "usage_changed" } | { "event": "pacing_wait_changed", wait: PacingWait | null, } | { "event": "host_request", id: number, method: string,
 /**
  * JSON-encoded arguments.
  */

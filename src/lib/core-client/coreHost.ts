@@ -15,7 +15,8 @@ import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
 import { VoiceRecorder } from '#lib/utils/recorder.js';
 import { isTauri } from '#lib/platform/runtime.js';
-import { readSecret } from './secrets.js';
+import { fetchWithTimeout } from '#lib/platform/fetchWithTimeout.js';
+import { readLlmKey, SECRET_PREFIX, type LlmKeySlot } from './secrets.js';
 import { appSettings } from '#lib/stores/settings.js';
 import { groqApiKey } from '#lib/stores/secrets.js';
 import type { CoreClient } from './transport.js';
@@ -55,6 +56,43 @@ const BROWSER_SQLITE_FILTERS = {
 	mimeTypes: SQLITE_MIME_TYPES,
 	description: 'SQLite database'
 };
+
+/** Device values the core keeps (the usage ledger) share the app's storage prefix. */
+const DEVICE_PREFIX = 'onspot.';
+
+/**
+ * Guards the core's device store: only onspot's own keys, and never a key
+ * slot, so a device value can never overwrite or read an API key.
+ */
+function deviceKey(key: string): string {
+	if (!key.startsWith(DEVICE_PREFIX) || key.startsWith(SECRET_PREFIX)) {
+		throw Object.assign(new Error(`The core may not use the storage key "${key}".`), {
+			code: 'core.device_key_refused'
+		});
+	}
+	return key;
+}
+
+function readDeviceValue(key: string): string | null {
+	try {
+		return localStorage.getItem(deviceKey(key));
+	} catch (error) {
+		if ((error as { code?: unknown }).code) throw error;
+		// Private mode or blocked storage: the core starts from nothing.
+		return null;
+	}
+}
+
+function writeDeviceValue(key: string, value: string): void {
+	try {
+		localStorage.setItem(deviceKey(key), value);
+	} catch (error) {
+		if ((error as { code?: unknown }).code) throw error;
+		throw Object.assign(new Error('This browser did not keep the usage record (storage full or blocked).'), {
+			code: 'core.device_storage_failed'
+		});
+	}
+}
 
 /** Base64 for bytes that cross the JSON bridge (backups can be large). */
 function encodeBase64(bytes: Uint8Array): string {
@@ -316,26 +354,38 @@ export function createCoreHost(client: CoreClient): CoreHost {
 						url: string;
 						headers: Record<string, string>;
 						body: string;
-						provider?: string | null;
+						provider?: LlmKeySlot | null;
+						timeoutMs?: number;
 					};
 					const headers = { ...request.headers };
 					if (request.provider) {
-						const key = readSecret(`llm.${request.provider}` as never);
+						const key = readLlmKey(request.provider);
 						if (key) headers.Authorization = `Bearer ${key}`;
 					}
-					const requestFetch = isTauri()
-						? (await import('@tauri-apps/plugin-http')).fetch
-						: fetch;
-					const response = await requestFetch(request.url, {
-						method: request.method,
-						headers,
-						body: request.body
-					});
+					const response = await fetchWithTimeout(
+						request.url,
+						{
+							method: request.method,
+							headers,
+							// A GET (the model list) must not carry a body, even an empty one.
+							body: request.method === 'GET' ? undefined : request.body
+						},
+						{ timeoutMs: request.timeoutMs }
+					);
 					return {
 						status: response.status,
 						headers: Object.fromEntries(response.headers.entries()),
 						body: await response.text()
 					};
+				}
+				case 'device.read': {
+					const { key } = payload as { key: string };
+					return { value: readDeviceValue(key) };
+				}
+				case 'device.write': {
+					const { key, value } = payload as { key: string; value: string };
+					writeDeviceValue(key, value);
+					return {};
 				}
 				case 'http.sync': {
 					const request = payload as {

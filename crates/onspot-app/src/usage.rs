@@ -2,6 +2,8 @@
 
 //! Provider rate-limit parsing, ported from `src/lib/usage/rateLimits.ts`.
 
+use std::collections::BTreeMap;
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -11,13 +13,13 @@ static DURATION_PART: Lazy<Regex> =
 static BARE_NUMBER: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^\d+(\.\d+)?$").expect("bare number regex"));
 static REFUSAL_LIMIT: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\((RPM|RPD|TPM|OTPM|TPD|ASH|ASD)\):\s*Limit\s+(\d+)(?:,\s*Used\s+(\d+))?")
+    Regex::new(r"(?i)\((RPM|RPD|TPM|OTPM|TPD|ASH|ASD)\):\s*Limit\s+(\d+)(?:,\s*Used\s+(\d+))?")
         .expect("refusal limit regex")
 });
 static RETRY_IN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)try again in\s+([\dhms.]+)").expect("retry regex"));
 static REQUESTED: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"Requested\s+(\d+)").expect("requested regex"));
+    Lazy::new(|| Regex::new(r"(?i)Requested\s+(\d+)").expect("requested regex"));
 
 /// The limit windows providers name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -72,6 +74,31 @@ pub struct RateLimitHeaders {
     pub limit_tokens: Option<String>,
     pub remaining_tokens: Option<String>,
     pub reset_tokens: Option<String>,
+}
+
+impl RateLimitHeaders {
+    /// Picks the `x-ratelimit-*` values out of a response's headers.
+    ///
+    /// Header names are case-insensitive on the wire, so they are matched
+    /// that way; a host that lower-cases them (`fetch`) and one that does not
+    /// read the same.
+    pub fn from_response(headers: &BTreeMap<String, String>) -> Self {
+        let value = |name: &str| {
+            headers
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.clone())
+        };
+
+        Self {
+            limit_requests: value("x-ratelimit-limit-requests"),
+            remaining_requests: value("x-ratelimit-remaining-requests"),
+            reset_requests: value("x-ratelimit-reset-requests"),
+            limit_tokens: value("x-ratelimit-limit-tokens"),
+            remaining_tokens: value("x-ratelimit-remaining-tokens"),
+            reset_tokens: value("x-ratelimit-reset-tokens"),
+        }
+    }
 }
 
 fn read_budget(
@@ -154,7 +181,8 @@ pub fn parse_duration(value: &str) -> Option<u64> {
 /// Reads the limit a refusal body names.
 pub fn parse_refusal(body: &str, now: u64) -> Option<RefusalLimit> {
     let captures = REFUSAL_LIMIT.captures(body)?;
-    let window = LimitWindow::from_name(&captures[1])?;
+    // Matched case-insensitively, like the provider text it came from.
+    let window = LimitWindow::from_name(&captures[1].to_ascii_uppercase())?;
     let limit = captures[2].parse().ok()?;
     let used = captures
         .get(3)

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { BaseTTSAdapter } from '../BaseTtsAdapter';
-import { fetchWithTimeout } from '#lib/adapters/llm/client.js';
-import { recordCall, recordRefusal } from '#lib/usage/ledger.js';
+import { fetchWithTimeout } from '#lib/platform/fetchWithTimeout.js';
+import { recordCloudCall, recordCloudRefusal } from '#lib/core-client/usage.js';
 import type { ModelProgress, TtsModelConfig } from '#lib/types.js';
 import { OPUS_MIME_TYPE } from '#lib/speech/audioFormat.js';
 import { decodeSpeech } from './speechAudio';
@@ -145,13 +145,13 @@ export class OpenAITtsAdapter extends BaseTTSAdapter {
 	private async readSpeech(response: Response, text: string, format: 'opus' | 'wav'): Promise<Blob> {
 		if (!response.ok) {
 			const detail = await response.text().catch(() => '');
-			recordRefusal({ url: this.speechUrl(), apiKey: this.apiKey, model: this.model, body: detail });
+			recordCloudRefusal({ url: this.speechUrl(), apiKey: this.apiKey, model: this.model, body: detail });
 			throw new Error(
 				`Speech API failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`
 			);
 		}
 
-		recordCall({
+		recordCloudCall({
 			url: this.speechUrl(),
 			apiKey: this.apiKey,
 			model: this.model,

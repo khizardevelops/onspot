@@ -94,22 +94,37 @@ fn a_prompt_choice_falls_back_when_the_model_cannot_write_one() {
             "englishFallback": false
         }),
     );
+    // The host has no stored usage ledger, and the provider refuses the
+    // request outright (a 400 is not retried; a 5xx or 429 would be).
     let replier = async {
+        let mut answered = std::collections::HashSet::new();
         loop {
-            let request = {
+            let pending: Vec<(u32, String)> = {
                 let events = replies.0.lock().expect("host replies");
-                events.iter().find_map(|event| match event {
-                    UiEvent::HostRequest { id, method, .. } if method == "http.request" => {
-                        Some(*id)
-                    }
-                    _ => None,
-                })
+                events
+                    .iter()
+                    .filter_map(|event| match event {
+                        UiEvent::HostRequest { id, method, .. } if !answered.contains(id) => {
+                            Some((*id, method.clone()))
+                        }
+                        _ => None,
+                    })
+                    .collect()
             };
-            if let Some(id) = request {
-                assert!(core.host_rpc().reply(
-                    id,
-                    Ok(json!({ "status": 500, "headers": {}, "body": "no" })),
-                ));
+            let mut refused = false;
+            for (id, method) in pending {
+                answered.insert(id);
+                let reply = match method.as_str() {
+                    "device.read" => json!({ "value": null }),
+                    "http.request" => {
+                        refused = true;
+                        json!({ "status": 400, "headers": {}, "body": "no" })
+                    }
+                    _ => json!({}),
+                };
+                assert!(core.host_rpc().reply(id, Ok(reply)));
+            }
+            if refused {
                 break;
             }
             futures::pending!();

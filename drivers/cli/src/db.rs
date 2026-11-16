@@ -51,6 +51,11 @@ pub fn default_keys_path() -> PathBuf {
     config_dir().join("onspot").join("keys.json")
 }
 
+/// Per-device values that never enter the database (the usage ledger).
+pub fn default_device_path() -> PathBuf {
+    config_dir().join("onspot").join("device.json")
+}
+
 #[cfg(target_os = "windows")]
 fn config_dir() -> PathBuf {
     std::env::var_os("APPDATA")

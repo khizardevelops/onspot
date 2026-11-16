@@ -131,7 +131,7 @@
 		},
 		{
 			"baseUrl": "http://127.0.0.1:4330/v1",
-			"provider": "custom",
+			"provider": "local",
 			"model": "stub",
 			"fallbackModels": []
 		}

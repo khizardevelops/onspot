@@ -91,7 +91,9 @@ pub struct UsageInput {
     pub elevenlabs_key_id: String,
     pub is_tauri: bool,
     pub now: u64,
-    #[serde(default)]
+    /// The device's ledger. The core fills it from its own record; a driver
+    /// never sends it.
+    #[serde(skip, default)]
     pub ledger: LedgerState,
     #[serde(default)]
     pub elevenlabs: Option<AccountReading<ElevenLabsSubscription>>,

@@ -126,8 +126,8 @@ pub fn model_label(model: &str) -> String {
         .unwrap_or_else(|| model.rsplit('/').next().unwrap_or(model).to_owned())
 }
 
-/// The host part of a URL, as the legacy `new URL(url).host` would show it.
-fn host(url: &str) -> &str {
+/// The host part of a URL, as the driver's `new URL(url).host` shows it.
+pub fn url_host(url: &str) -> &str {
     let without_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
     without_scheme.split('/').next().unwrap_or(without_scheme)
 }
@@ -136,11 +136,11 @@ fn host(url: &str) -> &str {
 /// server.
 pub fn provider_name_for(base_url: &str) -> String {
     if let Some(known) = CATALOG.providers.iter().find(|provider| {
-        !provider.base_url.is_empty() && host(&provider.base_url) == host(base_url)
+        !provider.base_url.is_empty() && url_host(&provider.base_url) == url_host(base_url)
     }) {
         return known.name.clone();
     }
-    host(base_url).to_owned()
+    url_host(base_url).to_owned()
 }
 
 /// Whether a provider model id is a chat model the LLM step can use.
@@ -224,15 +224,6 @@ fn language_level(target_language: &str, instruction_language: &str) -> &'static
     resource_level(studied.min(instruction))
 }
 
-/// The provider id implied by an endpoint URL.
-pub fn provider_id_for(base_url: &str) -> String {
-    match host(base_url).to_ascii_lowercase().as_str() {
-        "api.groq.com" => String::from("groq"),
-        "api.deepseek.com" => String::from("deepseek"),
-        _ => String::from("custom"),
-    }
-}
-
 /// Resolves the model Automatic should use: the chosen one, or the first model
 /// trusted with the languages in use, else the provider default.
 pub fn models_for(provider_id: &str, chosen: &str, language_level: &str) -> Vec<String> {
@@ -250,12 +241,17 @@ pub fn models_for(provider_id: &str, chosen: &str, language_level: &str) -> Vec<
     }
 }
 
+/// The key slot of the local-server endpoint.
+const LOCAL_KEY_SLOT: &str = "local";
+
 /// Builds the endpoint the LLM client needs from settings and a secret.
+/// `provider` is the key slot the driver's host adds a key from.
 pub fn resolve_endpoint(settings: &EndpointSettings<'_>) -> ResolvedEndpoint {
     if settings.correction_mode == "local" {
         return ResolvedEndpoint {
             base_url: settings.local_llm_url.to_owned(),
-            provider: String::from("custom"),
+            // The local server keeps its own key, never a cloud provider's.
+            provider: String::from(LOCAL_KEY_SLOT),
             model: settings.local_llm_model.to_owned(),
             fallback_models: Vec::new(),
             api_key: settings.api_key.to_owned(),
@@ -287,10 +283,11 @@ pub fn resolve_endpoint(settings: &EndpointSettings<'_>) -> ResolvedEndpoint {
     let models = models_for(id, chosen, level);
     let mut models = models.into_iter();
     let model = models.next().unwrap_or_default();
-    let provider_id = provider_id_for(&base_url);
     ResolvedEndpoint {
         base_url,
-        provider: provider_id,
+        // The key slot is the chosen provider's: a custom URL that points at a
+        // known host still uses the custom key the learner gave for it.
+        provider: id.to_owned(),
         model,
         fallback_models: models.collect(),
         api_key: settings.api_key.to_owned(),
@@ -396,8 +393,15 @@ mod tests {
         assert!(!resolved.base_url.is_empty());
 
         assert!(!resolved.model.is_empty());
-        assert_eq!(provider_id_for("https://api.deepseek.com/v1"), "deepseek");
-        assert_eq!(provider_id_for("http://localhost:1234/v1"), "custom");
+    }
+
+    #[test]
+    fn a_custom_url_on_a_known_host_still_uses_the_custom_key() {
+        let mut custom = settings("");
+        custom.llm_provider = "custom";
+        custom.custom_base_url = "https://api.groq.com/openai/v1";
+        custom.custom_model = "openai/gpt-oss-120b";
+        assert_eq!(resolve_endpoint(&custom).provider, "custom");
     }
 
     #[test]
@@ -431,7 +435,10 @@ mod tests {
         local.local_llm_url = "http://127.0.0.1:4330/v1";
         local.local_llm_model = "stub";
         let resolved = resolve_endpoint(&local);
-        assert_eq!(resolved.provider, "custom");
+        assert_eq!(
+            resolved.provider, "local",
+            "a local server never gets a cloud key"
+        );
         assert_eq!(resolved.base_url, "http://127.0.0.1:4330/v1");
         assert!(is_configured(&local));
         let mut blank = settings("");

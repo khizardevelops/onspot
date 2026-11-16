@@ -14,7 +14,7 @@ import {
 } from '#lib/adapters/db/index.js';
 import { appSettings, setSetting, settingsReady, type AppSettings } from './settings';
 import { ttsApiOptions } from './ttsConfig';
-import { llmConfigured, resolveLlmEndpoint } from './llm';
+import { coreLlmEndpoint, llmConfigured } from './llm';
 import { firstMissingRequirement, processingReady } from './processing';
 import { playTrack, primeAudioPlayback, setAudioLoading, type AudioKind } from './audio';
 import { languageData, refreshLanguageData } from './languageData';
@@ -253,24 +253,7 @@ function coreConfig(): PracticeConfig {
 		pace: settings.targetSpeechPace,
 		explanationAudioAvailable: get(explanationAudioAvailable),
 		llmConfigured: get(llmConfigured),
-		llmEndpoint: (() => {
-			const endpoint = resolveLlmEndpoint(settings);
-			const host = (() => {
-				try {
-					return new URL(endpoint.baseUrl).host;
-				} catch {
-					return endpoint.baseUrl;
-				}
-			})();
-			const provider =
-				host === 'api.groq.com' ? 'groq' : host === 'api.deepseek.com' ? 'deepseek' : 'custom';
-			return {
-				baseUrl: endpoint.baseUrl,
-				provider,
-				model: endpoint.model,
-				fallbackModels: [...(endpoint.fallbackModels ?? [])]
-			};
-		})(),
+		llmEndpoint: coreLlmEndpoint(settings),
 		maxSeconds: MAX_RECORDING_SEC
 	};
 }

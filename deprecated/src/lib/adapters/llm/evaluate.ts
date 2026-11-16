@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { chatCompletion, stripThinking } from '#lib/adapters/llm/client.js';
-import { repairJson } from '#lib/adapters/llm/jsonRepair.js';
+import { chatCompletion, stripThinking } from './client.js';
+import { repairJson } from './jsonRepair.js';
 import {
 	buildEvaluationMessages,
 	isCategory,
@@ -22,7 +22,7 @@ import {
 } from '#lib/adapters/llm/explanation.js';
 import { sameWords } from '#lib/utils/words.js';
 import { languageIdByName } from '#lib/languages/index.js';
-import { couldBeWrittenIn } from '#lib/languages/textLanguage.js';
+import { couldBeWrittenIn } from '../../languages/textLanguage.js';
 import { MAX_EVALUATION_TOKENS } from '#lib/config.js';
 import type {
 	ConnectorSuggestion,

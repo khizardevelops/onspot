@@ -1,6 +1,6 @@
 {
 	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
-	"source": "src/lib/adapters/llm/evaluate.ts / client.ts",
+	"source": "deprecated/src/lib/adapters/llm/evaluate.ts / src/lib/adapters/llm/client.ts",
 	"function": "extractJson / stripThinking",
 	"cases": [
 		{

@@ -102,6 +102,7 @@ async function fullLoopCheck(tone) {
 		headless: true,
 		args: [
 			'--no-sandbox',
+			'--mute-audio',
 			'--use-fake-ui-for-media-stream',
 			'--use-fake-device-for-media-stream',
 			`--use-file-for-fake-audio-capture=${tone}`,
@@ -205,7 +206,7 @@ async function fullLoopCheck(tone) {
 			{ timeout: 120_000 }
 		);
 
-		const { snapshot, translation: _translation, insights, glosses, phrase, usage, exported, sync, reminder, prompts, onboarding, language, catalog } = await page.evaluate(async () => {
+		const { snapshot, translation: _translation, insights, glosses, phrase, usage, exported, sync, reminder, prompts, onboarding, language, catalog, recordedCalls } = await page.evaluate(async () => {
 			const find = (name) =>
 				performance
 					.getEntriesByType('resource')
@@ -330,7 +331,11 @@ async function fullLoopCheck(tone) {
 			if (!monitored.some((service) => service.capability === 'LLM' && service.meters.length)) {
 				throw new Error('core usage monitor did not publish meters');
 			}
-			return { snapshot, translation, insights, glosses, phrase, usage, exported, sync, reminder, prompts, onboarding, language, catalog };
+			// The core counts its own LLM requests and Groq's speech recognition
+			// reports through it: both must land in the device's ledger.
+			const ledger = JSON.parse(localStorage.getItem('onspot.usage.v1') ?? '{"calls":[]}');
+			const recordedCalls = ledger.calls.filter((call) => call.host === 'api.groq.com');
+			return { snapshot, translation, insights, glosses, phrase, usage, exported, sync, reminder, prompts, onboarding, language, catalog, recordedCalls };
 		});
 
 		if (snapshot.phase !== 'idle' || snapshot.attempts.length !== 1) {
@@ -365,8 +370,14 @@ async function fullLoopCheck(tone) {
 		if (!onboarding.shouldOffer) throw new Error('the Rust onboarding decision should offer the guide');
 		if (!language.pending?.stt || language.ready) throw new Error('the Rust language plan did not report missing data');
 		if (!catalog.languages.some((entry) => entry.id === 'fr')) throw new Error('the Rust language catalog was empty');
+		const sttModels = new Set(['whisper-large-v3', 'whisper-large-v3-turbo']);
+		const recordedLlm = recordedCalls.filter((call) => !sttModels.has(call.model)).length;
+		const recordedStt = recordedCalls.length - recordedLlm;
+		if (recordedLlm !== evaluationCalls || recordedStt !== sttCalls) {
+			throw new Error(`usage ledger missed calls: llm ${recordedLlm}/${evaluationCalls}, stt ${recordedStt}/${sttCalls}`);
+		}
 		if (errors.length > 0) throw new Error(`page errors: ${errors.join(' | ')}`);
-		return `stt=${sttCalls}, eval=${evaluationCalls}, attempt ${snapshot.attempts[0].attempt.id}, translations ready`;
+		return `stt=${sttCalls}, eval=${evaluationCalls} (all counted in the usage ledger), attempt ${snapshot.attempts[0].attempt.id}, translations ready`;
 	} finally {
 		await browser.close();
 	}
@@ -398,6 +409,7 @@ try {
 		headless: true,
 		args: [
 			'--no-sandbox',
+			'--mute-audio',
 			'--use-fake-ui-for-media-stream',
 			'--use-fake-device-for-media-stream',
 			`--use-file-for-fake-audio-capture=${wav}`,

@@ -195,6 +195,7 @@ mod tests {
     fn request(avoid: &[&str]) -> PromptTopicRequest {
         PromptTopicRequest {
             endpoint: LlmEndpoint {
+                key_id: String::new(),
                 provider: String::from("groq"),
                 base_url: String::from("https://example.test/v1"),
                 model: String::from("model"),

@@ -31,6 +31,8 @@ fn gui_endpoint(settings: &AppSettings) -> LlmEndpoint {
         provider: resolved.provider,
         model: resolved.model,
         fallback_models: resolved.fallback_models,
+        // The CLI fills the key's hash after resolving; neither side knows it here.
+        key_id: String::new(),
     }
 }
 

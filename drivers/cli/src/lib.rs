@@ -7,6 +7,7 @@
 //! or export rules of its own, so a difference from the GUI is a driver bug.
 
 pub mod db;
+pub mod device;
 pub mod error;
 pub mod evaluation;
 pub mod exports;
@@ -16,7 +17,7 @@ pub mod secrets;
 pub mod sessions;
 pub mod settings;
 
-pub use db::{default_db_path, default_keys_path, Context};
+pub use db::{default_db_path, default_device_path, default_keys_path, Context};
 pub use error::CliError;
 pub use evaluation::{EvaluateOptions, DEFAULT_PROMPT};
 pub use secrets::CliSecrets;

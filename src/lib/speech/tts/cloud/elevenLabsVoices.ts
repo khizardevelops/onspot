@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { fetchWithTimeout } from '#lib/adapters/llm/client.js';
+import { fetchWithTimeout } from '#lib/platform/fetchWithTimeout.js';
 import { fetchElevenLabsSubscription } from './elevenLabsAccount';
 
 const VOICES_URL = 'https://api.elevenlabs.io/v2/voices?page_size=100';

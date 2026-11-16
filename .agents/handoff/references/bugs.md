@@ -4,24 +4,6 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Active (found by the 2026-11-16 migration review, unfixed)
 
-### Rust LLM client ignores the temperature it is given
-- `crates/adapters/llm-openai/src/client.rs` `complete()` does `let _ = temperature;` and
-  `request_body` always sends `DEFAULT_TEMPERATURE` (0.2). Translations and glosses passed 0.1 in
-  TS (`deprecated/.../translate.ts:95`, `glossary.ts:292`), so model-facing behaviour drifted (I5).
-- Fix: thread `temperature` into `request_body`; add a test that pins the body per caller.
-
-### LLM calls made by the core never reach the usage ledger
-- The Usage screen reads the TS `usageLedger` (`usage/coreMonitor.ts` → `usage.snapshot`). Its only
-  writers are TS `recordCall`/`recordRefusal` (cloud STT/TTS adapters, `adapters/llm/client.ts`).
-  Evaluation, prompt topics, translations and glosses now run in `llm-openai` and record nothing,
-  so LLM requests/tokens are under-counted. Not yet confirmed in the running UI.
-
-### Rust LLM pacing is a simplified copy of the TS pacer
-- `llm-openai/src/pacing.rs` uses a fixed 8,000 TPM bucket and a fixed 2 s wait on 429. The TS
-  pacer (`adapters/llm/pacing.ts`) learned stated limits from headers, parsed retry-after from
-  refusals, settled real token usage and retried one invalid-JSON reply. Expect more 429 failures
-  on low-limit keys (Groq free tier).
-
 ### Desktop opens `onspot.db` through two SQLite stacks
 - `src-tauri/src/lib.rs` still registers `tauri_plugin_sql` (TS `SqlDatabaseAdapter`, own
   migration runner) next to the core's `RusqliteDriver` on the same file. ADR-005 said "until P8";
@@ -32,6 +14,31 @@ Active defects that can be fixed within the current foundational technology.
   TS `speech/stt/native/nativeEngine.ts` → `plugin:speech`.
 
 ## Fixed
+
+### The core's LLM requests were unpaced, uncounted and sent with the wrong options (2026-11-16)
+- **Symptom**: the usage monitor missed every evaluation/translation/gloss/prompt-topic call;
+  rate-limit pacing never engaged (a fresh evaluator per request) and assumed 8,000 TPM for every
+  provider; translations went out without JSON mode, at 0.2 instead of 0.1, with a fixed 3,072-token
+  budget; prompt topics at 0.2 instead of 0.9; the connection test used different prompt text; long
+  takes and texts were never split; the "per-minute limit: continuing in N s…" notice was gone; a
+  local LLM server was sent the custom provider's key (key slot guessed from the URL host).
+- **Fix**: ADR-011. `onspot-app::{usage_ledger::UsageLedger, usage_pacing::RequestPacer}` (port of
+  `ledger.ts`/`pacing.ts`), one per `Core`; `DeviceStore` port (`device.read`/`device.write`, same
+  `onspot.usage.v1` record); client rewritten with per-caller `CompletionOptions`; evaluation (260
+  words) and translation (60 words) parts over `onspot-dsp::segments::sentence_chunks` (golden
+  pinned); `LlmEndpoint.keyId` + key slot rule `llmKeySlotFor`/`resolve_endpoint`; transient
+  `candidate` slot for the setup guide's unsaved key; `pacing_wait_changed` event.
+- **Proof**: 301 workspace tests (new: pacer, ledger, evaluator retries/options/parts, chunk golden);
+  `test:practice` now asserts every LLM and STT call is in the ledger (6/6, 1/1).
+
+### `bun run golden:capture` was broken (2026-11-16)
+- **Cause**: `languages/textLanguage.ts` was archived after the capture script was last run; the
+  archived evaluator still imported it through `#lib`. Fixed by pointing archived modules at their
+  archived siblings. Recapture changes only the `source` metadata.
+
+### Test browsers were not muted (2026-11-16)
+- The practice/storage/sync/portability checks launched Chrome without `--mute-audio` (practice
+  also allows autoplay). All five launches now pass it.
 
 ### Dark mode read as one fogged surface with no depth (2026-11-06)
 - **Symptom**: light mode had clear cards, controls and panels; dark mode made every component look

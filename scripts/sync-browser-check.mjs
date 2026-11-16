@@ -113,7 +113,7 @@ try {
 	browser = await chromium.launch({
 		executablePath: chromePath(),
 		headless: true,
-		args: ['--no-sandbox']
+		args: ['--no-sandbox', '--mute-audio']
 	});
 	const context = await browser.newContext();
 	const page = await context.newPage();

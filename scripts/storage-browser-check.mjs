@@ -71,7 +71,7 @@ const profile = mkdtempSync(join(tmpdir(), 'onspot-storage-check-'));
 let browser;
 try {
 	await waitForServer();
-	browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+	browser = await chromium.launch({ executablePath: chromePath(), headless: true, args: ['--mute-audio'] });
 	const page = await browser.newPage();
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));

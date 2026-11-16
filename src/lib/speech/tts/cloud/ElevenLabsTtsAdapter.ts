@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { BaseTTSAdapter } from '../BaseTtsAdapter';
-import { fetchWithTimeout } from '#lib/adapters/llm/client.js';
+import { fetchWithTimeout } from '#lib/platform/fetchWithTimeout.js';
 import type { ModelProgress, TtsModelConfig } from '#lib/types.js';
-import { recordCall } from '#lib/usage/ledger.js';
+import { recordCloudCall } from '#lib/core-client/usage.js';
 import { OPUS_MIME_TYPE } from '#lib/speech/audioFormat.js';
 import { DEFAULT_ELEVENLABS_VOICE_ID } from './elevenLabsVoices';
 import { decodeSpeech } from './speechAudio';
@@ -172,7 +172,7 @@ export class ElevenLabsTtsAdapter extends BaseTTSAdapter {
 		}
 
 		// ElevenLabs bills the characters of the text; the account total comes from its API.
-		recordCall({ url, apiKey: this.apiKey, model: this.model, characters: text.length });
+		recordCloudCall({ url, apiKey: this.apiKey, model: this.model, characters: text.length });
 		return response;
 	}
 }

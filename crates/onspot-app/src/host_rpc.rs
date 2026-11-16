@@ -15,7 +15,7 @@ use futures_channel::oneshot;
 use serde_json::Value;
 
 use crate::events::{EventSink, UiEvent};
-use onspot_ports::CoreError;
+use onspot_ports::{CoreError, DeviceStore};
 
 type Pending = Mutex<HashMap<u32, oneshot::Sender<Result<Value, CoreError>>>>;
 
@@ -78,6 +78,45 @@ impl HostRpc {
             .ok()
             .and_then(|mut pending| pending.remove(&id));
         sender.is_some_and(|sender| sender.send(reply).is_ok())
+    }
+}
+
+/// The device store of a driver that keeps its own values (browser
+/// `localStorage` in the webview), reached through host calls: `device.read`
+/// answers `{ value: string | null }`, `device.write` stores `value`.
+pub struct HostDeviceStore {
+    rpc: Arc<HostRpc>,
+}
+
+impl HostDeviceStore {
+    /// Creates the store over the core's host-call registry.
+    pub fn new(rpc: Arc<HostRpc>) -> Self {
+        Self { rpc }
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+impl DeviceStore for HostDeviceStore {
+    async fn read(&self, key: &str) -> Result<Option<String>, CoreError> {
+        let reply = self
+            .rpc
+            .call("device.read", serde_json::json!({ "key": key }))
+            .await?;
+        Ok(reply
+            .get("value")
+            .and_then(Value::as_str)
+            .map(str::to_owned))
+    }
+
+    async fn write(&self, key: &str, value: &str) -> Result<(), CoreError> {
+        self.rpc
+            .call(
+                "device.write",
+                serde_json::json!({ "key": key, "value": value }),
+            )
+            .await
+            .map(|_| ())
     }
 }
 

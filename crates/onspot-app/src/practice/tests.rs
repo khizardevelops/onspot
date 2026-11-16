@@ -288,6 +288,7 @@ fn config() -> PracticeConfig {
         tts_voice: String::from("fr_FR-siwis"),
         explanation_voice: String::from("en_US-amy"),
         llm_endpoint: onspot_domain::LlmEndpoint {
+            key_id: String::new(),
             base_url: String::from("http://127.0.0.1:4330/v1"),
             provider: String::from("custom"),
             model: String::from("stub"),

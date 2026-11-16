@@ -15,10 +15,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ts_rs::TS;
 
+use onspot_adapter_llm_openai::client::OpenAiEvaluator;
 use onspot_app::practice::{
     PracticeConfig, PracticePorts, PracticeSnapshot, PromptView, RunPracticeSession,
 };
 use onspot_app::{Core, UiEvent};
+use onspot_domain::LlmEndpoint;
 use onspot_ports::{
     AudioCapture, AudioClip, AudioFrame, AudioLevelSink, AudioPlayback, CancelToken,
     CaptureOptions, Clock, CoreError, GeneratedPrompt, HttpClient, HttpRequest, HttpResponse,
@@ -58,6 +60,9 @@ pub const INSIGHTS_BUILD: &str = "insights.build";
 pub const GLOSSES_ENSURE: &str = "glosses.ensure";
 pub const PHRASES_ENSURE: &str = "phrases.ensure";
 pub const USAGE_SNAPSHOT: &str = "usage.snapshot";
+pub const USAGE_RECORD_CALL: &str = "usage.record_call";
+pub const USAGE_RECORD_REFUSAL: &str = "usage.record_refusal";
+pub const LLM_LIST_MODELS: &str = "llm.list_models";
 pub const EXPORT_SESSION_MARKDOWN: &str = "export.session_markdown";
 pub const SYNC_DECIDE: &str = "sync.decide";
 pub const REMINDERS_STATE: &str = "reminders.state";
@@ -258,7 +263,10 @@ pub async fn dispatch(
         INSIGHTS_BUILD => build_insights(core).await.and_then(serialize),
         GLOSSES_ENSURE => ensure_glosses(core, payload).await.and_then(serialize),
         PHRASES_ENSURE => ensure_phrase(core, payload).await.and_then(serialize),
-        USAGE_SNAPSHOT => usage_snapshot(core, payload).and_then(serialize),
+        USAGE_SNAPSHOT => usage_snapshot(core, payload).await.and_then(serialize),
+        USAGE_RECORD_CALL => record_call(core, payload).await.and_then(serialize),
+        USAGE_RECORD_REFUSAL => record_refusal(core, payload).await.and_then(serialize),
+        LLM_LIST_MODELS => list_models(core, payload).await.and_then(serialize),
         EXPORT_SESSION_MARKDOWN => export_session_markdown(core, payload)
             .await
             .and_then(serialize),
@@ -317,7 +325,7 @@ fn configure(core: &Core, payload: Value) -> Result<PracticeResponse, BridgeErro
                 playback: Arc::new(RpcPlayback),
                 clock: Arc::new(SystemClock),
                 evaluation: Arc::new(onspot_app::EvaluatorPort::new({
-                    let evaluator = rust_evaluator(core.host_rpc().clone());
+                    let evaluator = rust_evaluator(core);
                     prompts = Arc::new(LlmPrompts(evaluator.clone()));
                     evaluator
                 })),
@@ -545,7 +553,7 @@ async fn test_connection(
     payload: Value,
 ) -> Result<TestConnectionResponse, BridgeError> {
     let request: TestConnectionRequest = parse(EVALUATION_TEST_CONNECTION, payload)?;
-    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let evaluator = rust_evaluator(core);
     let reply = onspot_app::TestLlmConnection::new(evaluator.as_ref())
         .execute(&request.endpoint, &CancelToken::new())
         .await
@@ -833,9 +841,14 @@ pub struct UsageRequest {
     pub input: onspot_app::UsageInput,
 }
 
-fn usage_snapshot(core: &Core, payload: Value) -> Result<onspot_app::UsageSnapshot, BridgeError> {
+async fn usage_snapshot(
+    core: &Core,
+    payload: Value,
+) -> Result<onspot_app::UsageSnapshot, BridgeError> {
     let request: UsageRequest = parse(USAGE_SNAPSHOT, payload)?;
-    let snapshot = onspot_app::usage_snapshot(&request.input);
+    let mut input = request.input;
+    input.ledger = core.usage_ledger().snapshot(input.now).await;
+    let snapshot = onspot_app::usage_snapshot(&input);
     for warning in &snapshot.warnings {
         core.emit(UiEvent::UsageWarning {
             kind: warning.level.clone(),
@@ -844,6 +857,61 @@ fn usage_snapshot(core: &Core, payload: Value) -> Result<onspot_app::UsageSnapsh
         });
     }
     Ok(snapshot)
+}
+
+/// `usage.record_call` arguments: a cloud call a driver-side engine made
+/// (speech recognition, speech synthesis).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordCallRequest {
+    pub call: onspot_app::CallReport,
+}
+
+/// `usage.record_refusal` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordRefusalRequest {
+    pub refusal: onspot_app::RefusalReport,
+}
+
+async fn record_call(core: &Core, payload: Value) -> Result<Value, BridgeError> {
+    let request: RecordCallRequest = parse(USAGE_RECORD_CALL, payload)?;
+    let now = SystemClock.now_ms();
+    core.usage_ledger().record_call(&request.call, now).await;
+    Ok(json!({}))
+}
+
+async fn record_refusal(core: &Core, payload: Value) -> Result<Value, BridgeError> {
+    let request: RecordRefusalRequest = parse(USAGE_RECORD_REFUSAL, payload)?;
+    let now = SystemClock.now_ms();
+    core.usage_ledger()
+        .record_refusal(&request.refusal, now)
+        .await;
+    Ok(json!({}))
+}
+
+/// `llm.list_models` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListModelsRequest {
+    pub endpoint: LlmEndpoint,
+}
+
+/// The chat models an endpoint's key can use.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct ListModelsResponse {
+    pub models: Vec<String>,
+}
+
+async fn list_models(core: &Core, payload: Value) -> Result<ListModelsResponse, BridgeError> {
+    let request: ListModelsRequest = parse(LLM_LIST_MODELS, payload)?;
+    let models = rust_evaluator(core)
+        .list_models(&request.endpoint, &CancelToken::new())
+        .await
+        .map_err(core_error)?;
+    Ok(ListModelsResponse { models })
 }
 
 /// `glosses.ensure` arguments.
@@ -940,7 +1008,7 @@ async fn ensure_glosses(core: &Core, payload: Value) -> Result<GlossesResponse, 
         }
     }
 
-    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let evaluator = rust_evaluator(core);
     let glosses = evaluator
         .gloss(
             &request.text,
@@ -998,7 +1066,7 @@ async fn ensure_phrase(core: &Core, payload: Value) -> Result<PhraseResponse, Br
         }
     }
 
-    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let evaluator = rust_evaluator(core);
     let meaning = evaluator
         .phrase(
             &request.phrase,
@@ -1113,7 +1181,7 @@ async fn ensure_translations(
         .clone()
         .filter(|text| !text.trim().is_empty())
         .unwrap_or_else(|| attempt.transcript.clone());
-    let evaluator = rust_evaluator(core.host_rpc().clone());
+    let evaluator = rust_evaluator(core);
     let mut translations = evaluator
         .translate(
             &text,
@@ -1278,10 +1346,13 @@ impl HttpClient for RpcHttp {
     }
 }
 
-fn rust_evaluator(rpc: Arc<onspot_app::HostRpc>) -> Arc<dyn LlmProvider> {
-    Arc::new(onspot_adapter_llm_openai::client::OpenAiEvaluator::new(
-        Arc::new(RpcHttp(rpc)),
+/// The LLM adapter over the driver's HTTP, sharing the core's one pacing and
+/// usage ledger with every other request of this run.
+fn rust_evaluator(core: &Core) -> Arc<OpenAiEvaluator> {
+    Arc::new(OpenAiEvaluator::new(
+        Arc::new(RpcHttp(core.host_rpc().clone())),
         Arc::new(SystemClock),
+        core.pacer().clone(),
     ))
 }
 

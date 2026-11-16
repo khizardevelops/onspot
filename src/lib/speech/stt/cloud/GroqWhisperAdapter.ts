@@ -2,8 +2,8 @@
 
 import { BaseSTTAdapter } from '../BaseSttAdapter';
 import { encodeWav } from '#lib/utils/wav.js';
-import { fetchWithTimeout } from '#lib/adapters/llm/client.js';
-import { recordCall, recordRefusal } from '#lib/usage/ledger.js';
+import { fetchWithTimeout } from '#lib/platform/fetchWithTimeout.js';
+import { recordCloudCall, recordCloudRefusal } from '#lib/core-client/usage.js';
 import type { ModelConfig, ModelProgress, TranscribeOptions } from '#lib/types.js';
 
 const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
@@ -108,14 +108,14 @@ export class GroqWhisperAdapter extends BaseSTTAdapter {
 
 		if (!response.ok) {
 			const detail = await response.text().catch(() => '');
-			recordRefusal({ url: GROQ_TRANSCRIPTION_URL, apiKey: this.apiKey, model: this.model, body: detail });
+			recordCloudRefusal({ url: GROQ_TRANSCRIPTION_URL, apiKey: this.apiKey, model: this.model, body: detail });
 			throw new Error(
 				`Groq speech-to-text failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`
 			);
 		}
 
 		// Groq's audio limits count the seconds sent, whatever was said in them.
-		recordCall({
+		recordCloudCall({
 			url: GROQ_TRANSCRIPTION_URL,
 			apiKey: this.apiKey,
 			model: this.model,

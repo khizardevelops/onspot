@@ -2,5 +2,4 @@
 
 export * from './types';
 export * from './providers';
-export { chatCompletion, isChatModel, listModels, testConnection } from './client';
 export * from './explanation';

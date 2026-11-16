@@ -11,6 +11,7 @@
 //! P2 adds `SqlDriver` and the history/settings repository ports it backs.
 //! P3 adds cancellation, the stable error shape and the practice audio ports.
 
+pub mod device;
 mod error;
 pub mod files;
 pub mod language_data;
@@ -20,6 +21,7 @@ pub mod sql;
 pub mod sync;
 mod token;
 
+pub use device::DeviceStore;
 pub use error::CoreError;
 pub use files::{DatabaseFile, FileSystemSink, PickedFile, RestoreCounts};
 pub use language_data::{DownloadProgressSink, LanguageDataInstaller};

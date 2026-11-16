@@ -40,7 +40,6 @@ const SVELTE_STORE_ALLOWED = [
 	'src/lib/usage/',
 	'src/lib/practice/promptSubmissions.ts',
 	'src/lib/speech/tts/service.ts',
-	'src/lib/adapters/llm/pacing.ts',
 	'src/lib/adapters/sync/',
 	'src/lib/components/',
 	'src/routes/'
@@ -53,7 +52,6 @@ const TAURI_ALLOWED = [
 	'src/lib/adapters/db/schema.ts',
 	'src/lib/adapters/db/TauriSqlAdapter.ts',
 	'src/lib/adapters/db/types.ts',
-	'src/lib/adapters/llm/client.ts',
 	'src/lib/adapters/sync/',
 	'src/lib/speech/stt/native/nativeEngine.ts',
 	'src/lib/utils/export.ts',

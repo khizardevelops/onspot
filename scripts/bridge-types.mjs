@@ -68,6 +68,10 @@ const TYPE_ORDER = [
 	'OpenResponse',
 	'AcceptedResponse',
 	'TestConnectionResponse',
+	'ListModelsResponse',
+	// The device's usage ledger: what driver-side cloud engines report.
+	'CallReport',
+	'RefusalReport',
 	'TranslationResponse',
 	'InsightsResponse',
 	'GlossesResponse',
@@ -78,6 +82,7 @@ const TYPE_ORDER = [
 	'InsightsTotals',
 	'Pattern',
 	'Occurrence',
+	'PacingWait',
 	'UiEvent'
 ];
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { isTauri } from '#lib/platform/runtime.js';
-import { recordCall, recordRefusal } from '#lib/usage/ledger.js';
+import { recordCall, recordRefusal } from '../../usage/ledger.js';
 import { repairJson } from './jsonRepair.js';
-import { modelLabel } from './providers.js';
+import { modelLabel } from '#lib/adapters/llm/providers.js';
 import {
 	admit,
 	DEFAULT_PATIENCE_MS,
@@ -14,7 +14,7 @@ import {
 	waitForRoom,
 	type Admission
 } from './pacing.js';
-import type { ChatMessage, LlmEndpoint } from './types.js';
+import type { ChatMessage, LlmEndpoint } from '#lib/adapters/llm/types.js';
 
 /**
  * Provider error bodies are shown in the UI, so give them room. A 300-char cut

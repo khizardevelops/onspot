@@ -9,6 +9,7 @@
 //! `bun run golden:capture` (decision: ADR-003).
 
 pub mod search;
+pub mod segments;
 pub mod speech;
 pub mod text_language;
 pub mod words;

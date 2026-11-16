@@ -5,9 +5,11 @@ use std::sync::{Arc, OnceLock};
 
 use futures::executor::block_on;
 use onspot_adapter_llm_openai::client::OpenAiEvaluator;
+use onspot_app::{EventSink, RequestPacer, UiEvent, UsageLedger};
+use onspot_cli::device::FileDeviceStore;
 use onspot_cli::evaluation::{evaluate_with, EvaluateOptions};
 use onspot_cli::http::{NativeHttp, SystemClock};
-use onspot_cli::{settings, CliError, CliSecrets, Context};
+use onspot_cli::{default_device_path, settings, CliError, CliSecrets, Context};
 use onspot_ports::CancelToken;
 use serde::Serialize;
 
@@ -144,9 +146,13 @@ fn run() -> Result<(), CliError> {
                     instruction_language: args.instruction_language,
                 };
                 let http = Arc::new(NativeHttp::new(secrets.clone())?);
-                let evaluator = OpenAiEvaluator::new(http, Arc::new(SystemClock));
+                let events: Arc<dyn EventSink> = Arc::new(PrintedEvents);
+                let device = Arc::new(FileDeviceStore::new(default_device_path()));
+                let ledger = Arc::new(UsageLedger::new(device, events.clone()));
+                let pacer = Arc::new(RequestPacer::new(ledger, events));
+                let evaluator = OpenAiEvaluator::new(http, Arc::new(SystemClock), pacer);
                 let (request, result) =
-                    evaluate_with(&settings, &options, &evaluator, &token).await?;
+                    evaluate_with(&settings, &options, &secrets, &evaluator, &token).await?;
                 event(serde_json::json!({
                     "event": "evaluated",
                     "provider": request.endpoint.provider,
@@ -475,6 +481,18 @@ ONSPOT_API_KEY, ONSPOT_<PROVIDER>_API_KEY",
 
 fn event(value: serde_json::Value) {
     eprintln!("{value}");
+}
+
+/// Core events (a pacing wait, a usage change) as structured lines on stderr,
+/// like the CLI's own.
+struct PrintedEvents;
+
+impl EventSink for PrintedEvents {
+    fn emit(&self, core_event: &UiEvent) {
+        if let Ok(value) = serde_json::to_value(core_event) {
+            event(value);
+        }
+    }
 }
 
 fn print_json(value: &impl Serialize) -> Result<(), CliError> {

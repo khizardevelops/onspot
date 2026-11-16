@@ -30,7 +30,7 @@ const languagesJson = JSON.parse(
 const AUTOMATIC = providersJson.automaticModel;
 const LEVELS = ['high', 'medium', 'low'];
 
-import { resolveLlmEndpointPolicy } from '../src/lib/adapters/llm/providers.ts';
+import { llmKeySlotFor, resolveLlmEndpointPolicy } from '../src/lib/adapters/llm/providers.ts';
 import { getLanguage, getInstructionLanguage, resourceLevelOf } from '../src/lib/languages/index.ts';
 
 function languageLevel(settings) {
@@ -41,13 +41,6 @@ function languageLevel(settings) {
 		instruction.webTextPercent
 	);
 	return resourceLevelOf(least);
-}
-
-function providerIdFor(baseUrl) {
-	const host = (baseUrl || '').replace(/^[a-z]+:\/\//i, '').split('/')[0].toLowerCase();
-	if (host === 'api.groq.com') return 'groq';
-	if (host === 'api.deepseek.com') return 'deepseek';
-	return 'custom';
 }
 
 function resolveEndpoint(settings) {
@@ -63,7 +56,7 @@ function resolveEndpoint(settings) {
 	});
 	return {
 		baseUrl: endpoint.baseUrl,
-		provider: providerIdFor(endpoint.baseUrl),
+		provider: llmKeySlotFor(settings),
 		model: endpoint.model,
 		fallbackModels: endpoint.fallbackModels ?? []
 	};

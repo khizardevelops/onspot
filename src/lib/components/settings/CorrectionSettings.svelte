@@ -9,16 +9,15 @@
 		groqApiKey,
 		localLlmApiKey
 	} from '#lib/stores/secrets.js';
-	import { currentLlmEndpoint, resolveLlmEndpoint } from '#lib/stores/llm.js';
+	import { currentLlmEndpoint, llmKeySlot, resolveLlmEndpoint } from '#lib/stores/llm.js';
 	import { getLanguage } from '#lib/languages/index.js';
-	import { testConnectionCore } from '#lib/core-client/llm.js';
+	import { listModelsCore, testConnectionCore } from '#lib/core-client/llm.js';
 	import {
 		AUTOMATIC_MODEL,
 		LLM_PROVIDERS,
 		getModelOptions,
 		modelLabel,
 		getProvider,
-		listModels,
 		type LlmProviderId
 	} from '#lib/adapters/llm/index.js';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
@@ -138,7 +137,7 @@
 					localRefreshMessage = 'Add the server URL first.';
 					return;
 				}
-				const models = await listModels({ baseUrl, apiKey: $localLlmApiKey, model: '' });
+				const models = await listModelsCore({ baseUrl, apiKey: $localLlmApiKey, model: '' }, 'local');
 				if (token !== refreshToken) return;
 				localModels = models;
 				localRefreshMessage = `Found ${models.length} model${models.length === 1 ? '' : 's'}.`;
@@ -152,7 +151,7 @@
 				return;
 			}
 			const baseUrl = provider === 'custom' ? $appSettings.customBaseUrl : providerConfig.baseUrl;
-			const models = await listModels({ baseUrl, apiKey, model: '' });
+			const models = await listModelsCore({ baseUrl, apiKey, model: '' }, provider);
 			if (token !== refreshToken) return;
 			remoteModels = models;
 			cloudRefreshMessage = `Found ${models.length} model${models.length === 1 ? '' : 's'}.`;
@@ -205,7 +204,7 @@
 				!local && ($appSettings.llmProvider === 'groq' || $appSettings.llmProvider === 'deepseek');
 			if (needsKey && !endpoint.apiKey) throw new Error('Add an API key first.');
 
-			const reply = await testConnectionCore(endpoint);
+			const reply = await testConnectionCore(endpoint, llmKeySlot($appSettings));
 			testOk = true;
 			testMessage = reply
 				? `Connected — the model replied "${reply}".`

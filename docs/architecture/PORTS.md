@@ -34,7 +34,8 @@ stable code (see `BRIDGE.md`).
 | `Prompts` | same + `practice/prompts.ts`, `promptCatalogue.ts` | 1,757 in practice | `repo-sql` (P2 **done**) | same | Catalogue seeding is a use case (P5). |
 | `Glosses` | same + `transcriptMeanings.svelte.ts` | 374 | `repo-sql` (P2 **read/write done**) | same | Stored in `attempts.word_glosses`, parsed with the legacy tolerance; UI move is P5. |
 | `Translations` | same + `adapters/llm/translate.ts` | 159 | `repo-sql` (P2 **read/write done**) | same | Stored in `attempts.translations`; set version stays as stored. UI move is P5. |
-| `Usage` | same + `usage/ledger.ts` | 251 | device-local store (P6) | `localStorage`, permanent | Not a SQL table: the ledger is per-device and never synced. Ledger maths pinned by fixtures. |
+| `Usage` | `usage/ledger.ts` (archived) | 251 | `onspot-app::usage_ledger::UsageLedger` over the `DeviceStore` port (**implemented**, ADR-011) | `device.read`/`device.write` → `localStorage` (`onspot.usage.v1`), permanent | Not a SQL table: the ledger is per-device and never synced. The core records every LLM call itself; driver-side speech engines report through `usage.record_call`/`usage.record_refusal` with a key hash. |
+| `DeviceStore` | — | — | port in `onspot-ports::device` (ADR-011) | webview `localStorage`; CLI JSON file | Device-local values that must never enter the database. |
 | `Settings` | same + `stores/settings.ts` | 485 | `repo-sql` (P2 rows; P7 closeout typed document) | same | Key/value rows, typed `AppSettings`, defaults, merge and normalisation live in `crates/onspot-app/src/settings.rs`; `settings.load`/`settings.patch` are the bridge commands (ADR-008). The Svelte store is now an optimistic driver view. Secret-prefixed keys never surface. |
 | `PromptSubmissions` | same + `practice/promptSubmissions.ts` | 208 | `repo-sql` (P2 **done**) | same | Opt-out; payload stays prompt-only. Sending/backoff stays P5. |
 

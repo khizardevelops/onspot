@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 once_cell = "1"
+onspot-app = { path = "../../onspot-app" }
 onspot-domain = { path = "../../onspot-domain" }
 onspot-ports = { path = "../../onspot-ports" }
 onspot-dsp = { path = "../../onspot-dsp" }
@@ -19,8 +20,7 @@ serde = { version = "1", features = ["derive"] }
 async-trait = "0.1"
 serde_json = "1"
 thiserror = "2"
-# reqwest on native / host HTTP on wasm arrives in P4, behind the HttpClient
-# port. The goal fixtures for jsonRepair live in tests/golden/.
-
-[dev-dependencies]
+# Long takes and texts are sent in parts, together.
 futures = "0.3"
+# Transport is the driver's, behind the HttpClient port. The golden fixtures
+# for jsonRepair live in tests/golden/.

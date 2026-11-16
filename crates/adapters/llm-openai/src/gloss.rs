@@ -8,7 +8,7 @@ use onspot_ports::{CancelToken, CoreError};
 use regex::Regex;
 use serde_json::Value;
 
-use crate::client::OpenAiEvaluator;
+use crate::client::{CompletionOptions, OpenAiEvaluator};
 use crate::parse::extract_json;
 use crate::prompt::ChatMessage;
 
@@ -16,6 +16,26 @@ static WORD: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[\p{L}\p{N}]+(?:['’\-\u{200c}][\p{L}\p{N}]+)*").expect("word regex"));
 
 const MAX_EXPRESSION_WORDS: i64 = 6;
+
+/// A meaning is one to four words: a few output tokens each, with room for
+/// punctuation and its word number key.
+const TOKENS_PER_GLOSS: usize = 10;
+/// GPT-OSS reasons before answering, even at low effort (130–440 tokens measured).
+const REASONING_HEADROOM: usize = 512;
+const MIN_GLOSS_TOKENS: usize = 256;
+/// A selected phrase's meaning is short.
+const MAX_PHRASE_TOKENS: u32 = 640;
+/// Meanings should be the likeliest reading, not a creative one.
+const GLOSS_TEMPERATURE: f32 = 0.1;
+
+fn gloss_options(max_tokens: u32) -> CompletionOptions {
+    CompletionOptions {
+        json: true,
+        temperature: GLOSS_TEMPERATURE,
+        max_tokens,
+        ..CompletionOptions::default()
+    }
+}
 
 fn words_of(text: &str) -> Vec<String> {
     WORD.find_iter(text)
@@ -149,8 +169,9 @@ impl OpenAiEvaluator {
             });
         }
         let messages = gloss_messages(text_value, &words, language, translation_target, with_pos);
+        let budget = (words.len() * TOKENS_PER_GLOSS + REASONING_HEADROOM).max(MIN_GLOSS_TOKENS);
         let raw = self
-            .complete(endpoint, &messages, 2048, true, 0.1, token)
+            .chat_completion(endpoint, &messages, gloss_options(budget as u32), token)
             .await?;
         let parsed = extract_json(&raw).map_err(|message| {
             CoreError::new(
@@ -202,7 +223,7 @@ impl OpenAiEvaluator {
             },
         ];
         let raw = self
-            .complete(endpoint, &messages, 640, true, 0.1, token)
+            .chat_completion(endpoint, &messages, gloss_options(MAX_PHRASE_TOKENS), token)
             .await?;
         let parsed = extract_json(&raw)
             .map_err(|message| CoreError::new("phrases.invalid_json", message))?;

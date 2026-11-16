@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { get, writable } from 'svelte/store';
-import { keyIdOf, scopeKey, totalsWithin, usageLedger, type LedgerState, type UsageScope } from '#lib/usage/ledger.js';
+import { keyIdOf, scopeKey, totalsWithin, usageLedger, type LedgerState, type UsageScope } from '../../usage/ledger.js';
 import { formatReset } from '#lib/usage/format.js';
 import { GROQ_HOST, groqKnownLimits, groqPlanOf, type ModelLimits } from '../../usage/publishedLimits';
 import { hashText } from '#lib/utils/hash.js';
-import { parseRateLimitHeaders, parseRefusal } from '#lib/usage/rateLimits.js';
-import { modelLabel, providerNameFor } from './providers';
-import type { ChatMessage, LlmEndpoint } from './types';
+import { parseRateLimitHeaders, parseRefusal } from '../../usage/rateLimits.js';
+import { modelLabel, providerNameFor } from '#lib/adapters/llm/providers.js';
+import type { ChatMessage, LlmEndpoint } from '#lib/adapters/llm/types.js';
 
 /**
  * Keeps LLM requests inside a provider's rate limits instead of running into

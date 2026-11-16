@@ -12,7 +12,7 @@
  * (Spanish and Portuguese) cannot be told apart this way, so they are not:
  * this answers "could be", never "is".
  */
-import { writingScriptsOf } from './index';
+import { writingScriptsOf } from '#lib/languages/index.js';
 
 /** At least this share of a text's letters must be in the language's script (names and loanwords may be Latin). */
 const MIN_SHARE_IN_SCRIPT = 0.5;

@@ -1,6 +1,6 @@
 {
 	"capturedFrom": "v0.2.4 working tree, 2026-11-12 (P0)",
-	"source": "src/lib/adapters/llm/translationPrompt.ts",
+	"source": "deprecated/src/lib/adapters/llm/translationPrompt.ts",
 	"function": "translationRules",
 	"cases": [
 		{

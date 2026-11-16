@@ -30,6 +30,8 @@ impl BridgeState {
             settings: Some(settings),
             records: Some(records),
             database_file: Some(database_file),
+            // The usage ledger stays in the webview's storage, next to the keys.
+            device: None,
         };
         Self(Arc::new(Core::with_hosts(
             CoreConfig {

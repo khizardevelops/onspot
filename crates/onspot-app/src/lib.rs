@@ -33,10 +33,11 @@ pub mod usage_format;
 pub mod usage_ledger;
 pub mod usage_limits;
 pub mod usage_monitor;
+pub mod usage_pacing;
 
 pub use core::{Core, CoreConfig};
 pub use evaluation::{EvaluateAttempt, EvaluatorPort, TestLlmConnection};
-pub use events::{EventSink, UiEvent};
+pub use events::{EventSink, PacingWait, UiEvent};
 pub use export::{build_session_markdown, export_timestamp, session_file_stem};
 pub use export_validate::{is_onspot_database, is_sqlite_database};
 pub use history::{HistoryError, HistoryService, HistorySession};
@@ -66,8 +67,7 @@ pub use prompts::{
     catalogue_prompts_for, english_prompt_text_by_title, prompt_catalogue, CataloguePrompt,
 };
 pub use providers::{
-    is_configured, models_for, provider_id_for, resolve_endpoint, EndpointSettings,
-    ResolvedEndpoint,
+    is_configured, models_for, resolve_endpoint, EndpointSettings, ResolvedEndpoint,
 };
 pub use reminders::{
     is_reminder_due, reminder_state, ReminderFrequency, ReminderInput, ReminderState,
@@ -90,13 +90,18 @@ pub use usage_format::{
     format_count, format_duration, format_portion, format_quantity, format_reset, UsageUnit,
 };
 pub use usage_ledger::{
-    key_id, prune, scope_key, totals_within, CallTotals, LedgerState, LiveReading, ReportedReading,
-    UsageEntry, UsageScope,
+    hash_text, key_id, prune, scope_key, totals_within, CallReport, CallTotals, LedgerState,
+    LiveReading, RefusalReport, ReportedReading, UsageEntry, UsageLedger, UsageScope,
+    LEDGER_STORAGE_KEY,
 };
 pub use usage_limits::{
     groq_known_limits, groq_plan_of, groq_published_limits, ModelLimits, GROQ_PUBLISHED_MODELS,
 };
 pub use usage_monitor::{usage_snapshot, UsageInput, UsageSnapshot};
+pub use usage_pacing::{
+    Admission, CompletedUsage, PacingRequest, RefusalOutcome, RequestPacer, RequestPlan,
+    WaitTicket, DEFAULT_PATIENCE_MS,
+};
 
 #[cfg(test)]
 mod tests {

@@ -285,6 +285,7 @@ fn every_practice_port_is_object_safe() {
             mode: String::from("exam"),
             avoid_topics: Vec::new(),
             endpoint: onspot_domain::LlmEndpoint {
+                key_id: String::new(),
                 base_url: String::from("http://localhost:1234/v1"),
                 provider: String::from("custom"),
                 model: String::from("stub"),
@@ -306,6 +307,7 @@ fn every_practice_port_is_object_safe() {
             language: String::from("French"),
             translation_target: String::from("English"),
             endpoint: onspot_domain::LlmEndpoint {
+                key_id: String::new(),
                 base_url: String::from("http://localhost:1234/v1"),
                 provider: String::from("custom"),
                 model: String::from("stub"),

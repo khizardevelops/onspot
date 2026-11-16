@@ -2,13 +2,16 @@
 
 import { derived, get } from 'svelte/store';
 import type { LlmEndpoint, LlmProviderId } from '#lib/adapters/llm/index.js';
-import { resolveLlmEndpointPolicy } from '#lib/adapters/llm/index.js';
+import { llmKeySlotFor, resolveLlmEndpointPolicy } from '#lib/adapters/llm/index.js';
 import {
 	getInstructionLanguage,
 	getLanguage,
 	resourceLevelOf,
 	type LanguageResourceLevel
 } from '#lib/languages/index.js';
+import { toCoreEndpoint } from '#lib/core-client/llm.js';
+import type { LlmKeySlot } from '#lib/core-client/secrets.js';
+import type { LlmEndpoint as CoreLlmEndpoint } from '#lib/core-client/types.gen.js';
 import { appSettings, type AppSettings } from './settings';
 import { customApiKey, deepseekApiKey, groqApiKey, localLlmApiKey } from './secrets';
 
@@ -56,6 +59,19 @@ export function resolveLlmEndpoint(settings: AppSettings): LlmEndpoint {
 
 export function currentLlmEndpoint(): LlmEndpoint {
 	return resolveLlmEndpoint(get(appSettings));
+}
+
+/**
+ * Which stored key the settings' endpoint uses: the local server's in local
+ * mode, otherwise the provider's. The host adds that key to core requests.
+ */
+export function llmKeySlot(settings: AppSettings): LlmKeySlot {
+	return llmKeySlotFor(settings);
+}
+
+/** The settings' endpoint as the core takes it: no key, its slot and its hash. */
+export function coreLlmEndpoint(settings: AppSettings): CoreLlmEndpoint {
+	return toCoreEndpoint(resolveLlmEndpoint(settings), llmKeySlot(settings));
 }
 
 /**

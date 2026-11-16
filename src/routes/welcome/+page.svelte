@@ -19,12 +19,8 @@
 		groqApiKey
 	} from '#lib/stores/secrets.js';
 	import { refreshLanguageData } from '#lib/stores/languageData.js';
-	import {
-		AUTOMATIC_MODEL,
-		getProvider,
-		testConnection,
-		type LlmEndpoint
-	} from '#lib/adapters/llm/index.js';
+	import { AUTOMATIC_MODEL, getProvider, type LlmEndpoint } from '#lib/adapters/llm/index.js';
+	import { testUnsavedKey } from '#lib/core-client/llm.js';
 	import { markOnboardingDone, markOnboardingSkipped, onboardingStatus, onboardingStatusCore } from '#lib/onboarding.js';
 	import { getLanguage } from '#lib/languages/index.js';
 	import SecretInput from '#lib/components/settings/SecretInput.svelte';
@@ -227,7 +223,7 @@
 
 		testing = true;
 		try {
-			const reply = await testConnection(testEndpoint());
+			const reply = await testUnsavedKey(testEndpoint());
 			// A bad key is never saved: it only becomes the live coach after it answers.
 			applyCoach();
 			coachNoticeTone = 'good';
