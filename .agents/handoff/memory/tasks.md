@@ -15,7 +15,10 @@
       checks over the WebView's CDP socket (native rusqlite storage, sync revision, record commands,
       usage ledger, real Groq calls with the key already stored in the debug app); Practice,
       Settings → Usage, History and Insights render. No take was recorded (needs a voice).
-- [ ] Release: version bump is the maintainer's; then tag to exercise `release.yml`/`android.yml`.
+- [x] Release pipeline exercised: `v0.2.4-rust.3` pre-release with all 15 installers (no version
+      bump, by request); `main` CI green.
+- [ ] Delete the broken `v0.2.4-rust.1`/`.2` pre-releases (waiting for the maintainer's OK).
+- [ ] Stable release: the maintainer bumps the version, writes `docs/releases/vX.Y.Z.md`, tags.
 - [ ] Optional: word-gloss sections per ~90 words if takes ever exceed a minute.
 
 ## Rust/TS parity follow-up (2026-11-15, uncommitted)

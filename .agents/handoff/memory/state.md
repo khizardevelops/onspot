@@ -1,5 +1,17 @@
 # State
 
+## On main, previewed as v0.2.4-rust.3 (2026-11-16)
+
+- `refactor/hex-arch-p0` fast-forwarded into `main` (it now equals `main`). CI on `main` is green:
+  Architecture (Rust fmt/clippy/tests, bindings, boundaries, coupling, goldens, browser storage),
+  GitHub Pages, Cloudflare (the live web app runs the Rust core) and Android.
+- **Pre-release `v0.2.4-rust.3`** (version unchanged, 0.2.4): all 15 installers. Suffixed tags
+  publish as GitHub pre-releases (`prerelease: contains(ref_name, '-')`), so the README's
+  `releases/latest` link still points at 0.2.4. `v0.2.4-rust.1`/`.2` are earlier, broken previews
+  (missing desktop files / fresh-install crash) and should be deleted once the maintainer agrees.
+- Nothing depends on `deprecated/`; `.gitattributes` keeps it (and generated files) out of
+  GitHub's language bar, where Rust is now the largest language.
+
 ## Migration completed (2026-11-16, commits `a8ad303`, `71dd15c`, `8b895e3` + the closeout commit)
 
 - **Review → fixes.** An independent review of P0–P8 found the core real and tested but the cutover

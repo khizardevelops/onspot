@@ -1,5 +1,18 @@
 # Last Session
 
+## 2026-11-16 (later): merged to main, first CI and release runs
+
+- Pushed over SSH (`git@github.com:khizardevelops/onspot.git`; the HTTPS remote cannot prompt
+  here), fast-forwarded `main`, tagged previews. First real CI runs surfaced five issues, all fixed:
+  release bundles path (`target/`), architecture CI (coupling audit on tracked files, wasm build,
+  DB fixture), GitHub Pages prerender of `/about/`, and a fresh-install crash from the plugin-sql
+  removal (config folder never created). A macOS Intel job failed once on corrupted `bun install`
+  downloads and passed on re-run.
+- Result: `v0.2.4-rust.3` pre-release with 15 installers; `main` green; live web app on the core.
+- Learned: the desktop checks and phone test reused existing app data, so they could not catch a
+  first-run failure; the AppImage smoke test (fresh profile) did. Keep a fresh-profile run in mind
+  for any change to startup or storage.
+
 ## 2026-11-16: migration completed after an independent review
 
 - **Review first.** Verified the agents' claims (tests/clippy/check all green) and found what they

@@ -10,6 +10,24 @@ Active defects that can be fixed within the current foundational technology.
 
 ## Fixed
 
+### Desktop/Android crashed on a fresh install: "unable to open database file" (2026-11-16)
+- **Cause**: removing `tauri-plugin-sql` (ADR-012) also removed the code that created the app
+  config folder; the core's rusqlite `open` creates the file but not its folder. Machines that had
+  run 0.2.4 already had the folder, so local runs, the phone and the desktop checks all passed.
+- **Fix**: `src-tauri/src/lib.rs` creates `app_config_dir` before opening `onspot.db`.
+- **Proof**: the release's AppImage smoke test (fresh XDG profile) failed on `v0.2.4-rust.2` and
+  passes from `fb86339`; locally `packaging/smoke-test.sh target/release/onspot` loads the UI.
+  `v0.2.4-rust.1`/`.2` pre-releases predate the fix.
+
+### First CI runs of the migration (2026-11-16)
+- The release workflow looked for bundles in `src-tauri/target/`; since P0 the root workspace
+  builds into `target/`. Fixed in `release.yml`.
+- The architecture workflow had never run (main/PR only): the coupling audit walked git-ignored
+  files (now `git ls-files`), the bridge job did not build the wasm package or the v0.2.4 fixture
+  before `test:storage` (now `bridge:wasm` + `scripts/make-fixture.sh`).
+- GitHub Pages (`BASE_PATH=/onspot`) failed prerendering `/about/` against the app shell's
+  `<base href>`; the About page no longer prerenders (SPA rule in `+layout.ts`).
+
 ### The learner's dev server reloaded mid-clip: "speech failed … error loading dynamically imported module" (2026-11-16)
 - **Cause**: the browser checks' own dev servers (other ports) shared `node_modules/.vite`, so
   the learner's `bun run dev` rebuilt its cache on restart ("vite config has changed"); the speech
