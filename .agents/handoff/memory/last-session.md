@@ -15,9 +15,16 @@
 - **Verification:** 308 Rust tests; all four browser checks (practice now asserts the ledger); both
   desktop checks against a fresh release build; boundaries/SPDX/coupling/endpoint parity; golden
   capture reproduces every fixture.
-- **Not done here:** the phone test. The learner said the phone was connected with USB debugging,
-  but neither `adb devices` nor `lsusb` saw it (charge-only cable or USB mode, most likely). The arm64
-  debug APK is built for it (installs as `app.onspot.desktop.debug`, beside the release app).
+- **Phone test (after the learner reconnected it):** Samsung SM-S721B, Android 17. The arm64 debug
+  APK installs as `app.onspot.desktop.debug` (`adb install -r --user 0`; the shell cannot reach the
+  phone's other user profiles). Android WebViews expose no browser-level CDP endpoint, so drive
+  the page socket directly (`adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`,
+  then `Runtime.evaluate` on `/json`'s `webSocketDebuggerUrl`). 24/24 checks passed, including real
+  Groq calls (prompt topic, translation, glosses) with the key the debug app already stored; the
+  Usage screen showed the core's LLM tokens and Groq's live headers. Observation: the connection
+  test returns an empty reply with GPT-OSS at its 16-token budget (reasoning uses it up); the TS
+  client had the same budget, so this is unchanged behaviour, and the UI already says "Connected,
+  but the model returned an empty reply."
 - **Disk:** `/mnt/data` filled to 100% once (target/ grew to 44 GB). Cleared `target/debug`
   (regenerable); the Android cache lives in `/mnt/data/not_synced/dev-cache/onspot-target`.
 - **Maintainer's decision kept:** legacy TS is archived under `deprecated/`, never deleted.

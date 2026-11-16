@@ -10,8 +10,11 @@
 - [x] Move bridge use-case logic (translations/glosses/phrases, prompt seeding) into `onspot-app`.
 - [x] Narrow boundary allowlists; move dev harnesses out of the product layout; mute test browsers.
 - [x] Desktop release build + desktop portability/sync checks.
-- [ ] Install and smoke-test the arm64 debug APK on the learner's phone (the phone was not
-      visible over USB this session: no `adb` device, nothing in `lsusb`).
+- [x] Phone test (2026-11-16, Samsung SM-S721B, Android 17): arm64 debug APK
+      (`app.onspot.desktop.debug`, beside the release app) installed with `--user 0`; 24/24 core
+      checks over the WebView's CDP socket (native rusqlite storage, sync revision, record commands,
+      usage ledger, real Groq calls with the key already stored in the debug app); Practice,
+      Settings → Usage, History and Insights render. No take was recorded (needs a voice).
 - [ ] Release: version bump is the maintainer's; then tag to exercise `release.yml`/`android.yml`.
 - [ ] Optional: word-gloss sections per ~90 words if takes ever exceed a minute.
 
