@@ -16,7 +16,8 @@
  *   so CI can catch a matrix that was not regenerated after a refactor.
  */
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,17 +54,25 @@ const FRAMEWORK_IMPORTS = {
 const COMPONENT_DIRECTORY = 'src/lib/components';
 const ROUTE_DIRECTORY = 'src/routes';
 
-function walk(directory) {
-	const entries = readdirSync(directory).sort();
-
-	return entries.flatMap((entry) => {
-		const path = join(directory, entry);
-		const stats = statSync(path);
-		if (stats.isDirectory()) return walk(path);
-
-		const extension = entry.slice(entry.lastIndexOf('.'));
-		return SOURCE_EXTENSIONS.has(extension) ? [path] : [];
+/**
+ * The tracked source files under `directory`, as a clean checkout (and CI)
+ * has them. Walking the disk would also count git-ignored local files, such
+ * as a locally built model-lab vendor bundle, and the matrix would then differ
+ * from machine to machine.
+ */
+function trackedSourceFiles(directory) {
+	const listed = execFileSync('git', ['ls-files', '-z', '--', relative(REPO_ROOT, directory)], {
+		cwd: REPO_ROOT,
+		encoding: 'utf8'
 	});
+
+	return listed
+		.split('\0')
+		.filter((path) => SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf('.'))))
+		.map((path) => join(REPO_ROOT, path))
+		// A tracked file deleted in the working tree is gone from the next commit too.
+		.filter((path) => existsSync(path))
+		.sort();
 }
 
 /** File text with comments removed, so documentation that mentions `window.` is not counted. */
@@ -246,7 +255,7 @@ ${rows.join('\n')}
 }
 
 function main() {
-	const files = walk(SOURCE_ROOT);
+	const files = trackedSourceFiles(SOURCE_ROOT);
 	const matrix = files.map(analyseFile).sort((first, second) => second.score - first.score || first.path.localeCompare(second.path));
 	const output = render(matrix);
 	const checkOnly = process.argv.includes('--check');

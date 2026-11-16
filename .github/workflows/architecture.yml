@@ -89,13 +89,22 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: The bridge compiles for the web
-        run: cargo build -p onspot-bridge --target wasm32-unknown-unknown --features wasm
+      - name: Cache wasm-bindgen CLI
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Install the matching wasm-bindgen CLI
         run: |
+          if command -v wasm-bindgen >/dev/null 2>&1; then exit 0; fi
           VERSION="$(awk '/^name = "wasm-bindgen"$/{found=1; next} found && /^version = /{gsub(/[version = \"]/, ""); print; exit}' Cargo.lock)"
           cargo install wasm-bindgen-cli --version "$VERSION" --locked
+
+      # Builds the web bridge into static/core-bridge/, the package the storage
+      # check loads (the same step the Pages and Cloudflare deploys run).
+      - name: Build the core bridge for the web
+        run: bun run bridge:wasm
 
       # Real Chrome, the wasm package and the dev server: Rust migrations and the
       # storage commands over the existing sqlite-wasm worker (P2).
