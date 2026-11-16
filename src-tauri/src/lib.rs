@@ -41,8 +41,12 @@ pub fn run() {
             microphone::allow_in_main_window(app)?;
 
             // The app's one database connection: the core owns the schema,
-            // the migrations and every query.
-            let database_path = app.path().app_config_dir()?.join("onspot.db");
+            // the migrations and every query. On a fresh install the config
+            // folder does not exist yet, and SQLite creates the file but never
+            // its folder.
+            let config_dir = app.path().app_config_dir()?;
+            std::fs::create_dir_all(&config_dir)?;
+            let database_path = config_dir.join("onspot.db");
             let database = Arc::new(RusqliteDriver::open(&database_path)?);
             tauri::async_runtime::block_on(migrate(database.as_ref()))?;
             let driver: Arc<dyn SqlDriver> = database.clone();
