@@ -2,7 +2,7 @@
 
 import { derived, get } from 'svelte/store';
 import type { LlmEndpoint, LlmProviderId } from '#lib/adapters/llm/index.js';
-import { AUTOMATIC_MODEL, automaticModels, getProvider } from '#lib/adapters/llm/index.js';
+import { resolveLlmEndpointPolicy } from '#lib/adapters/llm/index.js';
 import {
 	getInstructionLanguage,
 	getLanguage,
@@ -23,10 +23,7 @@ function secretFor(provider: LlmProviderId) {
 	}
 }
 
-/**
- * The resource level a request needs: the model reads the studied language and
- * writes the language of instruction, so the less-resourced of the two decides.
- */
+/** The least-resourced of the studied and instruction languages, for Automatic. */
 function languageLevelOf(settings: AppSettings): LanguageResourceLevel {
 	const studied = getLanguage(settings.targetLanguage);
 	const instruction = getInstructionLanguage(settings.instructionLanguage);
@@ -36,46 +33,25 @@ function languageLevelOf(settings: AppSettings): LanguageResourceLevel {
 }
 
 /**
- * The models a request may use, in order of preference. Automatic: the
- * provider's models trusted with the languages in use (`automaticModels`);
- * `pacing.ts` then takes the first with room for the request. A model chosen
- * in Settings: that model alone.
- */
-function modelsFor(settings: AppSettings): string[] {
-	if (settings.llmProvider === 'custom') return [settings.customModel];
-
-	const chosen = settings.llmModel;
-	if (chosen && chosen !== AUTOMATIC_MODEL) return [chosen];
-
-	const automatic = automaticModels(settings.llmProvider, languageLevelOf(settings));
-	return automatic.length > 0 ? automatic : [getProvider(settings.llmProvider).defaultModel];
-}
-
-/**
  * Builds the endpoint the LLM client needs from the current settings and the
  * secret store. Shared by practice evaluation and the Settings connection test.
+ * The URL/model policy is one function (`resolveLlmEndpointPolicy`), mirrored by
+ * the Rust core and pinned by `request-endpoints.json`; only the key is added here.
  */
 export function resolveLlmEndpoint(settings: AppSettings): LlmEndpoint {
-	// A local server (LM Studio, llama.cpp, Ollama, ...) speaks the same
-	// OpenAI-compatible protocol; only the address and key differ.
-	if (settings.correctionMode === 'local') {
-		return {
-			baseUrl: settings.localLlmUrl,
-			apiKey: get(localLlmApiKey),
-			model: settings.localLlmModel
-		};
-	}
-
-	const provider = getProvider(settings.llmProvider);
-	const baseUrl = settings.llmProvider === 'custom' ? settings.customBaseUrl : provider.baseUrl;
-	const [model, ...fallbackModels] = modelsFor(settings);
-
-	return {
-		baseUrl: baseUrl || provider.baseUrl,
-		apiKey: get(secretFor(settings.llmProvider)),
-		model,
-		fallbackModels
-	};
+	const endpoint = resolveLlmEndpointPolicy({
+		correctionMode: settings.correctionMode,
+		localLlmUrl: settings.localLlmUrl,
+		localLlmModel: settings.localLlmModel,
+		llmProvider: settings.llmProvider,
+		llmModel: settings.llmModel,
+		customBaseUrl: settings.customBaseUrl,
+		customModel: settings.customModel,
+		languageLevel: languageLevelOf(settings)
+	});
+	const apiKey =
+		settings.correctionMode === 'local' ? get(localLlmApiKey) : get(secretFor(settings.llmProvider));
+	return { ...endpoint, apiKey };
 }
 
 export function currentLlmEndpoint(): LlmEndpoint {

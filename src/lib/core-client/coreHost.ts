@@ -12,20 +12,12 @@
 
 import { get } from 'svelte/store';
 import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
-import { evaluateAttempt } from '#lib/adapters/llm/index.js';
-import { generatePromptTopic } from '#lib/adapters/llm/promptTopic.js';
-import {
-	DEFAULT_INSTRUCTION_LANGUAGE_ID,
-	getInstructionLanguage,
-	requireLanguage
-} from '#lib/languages/index.js';
 import { transcribeSpeech } from '#lib/speech/stt/service.js';
 import { VoiceRecorder } from '#lib/utils/recorder.js';
 import { isTauri } from '#lib/platform/runtime.js';
 import { readSecret } from './secrets.js';
 import { appSettings } from '#lib/stores/settings.js';
 import { groqApiKey } from '#lib/stores/secrets.js';
-import { llmConfigured, resolveLlmEndpoint } from '#lib/stores/llm.js';
 import type { CoreClient } from './transport.js';
 
 /** One captured take, in the shape the core's `AudioFrame` expects. */
@@ -239,25 +231,6 @@ export function createCoreHost(client: CoreClient): CoreHost {
 						throw hostError('practice.transcription_failed', error);
 					}
 				}
-				case 'evaluation.evaluate': {
-					const request = payload as {
-						transcript: string;
-						prompt: string;
-						mode: 'exam' | 'casual' | 'freeflow';
-						level: string;
-						language: string;
-						translationTarget: string;
-					};
-					const settings = get(appSettings);
-					try {
-						return await evaluateAttempt({
-							...request,
-							endpoint: resolveLlmEndpoint(settings)
-						});
-					} catch (error) {
-						throw hostError('practice.evaluation_failed', error);
-					}
-				}
 				case 'fs.save': {
 					const request = payload as { fileName: string; bytesBase64: string };
 					try {
@@ -405,35 +378,6 @@ export function createCoreHost(client: CoreClient): CoreHost {
 					const { disconnectGoogleDrive } = await import('#lib/adapters/sync/google/oauth.js');
 					disconnectGoogleDrive();
 					return {};
-				}
-				case 'prompt.write': {
-					if (!get(llmConfigured)) return null;
-					const request = payload as {
-						targetLanguageId: string;
-						instructionLanguageId: string;
-						level: string;
-						mode: 'exam' | 'casual' | 'freeflow';
-						avoidTopics: string[];
-					};
-					const settings = get(appSettings);
-					try {
-						return await generatePromptTopic({
-							endpoint: resolveLlmEndpoint(settings),
-							instructionLanguage: getInstructionLanguage(
-								request.instructionLanguageId
-							).name,
-							instructionLanguageId:
-								request.instructionLanguageId ?? DEFAULT_INSTRUCTION_LANGUAGE_ID,
-							targetLanguage: requireLanguage(request.targetLanguageId).name,
-							level: request.level,
-							mode: request.mode,
-							avoidTopics: request.avoidTopics
-						});
-					} catch {
-						// The core falls back to stored/catalogue prompts; the learner is not
-						// interrupted with a second failure while nothing was typed.
-						return null;
-					}
 				}
 				default:
 					throw hostError(

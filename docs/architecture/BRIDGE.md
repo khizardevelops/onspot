@@ -83,7 +83,10 @@ until its phase declares the payload in the bridge and generates the type.
 | `restore.pick` | P7 **implemented** | `{}` → `{ fileName }`; opens the picker (`fs.pick`), checks the format and stages the backup. |
 | `restore.confirm` | P7 **implemented** | `{}` → `{ sessions, attempts }`; replaces the database from the staged backup. |
 | `restore.cancel` | P7 **implemented** | `{}` → `{ cancelled }`; discards a staged backup. |
+| `restore.legacy_json` | P8 **implemented** | `{ json, now }` → `{ sessions, attempts, corrections, recordings, settings }`; merges a format-1 JSON backup through the Rust repositories without clearing unrelated rows. |
 | `sync.decide` | P7 **implemented** | `{ comparison, choice? }` → `{ decision }`; the conflict policy. |
+| `sessions.parse_setup` / `sessions.usable_setup` / `sessions.infer_setup` | P8 **implemented** | Validate a stored setup, repair its voices against the catalog, or infer one for a pre-migration session from its takes and the current settings. |
+| `prompts.flush_submissions` | P8 **implemented** | `{ endpoint, force, online }` → `{ sent, pending, error? }`; drains the prompt-submission outbox with the core's batch and backoff policy. |
 | `reminders.state` / `onboarding.decide` / `prompts.catalogue` / `language.plan` / `language.catalog` | P7 **implemented** | Pure state and catalog lookups used by the driver stores. |
 | `sync.connect` / `sync.account` / `sync.disconnect` / `sync.now` | P7 **implemented** | Drive/WebDAV connection state, snapshot sync, and the conflict choice. |
 | `language.plan` | P7 **implemented** | `{ input }` → required/installed parts, pending bytes and readiness (byte counts are `u32` so wasm does not hand the driver a `bigint`). |
@@ -141,7 +144,7 @@ ignore it; the runtime decodes by `event` and logs unknown names.
 - Adding an optional field is not breaking; removing or renaming one is.
 - The bridge supports one version per command at a time. No version lives past
   the phase that replaces it, except a version the shipping app still sends;
-  P8 removes all of them together with `VITE_CORE_BACKEND`.
+  P8 removed the toggle; the bridge now serves one live command version per command.
 - An event payload change follows the same rule: a new field is additive, a
   renamed one is a new event.
 
@@ -180,6 +183,7 @@ same command and fails on any diff, so a changed Rust type cannot leave a stale
 driver type behind.
 
 `src/lib/core-client/` also holds `transport.ts` (the `CoreClient` interface with
-`WasmCoreClient` and `TauriCoreClient`, selected by `isTauri()`), `backend.ts`
-(ADR-002's toggle) and `CoreBridgeProbe.svelte` (dev-only readout, dropped from
-production builds).
+`WasmCoreClient` and `TauriCoreClient`, selected by `isTauri()`) and
+`CoreBridgeProbe.svelte` (dev-only readout, dropped from production builds).
+ADR-002's toggle and `backend.ts` are gone; the pre-cutover copy is archived under
+`deprecated/`.

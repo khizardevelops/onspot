@@ -66,8 +66,8 @@ neither.
   transports; only the port implementation differs.
 - Browser storage commands fail with `bridge.unavailable` when a driver boots
   without a SQL host (for example a core build in a page whose wasm package is
-  absent). The settings store falls back to the legacy adapter and logs it, so a
-  release without the wasm package still opens.
+  absent). After P8 the settings store no longer falls back to the legacy
+  adapter; the page surfaces the error instead of writing around the core.
 - JavaScript promises mean the wasm command surface is async; a caller must
   `await` `init_core_wasm` and `dispatch_wasm`.
 

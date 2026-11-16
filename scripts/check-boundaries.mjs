@@ -9,14 +9,13 @@
  * runtime, an HTTP client or an async runtime. `cargo tree -e normal` means
  * dev-dependencies used by tests are allowed and excluded.
  *
- * TypeScript: adapters may not import UI components, and nothing outside the
- * view layer may import a `.svelte` component. The rules report warnings for
- * now (P0 installs the guard, later phases fix the violations and then the
- * rule becomes an error); an internal error still fails the run.
+ * TypeScript: adapters may not import UI components, nothing outside the
+ * view layer may import a `.svelte` component, and live code may not import
+ * the archived TypeScript under `deprecated/`. The rules are errors by default
+ * after P8; `--no-strict` is only for a one-off local audit while a move is in
+ * progress.
  *
- * Usage: node scripts/check-boundaries.mjs [--strict]
- *   --strict turns TypeScript warnings into a failure (planned for the phase
- *   that has cleaned up the offences).
+ * Usage: node scripts/check-boundaries.mjs [--no-strict]
  */
 
 import { execFileSync } from 'node:child_process';
@@ -28,6 +27,38 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_ROOT = join(REPO_ROOT, 'src');
 const COMPONENT_DIRECTORY = 'src/lib/components';
 const ADAPTER_DIRECTORY = 'src/lib/adapters';
+const DEPRECATED_DIRECTORY = 'deprecated/';
+
+/**
+ * `svelte/store` belongs to view state. These are the view-state stores and
+ * the host shims that read them; everything else must take data as arguments.
+ */
+const SVELTE_STORE_ALLOWED = [
+	'src/lib/stores/',
+	'src/lib/core-client/',
+	'src/lib/platform/',
+	'src/lib/usage/',
+	'src/lib/practice/promptSubmissions.ts',
+	'src/lib/speech/tts/service.ts',
+	'src/lib/adapters/llm/pacing.ts',
+	'src/lib/adapters/sync/',
+	'src/lib/components/',
+	'src/routes/'
+];
+
+/** Desktop and speech plugins stay behind the transport and platform shims. */
+const TAURI_ALLOWED = [
+	'src/lib/core-client/',
+	'src/lib/platform/',
+	'src/lib/adapters/db/schema.ts',
+	'src/lib/adapters/db/TauriSqlAdapter.ts',
+	'src/lib/adapters/db/types.ts',
+	'src/lib/adapters/llm/client.ts',
+	'src/lib/adapters/sync/',
+	'src/lib/speech/stt/native/nativeEngine.ts',
+	'src/lib/utils/export.ts',
+	'src/lib/components/WindowBar.svelte'
+];
 
 /** Crates that must stay framework-free (invariant I2). */
 const CORE_CRATES = ['onspot-domain', 'onspot-ports', 'onspot-app', 'onspot-dsp'];
@@ -64,8 +95,7 @@ function importSpecifiers(text) {
 }
 
 /** Resolves a project specifier to a repo-relative path, or null for a package import. */
-function resolveProjectPath(specifier, fromFile) {
-	let target;
+function resolveProjectPath(specifier, fromFile) {	let target;
 
 	if (specifier.startsWith('#lib/')) {
 		target = join('src/lib', specifier.slice('#lib/'.length));
@@ -109,6 +139,11 @@ function checkRustCore() {
 	return failures;
 }
 
+/** True when the repo-relative file is under, or is, one of the allow-listed paths. */
+function allowedBy(repoPath, allowed) {
+	return allowed.some((entry) => (entry.endsWith('/') ? repoPath.startsWith(entry) : repoPath === entry));
+}
+
 function checkTypeScriptLayers() {
 	const warnings = [];
 
@@ -118,13 +153,24 @@ function checkTypeScriptLayers() {
 
 		for (const specifier of importSpecifiers(text)) {
 			const target = resolveProjectPath(specifier, path);
+			if (specifier === 'svelte/store' && !allowedBy(repoPath, SVELTE_STORE_ALLOWED)) {
+				warnings.push(`${repoPath}: imports svelte/store outside a view-state store or host shim`);
+			}
+			if (
+				(specifier.startsWith('@tauri-apps/') || specifier === 'plugin:speech') &&
+				!allowedBy(repoPath, TAURI_ALLOWED)
+			) {
+				warnings.push(`${repoPath}: imports a desktop/speech plugin outside a host shim (${specifier})`);
+			}
 			if (!target) continue;
 
 			const importsComponent = target.startsWith(`${COMPONENT_DIRECTORY}/`) || target.endsWith('.svelte');
 			const isAdapter = repoPath.startsWith(`${ADAPTER_DIRECTORY}/`);
 			const isView = repoPath.startsWith(`${COMPONENT_DIRECTORY}/`) || repoPath.startsWith('src/routes/');
 
-			if (isAdapter && target.startsWith(`${COMPONENT_DIRECTORY}/`)) {
+			if (target.startsWith(DEPRECATED_DIRECTORY)) {
+				warnings.push(`${repoPath}: live code imports archived TypeScript (${specifier})`);
+			} else if (isAdapter && target.startsWith(`${COMPONENT_DIRECTORY}/`)) {
 				warnings.push(`${repoPath}: adapter imports UI (${specifier})`);
 			} else if (!isView && importsComponent) {
 				warnings.push(`${repoPath}: outside the view layer but imports a component (${specifier})`);
@@ -136,15 +182,15 @@ function checkTypeScriptLayers() {
 }
 
 function main() {
-	const strict = process.argv.includes('--strict');
+	const strict = !process.argv.includes('--no-strict');
 	const rustFailures = checkRustCore();
 	const typescriptWarnings = checkTypeScriptLayers();
 
 	console.log(`Rust core crates checked: ${CORE_CRATES.join(', ')}`);
 	for (const failure of rustFailures) console.error(`ERROR ${failure}`);
 
-	console.log(`TypeScript layer rules checked under src/ (${typescriptWarnings.length} warning${typescriptWarnings.length === 1 ? '' : 's'})`);
-	for (const warning of typescriptWarnings) console.warn(`WARN  ${warning}`);
+	console.log(`TypeScript layer rules checked under src/ (${typescriptWarnings.length} violation${typescriptWarnings.length === 1 ? '' : 's'})`);
+	for (const warning of typescriptWarnings) console.error(`ERROR ${warning}`);
 
 	if (rustFailures.length > 0) {
 		console.error(`\n${rustFailures.length} boundary violation${rustFailures.length === 1 ? '' : 's'} in the Rust core.`);
@@ -152,7 +198,7 @@ function main() {
 	}
 
 	if (strict && typescriptWarnings.length > 0) {
-		console.error(`\n${typescriptWarnings.length} TypeScript layer warning(s) treated as errors (--strict).`);
+		console.error(`\n${typescriptWarnings.length} TypeScript layer violation(s).`);
 		process.exit(1);
 	}
 

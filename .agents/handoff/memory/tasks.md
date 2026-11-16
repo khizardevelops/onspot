@@ -1,5 +1,48 @@
 # Tasks
 
+## Rust/TS parity follow-up (2026-11-15, uncommitted)
+- [x] Port prompt-topic generation/validation to `llm-openai::prompt_topic`; export language
+      `scripts`; LLM-backed `PromptSource`; `PracticeConfig.llmConfigured`; remove host
+      `prompt.write` and the unused host `evaluation.evaluate` case.
+- [x] Add the P5 fixture assertion for legacy translations plus core word-gloss read/write and
+      raw JSON shape.
+- [x] Archive dead `evaluate.ts`, `prompt.ts`, `languageGuidance.ts`, `promptTopic.ts`; keep
+      `capture-golden.mjs` reproducible against the archived copies.
+- [x] Port format-1 legacy JSON merge to `onspot-app::legacy_import`; bridge
+      `restore.legacy_json`; `utils/export.ts` now reads the file and delegates.
+- [x] Bridge-level legacy import dispatch test (`a_legacy_json_backup_is_merged_through_the_core`).
+- [x] Prompt-submission batch/backoff/wire policy (`onspot-app::prompt_submissions`, bridge
+      `prompts.flush_submissions`; TS now only decides when to ask).
+- [x] Session-setup inference/validation/usable-voice fallback (`onspot-app::session_setup`, bridge
+      `sessions.infer_setup`/`sessions.parse_setup`/`sessions.usable_setup`); `couldBeWrittenIn`
+      now only in Rust, live `languages/textLanguage.ts` archived.
+- [x] Move the LLM endpoint/Automatic-model/configured policy into `providers::resolve_endpoint` /
+      `models_for` / `is_configured` / `provider_id_for`; the CLI driver now calls it instead of
+      duplicating the rule.
+- [x] Cross-driver golden gate: `drivers/cli/tests/cross_driver_endpoint.rs` compares the GUI
+      practice path and `onspot_cli::evaluation::build_request` for groq, custom and a
+      low-resource language pair (drop-in, never a checked-in JSON fixture).
+- [x] Fix the fresh-clone break: the v0.2.4 SQLite fixture was gitignored and required by
+      `repo-sql` tests. `tests/fixtures/ensure.rs` now rebuilds it from the tracked `v9.sql`
+      (lock file + atomic rename for parallel test binaries); verified in a clean `git clone`
+      with the binary absent. `scripts/make-fixture.sh` is the manual equivalent.
+- [ ] Remaining host-side product work: direct `adapters/db` view shims (reminders, audio cache,
+      sync metadata, dev checks) and the device-local usage-ledger *persistence*. `SecretStore`
+      (browser localStorage) and the synchronous `stores/llm.ts` composition are permanent
+      web-driver adapters per the plan; their rules are in Rust and pinned by the cross-driver test.
+- [x] Packaging smoke (this host, 2026-11-15): Android **x86_64 debug APK** built
+      (`app-universal-debug.apk`) and run in the `dev_api36` emulator — activity resumed, the
+      Svelte welcome screen rendered ("Set up onspot", 16 stylesheets, 9 buttons). Desktop
+      release built, `.deb`/`.rpm` produced and the release binary launches under Xvfb. Fresh
+      clone: `bun install --frozen-lockfile`, `bun run build` and `cargo test -p
+      onspot-adapter-repo-sql` all pass with the fixture binary removed.
+- [ ] Not verified here: **AppImage** (local `linuxdeploy` fails on CachyOS/Arch; CI builds it on
+      Ubuntu), fresh-clone **full** `cargo test --workspace` (clone compiled everything, then hit
+      the disk limit at the final link step; the repo-tree run is green at 281), Windows/macOS
+      runtime smokes, real Android arm64 device, live Groq/DeepSeek keys, real Drive.
+- [ ] Release: **version is left for the maintainer to bump by hand.** `docs/releases/v0.2.5.md`
+      was drafted and then removed on request; no tag was pushed. P8 commit still open.
+
 ## Hexagonal migration P7 closeout (2026-11-14, uncommitted)
 - [x] Port the typed `AppSettings` document, defaults, merge and normalisation to
       `crates/onspot-app/src/settings.rs` (ADR-008); add `settings.load` / `settings.patch`.
@@ -11,19 +54,33 @@
       ts-rs types and wasm; rerun workspace tests, clippy, fmt, svelte-check, storage/practice/sync/
       portability, boundaries, SPDX, catalogs and coupling.
 - [ ] Commit the closeout (user has not asked for a commit yet).
-- [ ] P5 legacy→core gloss/translation fixture assertion (separate P5 gap).
 
-## Hexagonal migration P8 (planned, 2026-11-14)
-- [ ] Build `drivers/cli` over the same `onspot-app` core (settings/sessions/evaluate/insights/
-      exports; STT/TTS absent by design).
-- [ ] Remove `VITE_CORE_BACKEND` and the legacy branches, then **move** the dead TS modules to
-      `deprecated/` (mirrored paths, SPDX kept) instead of deleting them. Add the boundary rule
-      that live code cannot import `deprecated/`; keep tests/scripts on `core-client`.
-- [ ] Re-run the coupling audit, make the TS boundary rules error-level, and document the before/
-      after matrix.
-- [ ] Fresh-clone build + desktop installer + Android APK + web build; final practice smoke;
-      DRIVER-GUIDE/README/handoff; release tag.
-
+## Hexagonal migration P8 (code complete, final gates pending, 2026-11-15)
+- [x] Build `drivers/cli` over the same `onspot-app` core (settings/sessions/evaluate/insights/
+      exports; STT/TTS absent by design). Manual parser, SIGINT cancellation, env/keyfile secrets,
+      blocking rustls HTTP, 7 integration tests.
+- [x] Remove `VITE_CORE_BACKEND` and the legacy branches guarded by it.
+- [x] Collapse `stores/practice.ts` to the core state machine plus P5 view updates/audio and
+      collapse `stores/settings.ts` to `settings.load`/`settings.patch` (no legacy fallback).
+- [x] Move the pre-cutover `practice.ts`, `settings.ts` and `languageData.ts` (plus `backend.ts`,
+      `usage/monitor.ts`, sync/Drive/WebDAV, old routes/components) under mirrored `deprecated/`
+      paths; never delete the TypeScript implementation.
+- [x] Add the boundary rule that live code cannot import `deprecated/`; make `svelte/store` and
+      `@tauri-apps/*`/`plugin:speech` allowlists error-level.
+- [x] Archive `adapters/llm/translate.ts`, `glossary.ts`, `translationPrompt.ts` and
+      `lib/insights.ts`; move the pure gloss-intent helpers to `components/transcriptGlosses.ts`
+      and point `/insights/` at the generated core types/`bigint` counts.
+- [x] Audit the rest of the dead TS: sync transfer/decision logic removed, `utils/export.ts` dead
+      wrappers removed with the pre-edit file archived, and `usage`/`adapters/db` confirmed as live
+      host shims (documented in `state.md` rather than deleted).
+- [x] Move the Tauri save dialog behind `platform/saveDocument.ts`.
+- [x] Regenerate the coupling matrix and record the final before/after table.
+- [x] Verify svelte-check (0/9), build, storage/practice/sync/portability, boundaries, SPDX, catalogs,
+      coupling, and workspace fmt/clippy/test.
+- [ ] Fresh-clone build + desktop installer + Android APK + web build; final practice smoke; release
+      tag. Android and credential/device smokes are blocked here.
+- [ ] Commit P8 (user has not asked for a commit yet).
+- [x] P5 legacy→core gloss/translation fixture assertion (2026-11-15).
 
 ## Hexagonal migration P0 (2026-11-12, done)
 - [x] Re-verify the audit (LOC, file roles, schema version, coupling) and record corrections in the

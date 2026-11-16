@@ -50,6 +50,8 @@ pub struct Language {
     pub name: String,
     pub native_name: String,
     pub web_text_percent: f64,
+    #[serde(default)]
+    pub scripts: Vec<String>,
     pub local: LocalSupport,
     #[serde(default)]
     pub stt: Option<LanguageStt>,

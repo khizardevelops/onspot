@@ -13,8 +13,7 @@
  *
  * This drives the bridge commands directly, so it covers what the web check
  * cannot: the Tauri host shims, the native `DatabaseFile`, and the plugin HTTP
- * transport. `useCore('sync')` wiring itself is shared TypeScript and is
- * exercised by `bun run test:sync`.
+ * transport. The shared TypeScript sync wiring is exercised by `bun run test:sync`.
  *
  * Prerequisites: `bunx tauri build --no-bundle` and WebKitWebDriver
  * (`/usr/bin/WebKitWebDriver`). No extra npm packages.

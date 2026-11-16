@@ -225,6 +225,8 @@ export interface LanguageDefinition {
 	writing: WritingSystem;
 	/** Text direction for the target language's own text. */
 	direction: TextDirection;
+	/** The Unicode scripts its letters are written in, as `\p{Script=…}` names them. */
+	scripts: readonly string[];
 	/** English name, e.g. `French`. */
 	name: string;
 	/** Endonym shown under the English name, e.g. `Français`. */
@@ -265,6 +267,7 @@ const FRENCH: LanguageDefinition = {
 	locale: 'fr',
 	writing: 'spaced',
 	direction: 'ltr',
+	scripts: ['Latin'],
 	local: { stt: true, tts: true, correction: true },
 	name: 'French',
 	nativeName: 'Français',
@@ -296,6 +299,7 @@ const JAPANESE: LanguageDefinition = {
 	locale: 'ja',
 	writing: 'unspaced',
 	direction: 'ltr',
+	scripts: ['Han', 'Hiragana', 'Katakana'],
 	local: { stt: true, tts: true, correction: true },
 	name: 'Japanese',
 	nativeName: '日本語',
@@ -333,6 +337,7 @@ const PERSIAN: LanguageDefinition = {
 	locale: 'fa',
 	writing: 'spaced',
 	direction: 'rtl',
+	scripts: ['Arabic'],
 	// Read-back can run on the device (Piper's Persian voices); recognition and correction stay cloud.
 	local: { stt: false, tts: true, correction: false },
 	name: 'Persian',
@@ -450,6 +455,7 @@ function requestedLanguage(code: string): LanguageDefinition {
 		locale: code,
 		writing: known.writing,
 		direction: known.direction,
+		scripts: known.scripts,
 		local: { stt: true, tts: true, correction: true },
 		name: known.name,
 		nativeName: known.nativeName,

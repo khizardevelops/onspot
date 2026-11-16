@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{CancelToken, CoreError};
+use onspot_domain::LlmEndpoint;
 
 /// A recorded or synthesized audio payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,13 +326,20 @@ pub struct GeneratedPrompt {
 #[serde(rename_all = "camelCase")]
 pub struct PromptRequest {
     pub target_language_id: String,
+    pub target_language: String,
     pub instruction_language_id: String,
+    pub instruction_language: String,
+    /// The Unicode scripts the instruction language uses.
+    #[serde(default)]
+    pub instruction_scripts: Vec<String>,
     /// CEFR-ish level id from Settings.
     pub level: String,
     /// `exam`, `casual` or `freeflow`.
     pub mode: String,
     /// Recent titles to avoid.
     pub avoid_topics: Vec<String>,
+    /// The learner's configured LLM, without a key.
+    pub endpoint: LlmEndpoint,
 }
 
 /// Writes a prompt through the learner's LLM, when configured.

@@ -211,10 +211,13 @@ Moving the language-data installation state itself remains P7 work.
 
 ## 7. Open decisions to settle in P3
 
-1. **Prompt generation.** `next_prompt` calls `PromptSource` first; the host
-   shim runs the existing TS generator and the core stores the result. With no
-   model, the driver passes the stored/catalogue candidates and the core picks
-   one. Catalogue data stays TS until P7.
+1. **Prompt generation — settled.** `next_prompt` calls `PromptSource` first;
+   the core stores the result. The production port is now
+   `llm-openai::prompt_topic` (rendered prompt, JSON parse, title/text/word caps,
+   script check from the language catalog, recent-topic check). The old host
+   `prompt.write` shim is gone. With no usable LLM key (`llmConfigured` in
+   `PracticeConfig`), or when generation fails, the core picks one of the
+   stored/catalogue candidates the driver passed.
 2. **Evaluation.** `EvaluationPort` is a shim around today's TS
    `evaluateAttempt` on both runtimes for P3. P4 replaces the shim; the core
    only sees `EvaluationResult`.
@@ -239,11 +242,10 @@ Moving the language-data installation state itself remains P7 work.
    races).
 4. Rust adapters: native STT; host RPC shims for capture/STT/evaluation/prompt
    on wasm and Tauri; playback is event intents handled by the driver.
-5. Bridge commands and generated types; `useCore('practice')` allowlist; tick
-   command because the driver owns the interval.
-6. Svelte adapter (`stores/practice.ts` branches on `useCore('practice')`) and
-   parity smoke matrix. The legacy implementation stays selectable through
-   `VITE_CORE_BACKEND=legacy` (ADR-002), so the God store body remains until P8.
+5. Bridge commands and generated types; tick command because the driver owns
+   the interval.
+6. Svelte adapter (`stores/practice.ts`) now always boots the core and keeps only the
+   view/audio/P5 glue; the pre-cutover God store body is archived under `deprecated/`.
 
 ## 9. Acceptance checks for this map
 

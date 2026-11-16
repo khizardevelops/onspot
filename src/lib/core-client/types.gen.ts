@@ -216,6 +216,11 @@ sttMode: EngineMode, ttsVoice: string, explanationVoice: string,
  */
 llmEndpoint: LlmEndpoint,
 /**
+ * Whether Settings has a usable key for that endpoint. The key itself
+ * stays in the driver; this only stops the core making a doomed request.
+ */
+llmConfigured: boolean,
+/**
  * Playback pace, `1.0` being normal.
  */
 pace: number,
@@ -361,6 +366,28 @@ englishFallback: boolean, };
  * The open session after an operation.
  */
 export type PracticeResponse = { snapshot: PracticeSnapshot, };
+
+/**
+ * Counts after a format-1 JSON backup has been merged.
+ */
+export type LegacyImportResult = { sessions: number, attempts: number, corrections: number, recordings: number, settings: number, };
+
+/**
+ * What one flush did.
+ */
+export type SubmissionFlushResult = {
+/**
+ * Prompts accepted and removed from the outbox.
+ */
+sent: number,
+/**
+ * Prompts still waiting after the attempt.
+ */
+pending: number,
+/**
+ * The failure that kept this batch waiting, if any.
+ */
+error?: string | null, };
 
 
 /**

@@ -30,10 +30,10 @@ pub use language::{
     LanguageCancelResponse, LanguageDownloadResponse, LanguageProgressResponse,
     LANGUAGE_CANCEL_DOWNLOAD, LANGUAGE_DOWNLOAD, LANGUAGE_DOWNLOAD_PROGRESS,
 };
-pub use onspot_app::{Core, CoreConfig, EventSink, HostAdapters, UiEvent};
+pub use onspot_app::{Core, CoreConfig, EventSink, HostAdapters, LegacyImportResult, UiEvent};
 pub use portability::{
     ExportDatabaseResponse, RestoreCancelResponse, RestoreConfirmResponse, RestorePickResponse,
-    EXPORT_DATABASE, RESTORE_CANCEL, RESTORE_CONFIRM, RESTORE_PICK,
+    EXPORT_DATABASE, RESTORE_CANCEL, RESTORE_CONFIRM, RESTORE_LEGACY_JSON, RESTORE_PICK,
 };
 pub use practice::{
     AcceptedResponse, OpenResponse, PracticeResponse, ResumeResponse, CORE_HOST_REPLY,

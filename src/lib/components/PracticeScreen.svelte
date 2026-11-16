@@ -31,7 +31,6 @@
 	import { getInstructionLanguage, getLanguage } from '#lib/languages/index.js';
 	import { exportSessionTranscript } from '#lib/utils/sessionTranscript.js';
 	import { usageWarningsStore as usageWarnings } from '#lib/usage/view.js';
-	import { pacingWait } from '#lib/adapters/llm/index.js';
 	import { toast } from '#lib/stores/toast.js';
 	import { MAX_RECORDING_SEC } from '#lib/config.js';
 	import AppHeader from '#lib/components/AppHeader.svelte';
@@ -123,12 +122,6 @@
 	);
 	const busy = $derived($practice.phase === 'transcribing' || $practice.phase === 'evaluating');
 
-	/** A feedback request waiting for room under the provider's per-minute limit says so, instead of looking stuck. */
-	const waitingText = $derived.by(() => {
-		if ($practice.phase !== 'evaluating' || !$pacingWait) return null;
-		const seconds = Math.max(1, Math.ceil(($pacingWait.until - Date.now()) / 1000));
-		return `${$pacingWait.provider}'s per-minute limit: continuing in ${seconds} s…`;
-	});
 	const recording = $derived($practice.phase === 'recording');
 	const locked = $derived($practice.sessionId !== null);
 	/*
@@ -511,7 +504,7 @@
 		<Loader2 class="size-4 shrink-0 animate-spin text-[var(--brand)]" />
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center justify-between gap-2 text-[12px]">
-				<span class="truncate font-medium">{waitingText ?? ($practice.statusText || 'Working…')}</span>
+				<span class="truncate font-medium">{$practice.statusText || 'Working…'}</span>
 				{#if $practice.progress}<span class="shrink-0 font-mono text-[11px] text-muted-foreground">{$practice.progress.progress}%</span>{/if}
 			</div>
 			<NeoProgressBar

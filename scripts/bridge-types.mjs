@@ -62,6 +62,8 @@ const TYPE_ORDER = [
 	'PracticeSnapshot',
 	'PromptView',
 	'PracticeResponse',
+	'LegacyImportResult',
+	'SubmissionFlushResult',
 	'ResumeResponse',
 	'OpenResponse',
 	'AcceptedResponse',

@@ -2,8 +2,6 @@
 
 import type { IDatabaseAdapter, Prompt } from '#lib/adapters/db/index.js';
 import { DEFAULT_INSTRUCTION_LANGUAGE_ID, getInstructionLanguage, requireLanguage } from '#lib/languages/index.js';
-import { cataloguePromptsFor } from './promptCatalogue.js';
-import { useCore } from '#lib/core-client/backend.js';
 import { promptCatalogueCore } from '#lib/core-client/prompts.js';
 
 /**
@@ -29,9 +27,7 @@ export async function ensurePromptsSeeded(
 	const existing = await db.listPrompts(language.id, instructionLanguage.id);
 	if (existing.length > 0) return existing;
 
-	const seeds = useCore('language')
-		? await promptCatalogueCore(instructionLanguage.id, language.id)
-		: cataloguePromptsFor(instructionLanguage.id, language.id);
+	const seeds = await promptCatalogueCore(instructionLanguage.id, language.id);
 	if (seeds.length === 0) return [];
 
 	const now = new Date().toISOString();

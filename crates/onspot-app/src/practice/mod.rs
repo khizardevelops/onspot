@@ -245,23 +245,33 @@ impl RunPracticeSession {
             return None;
         }
 
+        let instruction_scripts = crate::language::language(&config.instruction_language_id)
+            .map(|language| language.scripts.clone())
+            .unwrap_or_default();
         let request = PromptRequest {
             target_language_id: config.target_language_id.clone(),
+            target_language: config.target_language_name.clone(),
             instruction_language_id: config.instruction_language_id.clone(),
+            instruction_language: config.instruction_language_name.clone(),
+            instruction_scripts,
             level: config.level.clone(),
             mode: config.mode.clone(),
             avoid_topics: candidates
                 .iter()
                 .map(|candidate| candidate.title.clone())
                 .collect(),
+            endpoint: config.llm_endpoint.clone(),
         };
-        let generated = self
-            .ports
-            .prompts
-            .write(&request, &CancelToken::new())
-            .await
-            .ok()
-            .flatten();
+        let generated = if config.llm_configured {
+            self.ports
+                .prompts
+                .write(&request, &CancelToken::new())
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
 
         if let Some(generated) = generated {
             let now = now_rfc3339(self.ports.clock.now_ms());

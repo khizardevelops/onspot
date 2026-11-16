@@ -4,11 +4,10 @@
 	import { pageHref } from '#lib/pages.js';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
-	import { computeInsights, SEVERITY_RANK, type InsightsData, type Occurrence } from '#lib/insights.js';
+	import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+	import type { InsightsData, Occurrence, Session } from '#lib/core-client/types.gen.js';
 	import { openSession } from '#lib/stores/practice.js';
 	import { toast } from '#lib/stores/toast.js';
-	import { useCore } from '#lib/core-client/backend.js';
 	import { getCoreClient } from '#lib/core-client/client.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
 	import { NeoCard } from '@dvcol/neo-svelte/cards';
@@ -17,6 +16,9 @@
 	import { ArrowLeft, ChevronRight } from '@lucide/svelte';
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import { closeOnBack } from '#lib/platform/backButton.svelte.js';
+
+	/** Lower is more severe. */
+	const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, suggestion: 2 };
 
 	let data = $state<InsightsData | null>(null);
 	let loading = $state(true);
@@ -29,7 +31,7 @@
 
 	const groups = $derived.by(() => {
 		if (!selected) return [];
-		const bySession = new Map<string, { session: Session | undefined; occurrences: Occurrence[] }>();
+		const bySession = new Map<string, { session: Session | null; occurrences: Occurrence[] }>();
 		for (const occurrence of selected.occurrences) {
 			const key = occurrence.session?.id ?? 'unknown';
 			let group = bySession.get(key);
@@ -47,21 +49,11 @@
 		loadError = '';
 		try {
 			const db = await getDatabaseAdapter();
-			if (useCore('insights')) {
-				const client = await getCoreClient();
-				const response = await client.command<{ data: InsightsData }>('insights.build');
-				const attempts = await db.listAllAttempts();
-				data = response.data;
-				attemptIndex = indexAttempts(attempts);
-			} else {
-				const [sessions, attempts, corrections] = await Promise.all([
-					db.listSessions(),
-					db.listAllAttempts(),
-					db.listAllCorrections()
-				]);
-				data = computeInsights(sessions, attempts, corrections);
-				attemptIndex = indexAttempts(attempts);
-			}
+			const client = await getCoreClient();
+			const response = await client.command<{ data: InsightsData }>('insights.build');
+			const attempts = await db.listAllAttempts();
+			data = response.data;
+			attemptIndex = indexAttempts(attempts);
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'The local database could not be opened.';
 		} finally {
@@ -72,10 +64,12 @@
 	onMount(load);
 
 	/** Each take's 1-based position inside its session. */
-	function indexAttempts(attempts: Attempt[]): Record<string, number> {
+	function indexAttempts(
+		attempts: Array<{ id: string; sessionId: string; createdAt: string }>
+	): Record<string, number> {
 
 		const index: Record<string, number> = {};
-		const grouped = new Map<string, Attempt[]>();
+		const grouped = new Map<string, typeof attempts>();
 		for (const attempt of attempts) {
 			const list = grouped.get(attempt.sessionId) ?? [];
 			list.push(attempt);
@@ -151,7 +145,11 @@
 	const grammarPatterns = $derived(
 		(data?.patterns ?? [])
 			.filter((p) => p.category === 'grammar')
-			.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.count - a.count)
+			.sort((a, b) => {
+				const rank = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+				if (rank !== 0) return rank;
+				return a.count === b.count ? 0 : a.count > b.count ? -1 : 1;
+			})
 	);
 </script>
 
@@ -176,7 +174,7 @@
 				</NeoButton>
 				<h2 class="font-serif text-2xl font-medium">{selected.label}</h2>
 				<p class="mb-6 text-sm text-muted-foreground">
-					{selected.count} occurrence{selected.count === 1 ? '' : 's'} across
+					{selected.count} occurrence{selected.count === 1n ? '' : 's'} across
 					{selected.sessionIds.length} session{selected.sessionIds.length === 1 ? '' : 's'}
 				</p>
 

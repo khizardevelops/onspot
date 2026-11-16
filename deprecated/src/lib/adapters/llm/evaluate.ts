@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { chatCompletion, stripThinking } from './client';
-import { repairJson } from './jsonRepair';
+import { chatCompletion, stripThinking } from '#lib/adapters/llm/client.js';
+import { repairJson } from '#lib/adapters/llm/jsonRepair.js';
 import {
 	buildEvaluationMessages,
 	isCategory,
@@ -10,7 +10,7 @@ import {
 	MAX_VOCABULARY_SUGGESTIONS,
 	type EvaluationPart
 } from './prompt';
-import { EXPLANATION_MAX_MISTAKES } from './explanation';
+import { EXPLANATION_MAX_MISTAKES } from '#lib/adapters/llm/explanation.js';
 import { sentenceChunks } from '#lib/utils/textChunks.js';
 import {
 	composeExplanation,
@@ -19,18 +19,18 @@ import {
 	separateFollowUp,
 	speakableExplanation,
 	type FollowUp
-} from './explanation';
+} from '#lib/adapters/llm/explanation.js';
 import { sameWords } from '#lib/utils/words.js';
 import { languageIdByName } from '#lib/languages/index.js';
 import { couldBeWrittenIn } from '#lib/languages/textLanguage.js';
-import { MAX_EVALUATION_TOKENS } from '../../config';
+import { MAX_EVALUATION_TOKENS } from '#lib/config.js';
 import type {
 	ConnectorSuggestion,
 	EvaluationCorrection,
 	EvaluationRequest,
 	EvaluationResult,
 	VocabularySuggestion
-} from './types';
+} from '#lib/adapters/llm/types.js';
 
 /**
  * Index of the `}` that closes the object opening at `start`, honouring JSON

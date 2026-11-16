@@ -2,7 +2,7 @@
 
 import type { ReferenceElement, VirtualElement } from '@floating-ui/dom';
 import type { PhraseGloss, TextGlosses } from '#lib/adapters/db/index.js';
-import { hasMeaningAt, hasPartOfSpeechAt } from '#lib/adapters/llm/glossary.js';
+import { hasMeaningAt, hasPartOfSpeechAt } from '#lib/components/transcriptGlosses.js';
 import { rangeOfWords, selectedWordRange, snapSelectionToWords } from './wordSelection';
 
 /**

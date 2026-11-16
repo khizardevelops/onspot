@@ -10,16 +10,10 @@ import {
 	type LanguageDefinition,
 	type LanguageVoice
 } from '#lib/languages/index.js';
-import {
-	cancelLocalSttPrepare,
-	missingLocalSttBytes,
-	prepareLocalStt
-} from '#lib/speech/stt/service.js';
-import { cancelLocalVoiceDownload, preloadLocalVoice } from '#lib/speech/tts/service.js';
+import { missingLocalSttBytes } from '#lib/speech/stt/service.js';
 import { isCached } from '#lib/speech/tts/local/cachedFetch.js';
 import { voiceAssets } from '#lib/languages/voices.js';
 import { notify } from '#lib/platform/notifications.js';
-import { useCore } from '#lib/core-client/backend.js';
 import { getCoreClient } from '#lib/core-client/client.js';
 import {
 	languageCancelDownloadCore,
@@ -305,16 +299,14 @@ export async function refreshLanguageData(
 
 	let pending = check.pending;
 	let ready = allInstalled(check.installed);
-	if (useCore('language')) {
-		try {
-			const plan = await languagePlanCore(corePlanInput(language, check));
-			pending = plan.pending;
-			ready = plan.ready;
-		} catch {
-			// The driver's own cache check stays the fallback if planning fails.
-		}
-		if (token !== checkToken) return;
+	try {
+		const plan = await languagePlanCore(corePlanInput(language, check));
+		pending = plan.pending;
+		ready = plan.ready;
+	} catch {
+		// The driver's own cache check stays the fallback if planning fails.
 	}
+	if (token !== checkToken) return;
 	const nothingRequired = !check.required.stt && !check.required.voice;
 
 	store.update((state) => ({
@@ -407,68 +399,14 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 				...state,
 				downloading: downloadContents(language, missingStt + missingVoice > 0, missingExplanation > 0 ? explanationVoice : undefined)
 			}));
-			if (useCore('language')) {
-				await ensureCoreDownloadEvents();
-				if (token !== jobToken) return;
-				const result = await languageDownloadCore(corePlanInput(language, check));
-				if (token !== jobToken) return;
-				running = null;
-				phase = null;
-				if (result.status === 'cancelled') return;
-				await refreshLanguageData(language.id);
-				announceDownloadFinished(`${language.name} data is ready. You can practise offline now.`);
-				return;
-			}
-
-			const sttShare = missing > 0 ? (missingStt / missing) * 100 : 0;
-			const voiceShare = missing > 0 ? (missingVoice / missing) * 100 : 0;
-			const explanationShare = missing > 0 ? (missingExplanation / missing) * 100 : 0;
-
-			if (required.stt && missingStt > 0) {
-				phase = 'stt';
-				await prepareLocalStt(language.id, (progress) => {
-					if (token !== jobToken) return;
-					store.update((state) => ({
-						...state,
-						progress: (progress.progress / 100) * sttShare,
-						statusText: progress.status || `Downloading ${language.name} speech model…`
-					}));
-				});
-			}
-
+			await ensureCoreDownloadEvents();
 			if (token !== jobToken) return;
-
-			// Only what is missing: loading an installed voice here would only cost time.
-			if (required.voice && voice && missingVoice > 0) {
-				phase = 'voice';
-				await preloadLocalVoice(voice.id, (progress) => {
-					if (token !== jobToken) return;
-					store.update((state) => ({
-						...state,
-						progress: sttShare + (progress.progress / 100) * voiceShare,
-						statusText: progress.status || `Downloading ${language.name} voice…`
-					}));
-				});
-			}
-
-			if (token !== jobToken) return;
-
-			if (required.explanationVoice && explanationVoice && missingExplanation > 0) {
-				phase = 'voice';
-				await preloadLocalVoice(explanationVoice.id, (progress) => {
-					if (token !== jobToken) return;
-					store.update((state) => ({
-						...state,
-						progress: sttShare + voiceShare + (progress.progress / 100) * explanationShare,
-						statusText: progress.status || `Downloading the ${explanationVoice.name} explanation voice…`
-					}));
-				});
-			}
-
+			const result = await languageDownloadCore(corePlanInput(language, check));
 			if (token !== jobToken) return;
 			running = null;
 			phase = null;
-			await refreshLanguageData();
+			if (result.status === 'cancelled') return;
+			await refreshLanguageData(language.id);
 			announceDownloadFinished(`${language.name} data is ready. You can practise offline now.`);
 		} catch (error) {
 			if (token !== jobToken) return;
@@ -495,31 +433,10 @@ export function downloadLanguageData(languageId?: string): Promise<void> {
 export function cancelLanguageDownload(): void {
 	if (!running) return;
 
-	if (useCore('language')) {
-		jobToken++;
-		running = null;
-		phase = null;
-		void languageCancelDownloadCore().catch(() => undefined);
-		store.update((state) => ({
-			...state,
-			status: 'missing',
-			progress: 0,
-			statusText: '',
-			error: null
-		}));
-		void refreshLanguageData();
-		return;
-	}
-
-	const cancelling = phase;
 	jobToken++;
 	running = null;
 	phase = null;
-	// Only the worker still fetching is torn down. Once the speech model has
-	// loaded it may already be transcribing a take; killing it would fail that
-	// take with a raw "STT worker disposed." error.
-	if (cancelling === 'stt') cancelLocalSttPrepare();
-	else if (cancelling === 'voice') cancelLocalVoiceDownload();
+	void languageCancelDownloadCore().catch(() => undefined);
 	store.update((state) => ({
 		...state,
 		status: 'missing',
@@ -527,7 +444,6 @@ export function cancelLanguageDownload(): void {
 		statusText: '',
 		error: null
 	}));
-	// Part of the data (e.g. the speech model) may have finished; size what is left.
 	void refreshLanguageData();
 }
 

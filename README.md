@@ -443,6 +443,8 @@ Drive API, and set `VITE_GOOGLE_CLIENT_ID_DESKTOP` and/or `VITE_GOOGLE_CLIENT_ID
 
 | Layer | Technology |
 |---|---|
+| Core | Rust crates (`onspot-domain`, `onspot-ports`, `onspot-app`, adapters) behind one JSON bridge; no UI framework, no HTTP client, no async runtime |
+| Drivers | SvelteKit on web and Tauri on desktop/Android; a pure-Rust headless CLI in `drivers/cli` |
 | App | [SvelteKit](https://svelte.dev) (Svelte 5), static SPA via `adapter-static` |
 | Desktop | [Tauri v2](https://tauri.app) |
 | UI | [`@dvcol/neo-svelte`](https://github.com/dvcol/neo-svelte) neumorphic components, Tailwind CSS v4, a paper-textured theme with light and dark modes |
@@ -450,13 +452,16 @@ Drive API, and set `VITE_GOOGLE_CLIENT_ID_DESKTOP` and/or `VITE_GOOGLE_CLIENT_ID
 | Text-to-speech | [Supertonic 3](https://huggingface.co/Supertone/supertonic-3) (31 languages, one shared model) on the prebuilt [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) WASM runtime, plus [Piper](https://github.com/rhasspy/piper) and [piper-plus](https://github.com/ayutaz/piper-plus) VITS voices on ONNX Runtime Web, in a lazily loaded Web Worker; [ElevenLabs](https://elevenlabs.io) or an OpenAI-compatible API in the cloud |
 | Pronunciation (G2P) | eSpeak-ng (Piper voices), OpenJTalk/jpreprocess compiled to WASM (Japanese); Supertonic reads text directly |
 | Audio | Web Audio: EQ, compressor, limiter and loudness normalisation per voice |
-| Storage | SQLite everywhere: `sqlite-wasm` on OPFS in the browser, native SQLite on desktop, behind one adapter |
+| Storage | SQLite everywhere through the core `SqlDriver` port: `sqlite-wasm` on OPFS in the browser, native SQLite on desktop and in the CLI |
 | Cloud sync | Google Drive (app-private folder, OAuth 2.0) and WebDAV, as whole-database snapshots |
 | Feedback | Any OpenAI-compatible chat API (Groq, DeepSeek, custom) |
 
-Heavy work never touches the interface thread: transcription, speech synthesis and the database
-each run in their own worker, so the app stays responsive while a model downloads or a voice
-speaks.
+The Rust core owns the rules: settings, evaluation, practice state, history, insights, export,
+sync planning and usage meters. Drivers own the host details: SQLite connections, HTTP transport,
+microphones, speakers, files and notifications. Heavy work never touches the interface thread:
+transcription, speech synthesis and the database each run in their own worker, so the app stays
+responsive while a model downloads or a voice speaks. See
+[`docs/architecture/DRIVER-GUIDE.md`](docs/architecture/DRIVER-GUIDE.md) to add another driver.
 
 ## Roadmap
 

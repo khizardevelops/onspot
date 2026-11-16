@@ -15,6 +15,7 @@ pub mod language_guidance;
 pub mod pacing;
 pub mod parse;
 pub mod prompt;
+pub mod prompt_topic;
 pub mod translation;
 pub mod translation_prompt;
 

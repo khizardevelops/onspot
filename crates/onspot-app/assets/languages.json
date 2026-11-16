@@ -6,6 +6,9 @@
 			"locale": "ar",
 			"writing": "spaced",
 			"direction": "rtl",
+			"scripts": [
+				"Arabic"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -51,6 +54,9 @@
 			"locale": "bn",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Bengali"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -96,6 +102,9 @@
 			"locale": "bg",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Cyrillic"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -141,6 +150,9 @@
 			"locale": "zh",
 			"writing": "unspaced",
 			"direction": "ltr",
+			"scripts": [
+				"Han"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -186,6 +198,9 @@
 			"locale": "hr",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -231,6 +246,9 @@
 			"locale": "cs",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -276,6 +294,9 @@
 			"locale": "da",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -321,6 +342,9 @@
 			"locale": "nl",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -366,6 +390,9 @@
 			"locale": "en",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -411,6 +438,9 @@
 			"locale": "et",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -456,6 +486,9 @@
 			"locale": "fi",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -501,6 +534,9 @@
 			"locale": "fr",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -546,6 +582,9 @@
 			"locale": "de",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -591,6 +630,9 @@
 			"locale": "el",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Greek"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -636,6 +678,9 @@
 			"locale": "hi",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Devanagari"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -681,6 +726,9 @@
 			"locale": "hu",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -726,6 +774,9 @@
 			"locale": "id",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -771,6 +822,9 @@
 			"locale": "it",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -816,6 +870,11 @@
 			"locale": "ja",
 			"writing": "unspaced",
 			"direction": "ltr",
+			"scripts": [
+				"Han",
+				"Hiragana",
+				"Katakana"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -861,6 +920,10 @@
 			"locale": "ko",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Hangul",
+				"Han"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -906,6 +969,9 @@
 			"locale": "lv",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -951,6 +1017,9 @@
 			"locale": "lt",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -996,6 +1065,9 @@
 			"locale": "fa",
 			"writing": "spaced",
 			"direction": "rtl",
+			"scripts": [
+				"Arabic"
+			],
 			"local": {
 				"stt": false,
 				"tts": true,
@@ -1041,6 +1113,9 @@
 			"locale": "pl",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1086,6 +1161,9 @@
 			"locale": "pt",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1131,6 +1209,9 @@
 			"locale": "ro",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1176,6 +1257,9 @@
 			"locale": "ru",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Cyrillic"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1221,6 +1305,9 @@
 			"locale": "sk",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1266,6 +1353,9 @@
 			"locale": "sl",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1311,6 +1401,9 @@
 			"locale": "es",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1356,6 +1449,9 @@
 			"locale": "sv",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1401,6 +1497,9 @@
 			"locale": "tr",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1446,6 +1545,9 @@
 			"locale": "uk",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Cyrillic"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1491,6 +1593,9 @@
 			"locale": "ur",
 			"writing": "spaced",
 			"direction": "rtl",
+			"scripts": [
+				"Arabic"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,
@@ -1536,6 +1641,9 @@
 			"locale": "vi",
 			"writing": "spaced",
 			"direction": "ltr",
+			"scripts": [
+				"Latin"
+			],
 			"local": {
 				"stt": true,
 				"tts": true,

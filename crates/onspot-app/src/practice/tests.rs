@@ -293,6 +293,7 @@ fn config() -> PracticeConfig {
             model: String::from("stub"),
             fallback_models: Vec::new(),
         },
+        llm_configured: true,
         pace: 1.0,
         explanation_audio_available: true,
         max_seconds: 60,

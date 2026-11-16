@@ -11,7 +11,6 @@
 	import initSqlite from '@sqlite.org/sqlite-wasm';
 	import fixtureUrl from '../../../crates/adapters/repo-sql/tests/fixtures/onspot-v0.2.4.sqlite?url';
 	import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
-	import { coreBackend } from './backend';
 	import { getCoreClient } from './client';
 
 	type CheckState = 'idle' | 'running' | 'pass' | 'fail' | 'skipped';
@@ -106,7 +105,7 @@
 	}
 
 	onMount(() => {
-		if (!import.meta.env.DEV || coreBackend !== 'core') {
+		if (!import.meta.env.DEV) {
 			status = 'skipped';
 			return;
 		}

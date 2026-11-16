@@ -12,7 +12,6 @@ import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
 import { getLanguage } from '#lib/languages/index.js';
 import { notify } from '#lib/platform/notifications.js';
 import { appSettings } from './settings';
-import { useCore } from '#lib/core-client/backend.js';
 import { reminderStateCore } from '#lib/core-client/reminders.js';
 
 export type ReminderFrequency = 'frequent' | 'infrequent';
@@ -102,16 +101,6 @@ async function lastSavedPracticeTime(): Promise<number | null> {
 	}
 }
 
-/** A reminder is due, and the learner has not put it off for longer. */
-function isDue(lastPractisedAt: number | null): boolean {
-	if (lastPractisedAt === null) return false;
-
-	const snoozedUntil = parseTime(storageGet(SNOOZED_UNTIL_KEY)) ?? 0;
-	const dueAt = lastPractisedAt + intervalMs();
-	const now = Date.now();
-	return now >= dueAt && now >= snoozedUntil;
-}
-
 /** Shows a system notification once per due period, and only when the app is not in view. */
 function notifyIfInBackground(nextAt: string | null): void {
 	if (!nextAt || !document.hidden) return;
@@ -143,25 +132,15 @@ export function refreshReminders(): Promise<void> {
 			const storedPractice = parseTime(storageGet(PRACTISED_AT_KEY));
 			const savedPractice = enabled ? await lastSavedPracticeTime() : null;
 			const lastPractisedAt = Math.max(storedPractice ?? 0, savedPractice ?? 0) || null;
-			const dueAt = lastPractisedAt === null ? null : lastPractisedAt + intervalMs();
 			const snoozedUntil = parseTime(storageGet(SNOOZED_UNTIL_KEY));
 
-			if (useCore('reminders')) {
-				store.set(await reminderStateCore({
-					enabled,
-					lastPractisedAtMs: lastPractisedAt,
-					snoozedUntilMs: snoozedUntil,
-					frequency: get(appSettings).reminderFrequency,
-					nowMs: Date.now()
-				}));
-			} else {
-				store.set({
-					ready: true,
-					due: enabled && isDue(lastPractisedAt),
-					lastPractisedAt: lastPractisedAt === null ? null : new Date(lastPractisedAt).toISOString(),
-					nextAt: dueAt === null ? null : new Date(dueAt).toISOString()
-				});
-			}
+			store.set(await reminderStateCore({
+				enabled,
+				lastPractisedAtMs: lastPractisedAt,
+				snoozedUntilMs: snoozedUntil,
+				frequency: get(appSettings).reminderFrequency,
+				nowMs: Date.now()
+			}));
 
 			if (get(store).due) notifyIfInBackground(get(store).nextAt);
 		} finally {

@@ -1,7 +1,7 @@
 # ADR-002 — `VITE_CORE_BACKEND` strangler toggle
 
-- Status: accepted
-- Date: 2026-11-12 (P0)
+- Status: superseded by P8 (removed)
+- Date: 2026-11-12 (P0); removal 2026-11-14 (P8)
 - Deciders: migration lead
 
 ## Context
@@ -47,6 +47,14 @@ shipping build picks one backend, and a developer or tester rebuilds to compare.
    and `VITE_CORE_BACKEND` from `.env.example`, CI and docs in one commit; then
    run `rg VITE_CORE_BACKEND` to prove nothing is left. The definition of done
    treats a surviving reference as a failure.
+
+## Removal note (P8)
+
+The toggle was removed once every feature ran on the core. `backend.ts`, the
+allowlist, `coreBackend`, `useCore(...)` and `VITE_CORE_BACKEND` are gone from
+`src`, `.env.example`, the browser check scripts and CI. `deprecated/src/lib/core-client-backend.ts`
+keeps the old module for history only; live code must not import from
+`deprecated/`.
 
 ## Consequences
 

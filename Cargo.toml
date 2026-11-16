@@ -18,6 +18,7 @@ members = [
 	"crates/adapters/sync-webdav",
 	"crates/adapters/native-stt",
 	"bindings/onspot-bridge",
+	"drivers/cli",
 	"src-tauri",
 	"src-tauri/plugins/speech",
 ]

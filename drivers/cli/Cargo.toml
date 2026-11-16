@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "onspot-cli"
+description = "Headless onspot driver over the same Rust core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "onspot_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "onspot-cli"
+path = "src/main.rs"
+
+[dependencies]
+onspot-domain = { path = "../../crates/onspot-domain" }
+onspot-ports = { path = "../../crates/onspot-ports" }
+onspot-app = { path = "../../crates/onspot-app" }
+onspot-adapter-repo-sql = { path = "../../crates/adapters/repo-sql" }
+onspot-adapter-llm-openai = { path = "../../crates/adapters/llm-openai" }
+async-trait = "0.1"
+futures = "0.3"
+libc = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"

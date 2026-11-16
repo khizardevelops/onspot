@@ -5,7 +5,7 @@ import { WebdavProvider } from './webdav.js';
 import type { SyncProvider, SyncProviderId } from './types.js';
 
 export * from './types.js';
-export { decideSync, syncNow } from './service.js';
+export { syncNow } from './service.js';
 
 /**
  * Builds the provider for a configured destination.

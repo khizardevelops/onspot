@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { ChatMessage, EvaluationRequest } from './types';
+import type { ChatMessage, EvaluationRequest } from '#lib/adapters/llm/types.js';
 import { evaluationGuidance, levelNote } from './languageGuidance';
-import { EXPLANATION_MAX_MISTAKES } from './explanation';
+import { EXPLANATION_MAX_MISTAKES } from '#lib/adapters/llm/explanation.js';
 
 const CATEGORIES = ['grammar', 'register', 'filler', 'style'] as const;
 const SEVERITIES = ['error', 'warning', 'suggestion'] as const;

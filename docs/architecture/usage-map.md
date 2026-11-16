@@ -60,8 +60,8 @@ Tests must pin `now` and sweep 23:59:59.999, midnight, and reset instants.
 2. Port the domain/use cases and `UsageRepo`; prove legacy localStorage rows
    aggregate identically.
 3. Add `usage.snapshot`/`usage_warning`; rewire the Settings monitor and the
-   practice warning line behind `useCore('usage')`, then flip the default.
-4. Manual smoke against the legacy monitor on the same data.
+   practice warning line to the core path (the toggle is gone after P8).
+4. Manual smoke against the archived monitor (`deprecated/`) on the same data.
 
 ## Open decisions
 

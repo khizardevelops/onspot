@@ -3262,6 +3262,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "onspot-cli"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "libc",
+ "onspot-adapter-llm-openai",
+ "onspot-adapter-repo-sql",
+ "onspot-app",
+ "onspot-domain",
+ "onspot-ports",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "onspot-domain"
 version = "0.1.0"
 dependencies = [
@@ -3989,7 +4007,9 @@ dependencies = [
  "cookie",
  "cookie_store",
  "encoding_rs",
+ "futures-channel",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",

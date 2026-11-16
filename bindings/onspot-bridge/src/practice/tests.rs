@@ -57,6 +57,7 @@ fn config() -> Value {
                 "model": "stub",
                 "fallbackModels": []
             },
+            "llmConfigured": true,
             "pace": 1.0,
             "explanationAudioAvailable": true,
             "maxSeconds": 60
@@ -78,7 +79,7 @@ fn configure_creates_the_session_and_snapshot_returns_it() {
 }
 
 #[test]
-fn a_prompt_choice_falls_back_when_the_driver_returns_no_generated_prompt() {
+fn a_prompt_choice_falls_back_when_the_model_cannot_write_one() {
     let (core, replies) = core();
     let _ = futures::executor::block_on(dispatch(&core, PRACTICE_CONFIGURE, config()))
         .expect("configure");
@@ -98,14 +99,17 @@ fn a_prompt_choice_falls_back_when_the_driver_returns_no_generated_prompt() {
             let request = {
                 let events = replies.0.lock().expect("host replies");
                 events.iter().find_map(|event| match event {
-                    UiEvent::HostRequest { id, method, .. } if method == "prompt.write" => {
+                    UiEvent::HostRequest { id, method, .. } if method == "http.request" => {
                         Some(*id)
                     }
                     _ => None,
                 })
             };
             if let Some(id) = request {
-                assert!(core.host_rpc().reply(id, Ok(Value::Null)));
+                assert!(core.host_rpc().reply(
+                    id,
+                    Ok(json!({ "status": 500, "headers": {}, "body": "no" })),
+                ));
                 break;
             }
             futures::pending!();
@@ -135,4 +139,98 @@ fn gloss_cache_keys_match_the_legacy_hash() {
     assert_eq!(hash_text("Bonjour je vais é"), "d966b3b9-h");
     assert_eq!(gloss_key("Bonjour je vais", "en"), "numbered:ed9c0c8e-f");
     assert_eq!(gloss_key("Bonjour je vais", "es"), "numbered:es:ed9c0c8e-f");
+}
+
+#[test]
+fn a_legacy_json_backup_is_merged_through_the_core() {
+    let (core, _) = core();
+    let restored = futures::executor::block_on(dispatch(
+        &core,
+        crate::portability::RESTORE_LEGACY_JSON,
+        json!({
+            "json": r#"{
+                "app": "onspot",
+                "format": 1,
+                "sessions": [{ "id": "s-legacy", "title": "Old", "mode": "casual",
+                    "startedAt": "2026-01-01T00:00:00.000Z" }],
+                "attempts": [{ "id": "a-legacy", "sessionId": "s-legacy",
+                    "transcript": "Bonjour", "durationSec": 2.0, "wordCount": 1 }]
+            }"#,
+            "now": "2026-11-15T00:00:00.000Z"
+        }),
+    ))
+    .expect("legacy restore");
+    assert_eq!(restored["sessions"], 1);
+    assert_eq!(restored["attempts"], 1);
+    assert_eq!(restored["corrections"], 0);
+    assert_eq!(restored["recordings"], 0);
+    assert_eq!(restored["settings"], 0);
+
+    let history = core.hosts().history.clone().expect("history");
+    let records = core.hosts().records.clone().expect("records");
+    assert_eq!(
+        futures::executor::block_on(history.list_sessions())
+            .expect("sessions")
+            .len(),
+        1
+    );
+    assert_eq!(
+        futures::executor::block_on(records.list_attempts("s-legacy"))
+            .expect("attempts")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn submission_flush_is_a_no_op_while_offline_or_unconfigured() {
+    let (core, _) = core();
+    let offline = futures::executor::block_on(dispatch(
+        &core,
+        crate::practice::PROMPTS_FLUSH_SUBMISSIONS,
+        json!({ "endpoint": "https://example.test/prompts", "online": false }),
+    ))
+    .expect("offline flush");
+    assert_eq!(offline["sent"], 0);
+    assert_eq!(offline["pending"], 0);
+
+    let unconfigured = futures::executor::block_on(dispatch(
+        &core,
+        crate::practice::PROMPTS_FLUSH_SUBMISSIONS,
+        json!({ "endpoint": "", "online": true }),
+    ))
+    .expect("unconfigured flush");
+    assert_eq!(unconfigured["sent"], 0);
+}
+
+#[test]
+fn an_unrecorded_session_setup_is_inferred_in_the_core() {
+    let (core, _) = core();
+    let settings = json!({
+        "targetLanguage": "ja",
+        "instructionLanguage": "fa",
+        "ttsMode": "local",
+        "ttsVoice": "not-a-voice",
+        "explanationVoice": "not-a-voice",
+        "targetSpeechPace": 0.9
+    });
+    let inferred = futures::executor::block_on(dispatch(
+        &core,
+        crate::practice::SESSIONS_INFER_SETUP,
+        json!({
+            "attempts": [{ "transcript": "Bonjour je vais au marché" }],
+            "settings": settings.clone()
+        }),
+    ))
+    .expect("infer setup");
+    assert_eq!(inferred["targetLanguage"], "fr");
+    assert_ne!(inferred["ttsVoice"], "not-a-voice");
+
+    let stored = futures::executor::block_on(dispatch(
+        &core,
+        crate::practice::SESSIONS_PARSE_SETUP,
+        json!({ "setup": settings }),
+    ))
+    .expect("parse setup");
+    assert_eq!(stored["setup"]["targetLanguage"], "ja");
 }

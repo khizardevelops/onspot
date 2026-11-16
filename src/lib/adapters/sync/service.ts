@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { get } from 'svelte/store';
-import { getDatabaseAdapter, type SyncMetadata } from '#lib/adapters/db/index.js';
 import { currentRevision, getSyncedRevision, setSyncedRevision } from '#lib/adapters/db/revision.js';
-import { importSqliteBytes } from '#lib/utils/export.js';
-import { useCore } from '#lib/core-client/backend.js';
 import { syncNowCore, type SyncTarget } from '#lib/core-client/sync.js';
 import { appSettings } from '#lib/stores/settings.js';
 import { webdavPassword, webdavUsername } from '#lib/stores/secrets.js';
@@ -12,8 +9,6 @@ import {
 	SyncError,
 	type RemoteFile,
 	type SyncChoice,
-	type SyncComparison,
-	type SyncDecision,
 	type SyncProvider,
 	type SyncResult
 } from './types.js';
@@ -27,138 +22,6 @@ import {
  */
 
 type ProgressCallback = (message: string) => void;
-
-/**
- * Decides what a sync should do without performing any I/O.
- *
- * @param comparison Current local/remote state.
- * @returns `up-to-date`, a safe automatic `upload`, or `needs-choice`.
- */
-export function decideSync(comparison: SyncComparison): SyncDecision {
-	// No remote file: uploading creates it and cannot lose local data.
-	if (!comparison.remote) return 'upload';
-
-	// A remote file this device has never synced with: the two databases were
-	// created independently, so neither side is safe to pick automatically.
-	if (!comparison.lastSyncedAt) return 'needs-choice';
-
-	if (comparison.hasLocalChanges && comparison.hasRemoteChanges) return 'needs-choice';
-	if (comparison.hasLocalChanges) return 'upload';
-	if (comparison.hasRemoteChanges) return 'needs-choice';
-
-	return 'up-to-date';
-}
-
-function compareSync(
-	metadata: SyncMetadata | null,
-	remote: RemoteFile | null,
-	revision: number,
-	syncedRevision: number | null
-): SyncComparison {
-	const hasLocalChanges = syncedRevision === null || syncedRevision !== revision;
-	const hasRemoteChanges = remote
-		? !metadata?.etag || metadata.etag !== remote.etag
-		: Boolean(metadata?.remoteFileId);
-
-	return {
-		localRevision: revision,
-		syncedRevision,
-		localSize: null,
-		remote,
-		lastSyncedAt: metadata?.lastSyncedAt ?? null,
-		hasLocalChanges,
-		hasRemoteChanges
-	};
-}
-
-async function rememberSync(
-	provider: SyncProvider,
-	remote: RemoteFile,
-	revision: number
-): Promise<void> {
-	const database = await getDatabaseAdapter();
-	const now = new Date().toISOString();
-
-	await database.setSyncMetadata({
-		provider: provider.id,
-		remoteFileId: remote.id,
-		etag: remote.etag,
-		lastSyncedAt: now,
-		cursor: String(revision),
-		updatedAt: now
-	});
-
-	setSyncedRevision(provider.id, revision);
-}
-
-async function uploadSnapshot(
-	provider: SyncProvider,
-	remote: RemoteFile | null,
-	comparison: SyncComparison,
-	revision: number,
-	onProgress?: ProgressCallback
-): Promise<SyncResult> {
-	onProgress?.('Preparing this device’s backup…');
-
-	const database = await getDatabaseAdapter();
-	const localBytes = await database.exportSqliteFile();
-
-	onProgress?.('Uploading this device’s backup…');
-
-	const uploaded = await provider.upload(localBytes, remote);
-	await rememberSync(provider, uploaded, revision);
-
-	return {
-		decision: 'upload',
-		completed: true,
-		comparison: {
-			...comparison,
-			localSize: localBytes.byteLength,
-			remote: uploaded,
-			syncedRevision: revision,
-			hasLocalChanges: false,
-			hasRemoteChanges: false,
-			lastSyncedAt: new Date().toISOString()
-		}
-	};
-}
-
-async function downloadSnapshot(
-	provider: SyncProvider,
-	remote: RemoteFile | null,
-	comparison: SyncComparison,
-	onProgress?: ProgressCallback
-): Promise<SyncResult> {
-	if (!remote) {
-		throw new SyncError('There is no cloud backup to download yet. Upload this device first.');
-	}
-
-	onProgress?.('Downloading the cloud backup…');
-	const cloudBytes = await provider.download(remote);
-
-	onProgress?.('Replacing this device’s database…');
-	await importSqliteBytes(cloudBytes);
-
-	// The import is a content write, so the restored database has a new
-	// revision. Mark exactly that revision as synced.
-	const revision = currentRevision();
-	await rememberSync(provider, remote, revision);
-
-	return {
-		decision: 'download',
-		completed: true,
-		comparison: {
-			...comparison,
-			localRevision: revision,
-			syncedRevision: revision,
-			localSize: cloudBytes.byteLength,
-			remote,
-			hasLocalChanges: false,
-			hasRemoteChanges: false,
-			lastSyncedAt: new Date().toISOString()
-		}
-	};
-}
 
 let activeSync: Promise<SyncResult> | null = null;
 
@@ -240,39 +103,5 @@ async function runSync(
 	choice: SyncChoice | undefined,
 	onProgress?: ProgressCallback
 ): Promise<SyncResult> {
-	if (useCore('sync')) return runSyncThroughCore(provider, choice, onProgress);
-
-	const database = await getDatabaseAdapter();
-	const metadata = await database.getSyncMetadata(provider.id);
-	const remote = await provider.getRemote();
-
-	// Capture the revision before exporting or uploading. A write that happens
-	// during the transfer then makes the next comparison see unsynced content.
-	const revision = currentRevision();
-	const comparison = compareSync(
-		metadata,
-		remote,
-		revision,
-		getSyncedRevision(provider.id)
-	);
-	const decision =
-		choice === 'download'
-			? 'download'
-			: choice === 'upload'
-				? 'upload'
-				: decideSync(comparison);
-
-	if (!choice) {
-		if (decision === 'up-to-date' || decision === 'needs-choice') {
-			return { decision, comparison, completed: false };
-		}
-
-		return uploadSnapshot(provider, remote, comparison, revision, onProgress);
-	}
-
-	if (choice === 'download') {
-		return downloadSnapshot(provider, remote, comparison, onProgress);
-	}
-
-	return uploadSnapshot(provider, remote, comparison, revision, onProgress);
+	return runSyncThroughCore(provider, choice, onProgress);
 }

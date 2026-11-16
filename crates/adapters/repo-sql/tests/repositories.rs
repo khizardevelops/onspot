@@ -5,7 +5,7 @@
 //! adapter wrote, including the tolerant JSON columns.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -15,12 +15,14 @@ use onspot_domain::{
     Attempt, AudioAsset, Correction, FollowUp, GlossedRange, PhraseGloss, Prompt, PromptSubmission,
     Session, SessionSetup, SyncMetadata, TextGlosses, TranslationBreakdownItem, TranslationSet,
 };
-use onspot_ports::RecordsStore;
+use onspot_ports::{RecordsStore, SqlValue};
+
+include!("fixtures/ensure.rs");
 
 static NEXT_FIXTURE: AtomicU32 = AtomicU32::new(0);
 
 fn fixture_copy() -> PathBuf {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/onspot-v0.2.4.sqlite");
+    let source = ensure_v024_fixture();
     let directory =
         std::env::temp_dir().join(format!("onspot-repo-records-{}", std::process::id()));
     std::fs::create_dir_all(&directory).expect("temp directory");
@@ -365,5 +367,72 @@ fn the_fixture_reads_through_the_full_repositories() {
                 .len(),
             2
         );
+    });
+}
+
+#[test]
+fn the_fixture_translations_and_glosses_interoperate_with_the_core() {
+    block_on(async {
+        let path = fixture_copy();
+        let driver: Arc<dyn onspot_ports::SqlDriver> =
+            Arc::new(RusqliteDriver::open(&path).expect("open fixture"));
+        migrate(&*driver).await.expect("migrate fixture");
+        let store = SqlRecordsStore::new(driver.clone());
+
+        let translations = store
+            .get_translations("a-1")
+            .await
+            .expect("legacy translations")
+            .expect("a-1 translations");
+        assert_eq!(translations.version, Some(3));
+        assert_eq!(translations.instruction_language.as_deref(), Some("en"));
+        assert_eq!(translations.idiomatic, "Hello, my name is Ana.");
+        assert_eq!(translations.literal, "Good day, I call myself Ana.");
+        assert_eq!(translations.word_for_word, "Hello I me call Ana");
+        assert!(translations.idiomatic_variants.is_empty());
+        assert!(translations.word_breakdown.is_empty());
+
+        assert_eq!(
+            store.get_word_glosses("a-1").await.expect("legacy glosses"),
+            None
+        );
+
+        let glosses = BTreeMap::from([(
+            String::from("legacy-hash"),
+            TextGlosses {
+                words: vec![String::from("hola")],
+                phrases: Vec::new(),
+                pos: Some(vec![String::from("interjection")]),
+                pos_sections: Some(vec![GlossedRange { start: 0, end: 1 }]),
+                sections: Some(vec![GlossedRange { start: 0, end: 1 }]),
+            },
+        )]);
+        assert!(store
+            .set_word_glosses("a-1", &glosses)
+            .await
+            .expect("write glosses"));
+        assert_eq!(
+            store.get_word_glosses("a-1").await.expect("read glosses"),
+            Some(glosses)
+        );
+
+        let rows = driver
+            .select(
+                "SELECT translations, word_glosses FROM attempts WHERE id = ?1",
+                &[SqlValue::Text(String::from("a-1"))],
+            )
+            .await
+            .expect("raw fixture row");
+        let translations_json = rows[0]
+            .get("translations")
+            .and_then(SqlValue::as_str)
+            .expect("translations text");
+        assert!(translations_json.contains("\"version\":3"));
+        let glosses_json = rows[0]
+            .get("word_glosses")
+            .and_then(SqlValue::as_str)
+            .expect("glosses text");
+        assert!(glosses_json.contains("\"legacy-hash\""));
+        assert!(glosses_json.contains("\"posSections\""));
     });
 }

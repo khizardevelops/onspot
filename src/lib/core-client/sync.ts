@@ -46,25 +46,6 @@ function syncErrorFrom(error: unknown): SyncError {
 }
 
 /**
- * Asks the core what a sync should do for the current comparison.
- *
- * @param comparison Local revision, remote file and change flags.
- * @param choice An explicit learner choice after a conflict, if any.
- * @returns The policy decision.
- */
-export async function decideSyncCore(
-	comparison: SyncComparison,
-	choice?: SyncChoice
-): Promise<SyncDecision> {
-	const client = await getCoreClient();
-	const response = await client.command<{ decision: SyncDecision }>('sync.decide', {
-		comparison,
-		choice
-	});
-	return response.decision;
-}
-
-/**
  * Runs one whole-database sync in the core.
  *
  * @param target The configured destination.

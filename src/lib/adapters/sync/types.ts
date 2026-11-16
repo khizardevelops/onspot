@@ -38,12 +38,6 @@ export interface SyncProvider {
 	connect(): Promise<SyncAccount>;
 	/** Forgets this device's authorization. Remote data is untouched. */
 	disconnect(): Promise<void>;
-	/** Returns the current remote snapshot, or null when none exists yet. */
-	getRemote(): Promise<RemoteFile | null>;
-	/** Downloads the remote snapshot bytes. */
-	download(remote: RemoteFile): Promise<Uint8Array>;
-	/** Creates or replaces the remote snapshot and returns its new metadata. */
-	upload(data: Uint8Array, remote: RemoteFile | null): Promise<RemoteFile>;
 }
 
 /** What the learner is asked to choose when both sides changed. */

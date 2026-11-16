@@ -5,7 +5,7 @@
 	 * One limit of one service: what is left, a gauge that empties as it is
 	 * used, and where the figures came from.
 	 */
-	import type { UsageMeter } from '#lib/usage/monitor.js';
+	import type { UsageMeter } from '#lib/usage/types.js';
 	import { formatAgo, formatPortion, formatReset } from '#lib/usage/format.js';
 	import { NeoProgressBar } from '@dvcol/neo-svelte/progress';
 

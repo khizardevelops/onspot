@@ -7,7 +7,6 @@
 	 * layout only in dev builds; `bun run build` contains none of it.
 	 */
 	import { onMount } from 'svelte';
-	import { coreBackend, useCore } from './backend';
 	import { getCoreClient } from './client';
 	import type { InitResponse, PingResponse, UiEvent } from './types.gen';
 
@@ -45,7 +44,7 @@
 <aside class="core-probe" data-testid="core-bridge-probe">
 	<strong>core bridge · {transport}</strong>
 	<p data-testid="core-probe-backend">
-		backend {coreBackend} · probe {useCore('probe') ? 'on core' : 'legacy'}
+		probe on core
 	</p>
 	{#if failure}
 		<p class="failure" data-testid="core-probe-failure">{failure}</p>

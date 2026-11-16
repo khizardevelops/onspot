@@ -12,9 +12,9 @@
 import { countWords } from '#lib/config.js';
 import { couldBeWrittenIn } from '#lib/languages/textLanguage.js';
 import type { RunMode } from '#lib/adapters/db/index.js';
-import { chatCompletion } from './client';
+import { chatCompletion } from '#lib/adapters/llm/client.js';
 import { extractJson } from './evaluate';
-import type { LlmEndpoint } from './types';
+import type { LlmEndpoint } from '#lib/adapters/llm/types.js';
 
 /**
  * A prompt short enough to read in the practice bar's two lines: a task of 5–6

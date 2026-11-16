@@ -13,7 +13,7 @@ use onspot_domain::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{CancelToken, CoreError};
+use crate::{CancelToken, CoreError, GeneratedPrompt};
 
 /// One HTTP request to an OpenAI-compatible endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +117,33 @@ pub trait HttpClient {
     }
 }
 
+/// What the next speaking prompt should be about.
+///
+/// The practice loop fills this from its configuration; the LLM adapter writes
+/// and validates the prompt. Language names and scripts come from the core's
+/// catalogue so no driver has to duplicate prompt policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptTopicRequest {
+    pub endpoint: LlmEndpoint,
+    /// The language the prompt must be written in, e.g. `English`.
+    pub instruction_language: String,
+    /// Its ISO 639-1 code, used to check the model answered in that language.
+    pub instruction_language_id: String,
+    /// The Unicode scripts that language uses.
+    #[serde(default)]
+    pub instruction_scripts: Vec<String>,
+    /// The language being studied, e.g. `French`.
+    pub target_language: String,
+    /// The learner's level, e.g. `B1`.
+    pub level: String,
+    /// The session's tone: `exam`, `casual` or `freeflow`.
+    pub mode: String,
+    /// Titles already offered, so the model does not repeat them.
+    #[serde(default)]
+    pub avoid_topics: Vec<String>,
+}
+
 /// Builds prompts, calls the endpoint and validates its answer.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait::async_trait]
@@ -126,6 +153,13 @@ pub trait LlmProvider: Send + Sync {
         request: &EvaluationRequest,
         token: &CancelToken,
     ) -> Result<EvaluationResult, CoreError>;
+
+    /// Writes and validates one speaking prompt in the instruction language.
+    async fn write_prompt(
+        &self,
+        request: &PromptTopicRequest,
+        token: &CancelToken,
+    ) -> Result<GeneratedPrompt, CoreError>;
 
     async fn test_connection(
         &self,
@@ -172,6 +206,12 @@ pub trait LlmProvider {
         request: &EvaluationRequest,
         token: &CancelToken,
     ) -> Result<EvaluationResult, CoreError>;
+    /// Writes and validates one speaking prompt in the instruction language.
+    async fn write_prompt(
+        &self,
+        request: &PromptTopicRequest,
+        token: &CancelToken,
+    ) -> Result<GeneratedPrompt, CoreError>;
 
     async fn test_connection(
         &self,

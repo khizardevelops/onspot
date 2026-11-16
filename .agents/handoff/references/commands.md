@@ -80,9 +80,9 @@ installed. After switching to a branch with different dependencies, run
   without the target, **the script falls back to `rust-src` + `-Z build-std=std,panic_abort`**
   (`RUSTC_BOOTSTRAP=1` is set internally); a stock `rust-std` component from another build is not
   metadata-compatible. The prebuilt `wasm-bindgen-0.2.130-x86_64-unknown-linux-musl` archive works
-  on PATH. The web build defaults to `core`, so run this before `bun run build` for a deploy; the
-  Pages/Cloudflare workflows and `scripts/cf-deploy.sh` now do it themselves.
-  `VITE_CORE_BACKEND=legacy` remains the fallback selector.
+  on PATH. The web build always runs on the core (the P8 cutover removed `VITE_CORE_BACKEND`), so
+  run this before `bun run build` for a deploy; the Pages/Cloudflare workflows and
+  `scripts/cf-deploy.sh` now do it themselves.
 - `bun run test:sync` — real Chrome + an in-memory WebDAV server with CORS: connect (Basic auth),
   first upload, a no-op second sync, a touched remote that returns `needs-choice`, an explicit
   download that restores the database, and a corrupt remote that is rejected before replacement.
@@ -112,9 +112,8 @@ installed. After switching to a branch with different dependencies, run
   history read/write and the secret-leak regression. Needs `bun run bridge:wasm` first and
   `CHROME_PATH` when Chrome is not in a standard location.
 - The dev probe (bottom-left, `data-testid="core-bridge-probe"`) runs `core.ping` and shows the last
-  three events. It exists only in dev builds. `VITE_CORE_BACKEND=core` (or
-  `localStorage['onspot.core-backend.v1']`) flips the backend; features still need to be on the
-  allowlist in `src/lib/core-client/backend.ts`.
+  three events. It exists only in dev builds. The legacy backend toggle and its allowlist are
+  gone; the app always talks to the Rust core.
 
 ## Desktop app (Tauri)
 - **Development, with hot reload: `bun run tauri dev`.** One command: it starts onspot's Vite dev
@@ -260,6 +259,21 @@ Cross-Origin-Embedder-Policy: credentialless
   ``linker `x86_64-linux-gnu-gcc` not found``.
 - Desktop database path: the SQL plugin anchors `sqlite:` to the app config dir
   (`onspot.db`). Browser database: OPFS, pool `onspot-pool`, virtual file `/onspot.db`.
+
+## CLI driver
+- `cargo build -p onspot-cli` — build the headless driver (`target/debug/onspot-cli`); add `--offline`
+  if the registry is unreachable.
+- `cargo run -p onspot-cli --offline -- --help` — command list. It shares `onspot-app` with the GUI:
+  `settings get|set`, `sessions list|show`, `evaluate`, `insights`, `export session` and
+  `export database`.
+- `onspot-cli --db PATH --keys-file PATH <command>` overrides the defaults. Without `--db` it opens
+  `config_dir()/app.onspot.desktop/onspot.db`; without `--keys-file` it reads `ONSPOT_KEYS_FILE`.
+  Keys resolve from `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `ONSPOT_API_KEY` or
+  `ONSPOT_<PROVIDER>_API_KEY`, then the key file.
+- Secrets are never printed; `--json` switches the structured output. `evaluate --transcript FILE`
+  is the only networked command and SIGINT cancels it cleanly.
+- `cargo test -p onspot-cli` — 7 integration tests (settings, empty store, Markdown,
+  request shape, empty transcript, stub-HTTP evaluate, Ctrl-C).
 
 ## After a fresh clone or `bun install --frozen-lockfile`
 The French phonemizer assets are gitignored (18 MB). Restore them into `static/` (not `public/`):

@@ -1,0 +1,622 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { writable } from 'svelte/store';
+import { getDatabaseAdapter } from '#lib/adapters/db/index.js';
+import type { RunMode } from '#lib/adapters/db/index.js';
+import { useCore } from '#lib/core-client/backend.js';
+import { getCoreClient } from '#lib/core-client/client.js';
+import type { AppSettings as CoreAppSettings } from '#lib/core-client/types.gen.js';
+import type { LlmModelId, LlmProviderId } from '#lib/adapters/llm/index.js';
+import { AUTOMATIC_MODEL, getProvider, isChatModel } from '#lib/adapters/llm/index.js';
+import {
+	OFFERED_LANGUAGES,
+	DEFAULT_INSTRUCTION_LANGUAGE_ID,
+	DEFAULT_LANGUAGE_ID,
+	INSTRUCTION_LANGUAGES,
+	NEUTRAL_TUNING,
+	defaultInstructionLanguageFor,
+	getExplanationVoice,
+	getLanguage,
+	getVoice,
+	type VoiceTuning
+} from '#lib/languages/index.js';
+import {
+	DEFAULT_ELEVENLABS_VOICE_ID,
+	RETIRED_DEFAULT_ELEVENLABS_VOICE_ID
+} from '#lib/speech/tts/cloud/elevenLabsVoices.js';
+
+/**
+ * Non-secret preferences, persisted in the database so they sync with the
+ * learner's data. Secrets live in `stores/secrets.ts` instead.
+ */
+export interface AppSettings {
+	/** CEFR level used in the LLM prompt. */
+	level: string;
+	/** Practice tone: formal exam vs casual. */
+	mode: RunMode;
+	/** Local Whisper or BYOK cloud transcription. */
+	sttMode: 'local' | 'cloud';
+	/** Local Piper or an OpenAI-compatible speech API. */
+	ttsMode: 'local' | 'cloud';
+	/** Local TTS voice id from the registry. */
+	ttsVoice: string;
+	/**
+	 * The read-back voice last chosen for each studied language, by language
+	 * code, so switching back to a language brings its voice back
+	 * (`withRememberedVoices`).
+	 */
+	targetVoiceByLanguage: Record<string, string>;
+	/**
+	 * How fast the target-language voice speaks on the device, as a share of
+	 * its natural pace (`SPEECH_PACES`): read-back, tapped words and the
+	 * target-language words of explanations. Slower helps a learner follow.
+	 */
+	targetSpeechPace: number;
+	/** Correction endpoint: a cloud provider or a local OpenAI-compatible server. */
+	correctionMode: 'cloud' | 'local';
+	/** Local correction server, e.g. LM Studio, llama.cpp or Ollama. */
+	localLlmUrl: string;
+	localLlmModel: string;
+	/** Cloud read-back provider. Both stay fully supported. */
+	ttsCloudProvider: 'elevenlabs' | 'openai';
+	/** ElevenLabs model and voice, kept independently of the OpenAI settings. */
+	elevenLabsModel: string;
+	elevenLabsVoiceId: string;
+	/** OpenAI-compatible endpoint, model and voice (also used by local servers). */
+	ttsApiBaseUrl: string;
+	ttsApiModel: string;
+	ttsApiVoice: string;
+	llmProvider: LlmProviderId;
+	/**
+	 * The model for Groq and DeepSeek: `AUTOMATIC_MODEL` lets onspot choose per
+	 * request (by the languages, the request's size and each model's limits);
+	 * a model id pins that model.
+	 */
+	llmModel: LlmModelId;
+	/** Base URL for the custom OpenAI-compatible provider. */
+	customBaseUrl: string;
+	/** Model name for the custom provider (free text). */
+	customModel: string;
+	/**
+	 * The on-device voice for the English of explanations (see
+	 * `explanationVoicesFor`); its target-language words keep `ttsVoice`.
+	 * Empty until the learner picks one.
+	 */
+	explanationVoice: string;
+	/** The explanation voice last chosen for each language of instruction, by language code. */
+	explanationVoiceByLanguage: Record<string, string>;
+	targetLanguage: string;
+	/**
+	 * The language the learner is taught in (`INSTRUCTION_LANGUAGES`):
+	 * explanations, translations and word meanings are written in it.
+	 */
+	instructionLanguage: string;
+	/** Which BYOC destination the learner configured, if any. */
+	syncProvider: 'off' | 'google-drive' | 'webdav';
+	/** WebDAV collection URL, without the backup path. */
+	webdavUrl: string;
+	/** WebDAV path of the snapshot inside the collection. */
+	webdavPath: string;
+	/**
+	 * Advanced per-voice audio adjustments (volume/EQ) layered on top of each
+	 * voice's approved processing profile. Keyed by voice id; absent = neutral.
+	 */
+	voiceTunings: Record<string, VoiceTuning>;
+	/** A gentle nudge to practise after a gap; off until the learner asks for it. */
+	practiceReminders: boolean;
+	/** How often reminders may appear: about daily, or every few days. */
+	reminderFrequency: 'frequent' | 'infrequent';
+	/**
+	 * When true, word-hover tooltips show the word's part of speech (noun, verb,
+	 * adjective, etc.) on a second line below the translation.
+	 */
+	showWordPos: boolean;
+	/**
+	 * Share generated speaking prompts (title, task, languages, level, mode)
+	 * with the shared prompt database. On by default; turning it off stops all
+	 * queueing and sending, and prompts generated while it is off stay local.
+	 */
+	promptContributions: boolean;
+}
+
+/**
+ * Compile-time guard: every core document field must also exist in the store's
+ * narrower view (whose choices are unions). Regenerate `types.gen.ts` after a
+ * Rust field change and this fails until the store is updated.
+ */
+type SettingsDocumentCoverage = AppSettings extends CoreAppSettings ? true : never;
+const settingsDocumentCoverage: SettingsDocumentCoverage = true;
+void settingsDocumentCoverage;
+
+/**
+ * The speaking paces a learner can choose for the target-language voice, as
+ * shares of the voice's natural pace. The voices slow down when they make the
+ * audio (Supertonic's duration, Piper's length scale), which sounds natural,
+ * unlike slowing a clip down when it plays.
+ */
+export const SPEECH_PACES = [0.8, 0.9, 1, 1.1] as const;
+
+/** A little slower than natural: the user found the voices' natural pace too fast to follow (2026-11-08). */
+export const DEFAULT_TARGET_SPEECH_PACE = 0.9;
+
+export const DEFAULT_SETTINGS: AppSettings = {
+	level: 'B1',
+	mode: 'exam',
+	sttMode: 'local',
+	ttsMode: 'local',
+	ttsVoice: 'piper-tom-medium',
+	targetVoiceByLanguage: {},
+	targetSpeechPace: DEFAULT_TARGET_SPEECH_PACE,
+	correctionMode: 'cloud',
+	localLlmUrl: 'http://localhost:1234/v1',
+	localLlmModel: '',
+	ttsCloudProvider: 'elevenlabs',
+	elevenLabsModel: 'eleven_multilingual_v2',
+	elevenLabsVoiceId: DEFAULT_ELEVENLABS_VOICE_ID,
+	ttsApiBaseUrl: 'https://api.openai.com/v1',
+	ttsApiModel: 'gpt-4o-mini-tts',
+	ttsApiVoice: 'alloy',
+	llmProvider: 'groq',
+	llmModel: AUTOMATIC_MODEL,
+	customBaseUrl: '',
+	customModel: '',
+	explanationVoice: '',
+	explanationVoiceByLanguage: {},
+	// French is currently the only approved language. A usable default avoids an
+	// indeterminate first boot that otherwise stays at “Checking language data…”.
+	targetLanguage: DEFAULT_LANGUAGE_ID,
+	instructionLanguage: DEFAULT_INSTRUCTION_LANGUAGE_ID,
+	syncProvider: 'off',
+	webdavUrl: '',
+	webdavPath: '/onspot/onspot.sqlite',
+	voiceTunings: {},
+	practiceReminders: false,
+	reminderFrequency: 'frequent',
+	showWordPos: false,
+	promptContributions: true
+};
+
+const FIELD_PREFIX = 'onspot.setting.';
+
+/**
+ * Present once a database's saved model has been moved to Automatic. Without
+ * it, the provider's preset model counts as never chosen; with it, a learner
+ * who later picks that same model keeps it.
+ */
+const AUTOMATIC_MODEL_MIGRATION_KEY = 'onspot.migration.automatic-model';
+
+/** CEFR levels offered in Settings. */
+export const LEVELS = ['A2', 'B1', 'B2', 'C1'] as const;
+
+/** Allowed values of the settings rendered as fixed-choice selects. */
+const CHOICES = {
+	level: LEVELS,
+	mode: ['exam', 'casual', 'freeflow'],
+	sttMode: ['local', 'cloud'],
+	ttsMode: ['local', 'cloud'],
+	ttsCloudProvider: ['elevenlabs', 'openai'],
+	correctionMode: ['cloud', 'local'],
+	llmProvider: ['groq', 'deepseek', 'custom'],
+	syncProvider: ['off', 'google-drive', 'webdav'],
+	reminderFrequency: ['frequent', 'infrequent']
+} as const satisfies Partial<Record<keyof AppSettings, readonly string[]>>;
+const store = writable<AppSettings>({ ...DEFAULT_SETTINGS });
+
+/** True once persisted settings have been loaded; prevents first-run flicker. */
+export const settingsReady = writable(false);
+
+let hydrated = false;
+/** Set while hydration writes the loaded snapshot, so it is never persisted back. */
+let applying = false;
+/** Fields changed before hydration finished; they win over the stored values. */
+const pending = new Map<keyof AppSettings, AppSettings[keyof AppSettings]>();
+let known: AppSettings = { ...DEFAULT_SETTINGS };
+
+store.subscribe((value) => {
+	// Hydration reads the database, which can take a moment on a cold start. A
+	// choice the learner makes before it finishes must not be reverted when the
+	// stored snapshot lands, so remember it and merge it in `initSettings`.
+	if (!hydrated && !applying) {
+		for (const field of Object.keys(value) as (keyof AppSettings)[]) {
+			if (value[field] !== known[field]) pending.set(field, value[field]);
+		}
+	}
+	known = value;
+	if (!hydrated || applying) return;
+	void persist(value);
+});
+
+/** Last JSON written per field; only fields that changed are written again. */
+const written = new Map<string, string>();
+let queued: AppSettings | null = null;
+let writing = false;
+
+/** Set after a bridge storage failure so the rest of the session uses the legacy path. */
+let coreStorageBroken = false;
+
+type SettingRow = { key: string; value: string };
+
+/** Reads the raw rows through the core when this feature is on it. */
+async function readSettingRows(): Promise<SettingRow[]> {
+	if (useCore('settings') && !coreStorageBroken) {
+		try {
+			const client = await getCoreClient();
+			const result = await client.command<{ settings: SettingRow[] }>('settings.list');
+			return result.settings;
+		} catch (error) {
+			// A release built without the wasm package must still open Settings.
+			coreStorageBroken = true;
+			console.error('[settings] core read failed; using the legacy adapter', error);
+		}
+	}
+	return (await getDatabaseAdapter()).listSettings();
+}
+
+/** Writes one row through the same path that read it. */
+async function writeSetting(key: string, value: string): Promise<void> {
+	if (useCore('settings') && !coreStorageBroken) {
+		try {
+			const client = await getCoreClient();
+			await client.command('settings.set', { key, value });
+			return;
+		} catch (error) {
+			coreStorageBroken = true;
+			console.error('[settings] core write failed; using the legacy adapter', error);
+		}
+	}
+	await (await getDatabaseAdapter()).setSetting(key, value);
+}
+
+/**
+ * Adopts a core-normalised document: every field the core returned is now the
+ * value on disk, so the driver never writes defaults or stale values back.
+ */
+function adoptCoreSettings(
+	settings: AppSettings,
+	inFlight?: AppSettings,
+	latest?: AppSettings | null
+): void {
+	written.clear();
+	for (const [field, value] of Object.entries(settings)) {
+		written.set(field, JSON.stringify(value));
+	}
+	let adopted = settings;
+	if (inFlight && latest) {
+		// A field edited while the patch was in flight is newer than the reply;
+		// keep it in the store and leave `written` at the reply's value so the
+		// queued snapshot patches it next.
+		adopted = { ...settings };
+		for (const field of Object.keys(latest) as (keyof AppSettings)[]) {
+			if (latest[field] !== inFlight[field]) {
+				(adopted as unknown as Record<string, unknown>)[field] = latest[field];
+			}
+		}
+	}
+	applying = true;
+	store.set(adopted);
+	applying = false;
+}
+
+/**
+ * Writes are serialized and coalesced: typing in a field produces many store
+ * updates, and overlapping full-snapshot writes could land out of order and
+ * leave an older value in the database.
+ */
+async function persist(value: AppSettings): Promise<void> {
+	queued = value;
+	if (writing) return;
+	writing = true;
+	try {
+		while (queued) {
+			const next = queued;
+			queued = null;
+			try {
+				const patch: Record<string, string> = {};
+				for (const [field, fieldValue] of Object.entries(next)) {
+					const json = JSON.stringify(fieldValue);
+					if (written.get(field) === json) continue;
+					patch[field] = json;
+				}
+				if (Object.keys(patch).length === 0) continue;
+
+				if (useCore('settings') && !coreStorageBroken) {
+					try {
+						const client = await getCoreClient();
+						const result = await client.command<{ settings: AppSettings }>('settings.patch', {
+							patch
+						});
+						adoptCoreSettings(result.settings, next, queued);
+						continue;
+					} catch (error) {
+						coreStorageBroken = true;
+						console.error('[settings] core write failed; using the legacy adapter', error);
+					}
+				}
+
+				for (const [field, json] of Object.entries(patch)) {
+					await writeSetting(`${FIELD_PREFIX}${field}`, json);
+					written.set(field, json);
+				}
+			} catch (error) {
+				console.error('[settings] failed to persist', error);
+			}
+		}
+	} finally {
+		writing = false;
+	}
+}
+
+/**
+ * Saves the fields chosen while the stored settings were loading. The load
+ * applies everything without saving (it must not write defaults back), so
+ * these would otherwise stay unsaved until some other setting changed, and
+ * be lost on the next start.
+ */
+async function persistChosenWhileLoading(value: AppSettings, fields: (keyof AppSettings)[]): Promise<void> {
+	try {
+		const patch: Record<string, string> = {};
+		for (const field of fields) {
+			const json = JSON.stringify(value[field]);
+			if (written.get(field) === json) continue;
+			patch[field] = json;
+		}
+		if (Object.keys(patch).length === 0) return;
+
+		if (useCore('settings') && !coreStorageBroken) {
+			const client = await getCoreClient();
+			const result = await client.command<{ settings: AppSettings }>('settings.patch', { patch });
+			adoptCoreSettings(result.settings);
+			return;
+		}
+
+		for (const [field, json] of Object.entries(patch)) {
+			await writeSetting(`${FIELD_PREFIX}${field}`, json);
+			written.set(field, json);
+		}
+	} catch (error) {
+		console.error('[settings] failed to persist a choice made while loading', error);
+	}
+}
+
+/** Loads persisted settings from the database. Safe to call once on startup. */
+export async function initSettings(): Promise<void> {
+	// Also runs after a database restore or a cloud download. Suspend
+	// persistence until the loaded values are in the store, so filling in
+	// defaults for fields the restored file lacks cannot write a change back
+	// into the database (and bump the sync revision) during rehydration.
+	hydrated = false;
+
+	if (useCore('settings') && !coreStorageBroken) {
+		try {
+			const client = await getCoreClient();
+			const result = await client.command<{ settings: AppSettings }>('settings.load');
+			const loaded = result.settings as unknown as AppSettings;
+			// Adopt the stored document first, so its fields stay in `written` and
+			// are not patched back. A choice made while loading is then a real
+			// difference and the subscriber's `persist` writes it.
+			const chosenWhileLoading = new Map(pending);
+			pending.clear();
+			adoptCoreSettings(loaded);
+			hydrated = true;
+			settingsReady.set(true);
+			if (chosenWhileLoading.size > 0) {
+				store.update((value) => {
+					const merged = { ...value };
+					for (const [field, fieldValue] of chosenWhileLoading) {
+						(merged as unknown as Record<string, unknown>)[field] = fieldValue;
+					}
+					return merged;
+				});
+			}
+			return;
+		} catch (error) {
+			coreStorageBroken = true;
+			console.error('[settings] core load failed; using the legacy adapter', error);
+		}
+	}
+
+	const rows = await readSettingRows();
+	const loaded: AppSettings = { ...DEFAULT_SETTINGS };
+	// Also runs after a database restore: what is on disk is now the restored file.
+	written.clear();
+	for (const row of rows) {
+		if (!row.key.startsWith(FIELD_PREFIX)) continue;
+		const field = row.key.slice(FIELD_PREFIX.length) as keyof AppSettings;
+		if (!(field in loaded)) continue;
+		written.set(field, row.value);
+		try {
+			// Values are JSON-encoded; ignore anything malformed.
+			(loaded as unknown as Record<string, unknown>)[field] = JSON.parse(row.value);
+		} catch {
+			// keep the default
+		}
+	}
+	// Settings written before the language registry used ids stored the English
+	// name ("French"). Normalise to the registry id, or fall back to the default
+	// language.
+	const match = OFFERED_LANGUAGES.find(
+		(language) => language.id === loaded.targetLanguage || language.name === loaded.targetLanguage
+	);
+	// A corrupt/obsolete setting must not leave the app without a language. When
+	// more languages are approved, this remains a safe default rather than a
+	// null state that prevents the data gate from resolving.
+	loaded.targetLanguage = match?.id ?? DEFAULT_LANGUAGE_ID;
+	// Cloud-only languages must not load with stale local modes (e.g. settings
+	// written before the language became cloud-only, or a restored backup).
+	const targetLanguage = getLanguage(loaded.targetLanguage);
+	if (targetLanguage) {
+		if (!targetLanguage.local.stt) loaded.sttMode = 'cloud';
+		if (!targetLanguage.local.tts) loaded.ttsMode = 'cloud';
+		if (!targetLanguage.local.correction) loaded.correctionMode = 'cloud';
+	}
+	loaded.voiceTunings = sanitizeTunings(loaded.voiceTunings);
+	// An unknown instruction language, or the studied language itself, falls back to the default.
+	const teachable = INSTRUCTION_LANGUAGES.some(
+		(language) => language.id === loaded.instructionLanguage && language.id !== loaded.targetLanguage
+	);
+	if (!teachable) loaded.instructionLanguage = defaultInstructionLanguageFor(loaded.targetLanguage);
+	// A voice saved for another language (or removed from the registry) would
+	// leave the Voice select blank and read-backs on an unknown voice.
+	if (!getVoice(loaded.targetLanguage, loaded.ttsVoice)) {
+		loaded.ttsVoice = getLanguage(loaded.targetLanguage)?.defaultVoice ?? DEFAULT_SETTINGS.ttsVoice;
+	}
+	loaded.targetVoiceByLanguage = rememberedVoices(loaded.targetVoiceByLanguage, getVoice);
+	loaded.explanationVoiceByLanguage = rememberedVoices(loaded.explanationVoiceByLanguage, getExplanationVoice);
+	Object.assign(loaded, withRememberedVoices(loaded, loaded));
+	// Before Automatic, every learner had a model saved: the provider's preset
+	// unless they changed it, and the preset was never a choice. A non-chat
+	// model (a classifier such as gpt-oss-safeguard) can never evaluate a take.
+	const migratedToAutomatic = rows.some((row) => row.key === AUTOMATIC_MODEL_MIGRATION_KEY);
+	const savedPreset = !migratedToAutomatic && loaded.llmModel === getProvider(loaded.llmProvider).defaultModel;
+	const movedToAutomatic = savedPreset || !isChatModel(loaded.llmModel);
+	if (movedToAutomatic) loaded.llmModel = AUTOMATIC_MODEL;
+	// The old default ElevenLabs voice is now a paid Voice Library voice, so every
+	// take would fail with HTTP 402 on the free plan; it was never a learner's pick.
+	if (loaded.elevenLabsVoiceId === RETIRED_DEFAULT_ELEVENLABS_VOICE_ID) {
+		loaded.elevenLabsVoiceId = DEFAULT_ELEVENLABS_VOICE_ID;
+	}
+	// Choice fields: an unknown value falls back to the default rather than
+	// rendering an empty select.
+	for (const [field, allowed] of Object.entries(CHOICES) as [keyof typeof CHOICES, readonly string[]][]) {
+		if (!allowed.includes(loaded[field] as string)) {
+			(loaded as unknown as Record<string, unknown>)[field] = DEFAULT_SETTINGS[field];
+		}
+	}
+	if (!(SPEECH_PACES as readonly number[]).includes(loaded.targetSpeechPace)) {
+		loaded.targetSpeechPace = DEFAULT_TARGET_SPEECH_PACE;
+	}
+	// A choice made while the database was being read wins over the stored value.
+	const chosenWhileLoading = [...pending.keys()];
+	for (const [field, value] of pending) {
+		(loaded as unknown as Record<string, unknown>)[field] = value;
+	}
+	pending.clear();
+	// A settings row from before the model enum existed may name a model this
+	// build no longer ships. The Settings dropdown keeps the unknown id as an
+	// extra option rather than silently discarding the user's choice.
+	//
+	// Mark hydrated only after the first set. The persistence subscriber must
+	// not write defaults for fields a restored database lacks: that write would
+	// bump the content revision immediately after a cloud download, making the
+	// next sync upload the just-downloaded data again.
+	applying = true;
+	store.set(loaded);
+	applying = false;
+	hydrated = true;
+	settingsReady.set(true);
+
+	// The move to Automatic is written now: the subscriber only writes later changes.
+	const fieldsToWrite: (keyof AppSettings)[] = movedToAutomatic ? [...chosenWhileLoading, 'llmModel'] : chosenWhileLoading;
+	if (fieldsToWrite.length > 0) await persistChosenWhileLoading(loaded, fieldsToWrite);
+	if (!migratedToAutomatic) {
+		// Unrecorded, the move only repeats on the next start; it must not fail the start.
+		await writeSetting(AUTOMATIC_MODEL_MIGRATION_KEY, 'done').catch((error: unknown) => {
+			console.error('[settings] could not record the move to Automatic', error);
+		});
+	}
+}
+
+export const appSettings = {
+	subscribe: store.subscribe,
+	set: store.set,
+	update: store.update
+};
+
+export function setSetting<K extends keyof AppSettings>(field: K, value: AppSettings[K]): void {
+	store.update((current) => withRememberedVoices(current, { ...current, [field]: value }));
+}
+
+/**
+ * Keeps each language's voices: a voice chosen for a language is remembered
+ * under it (separately for read-back and for explanations), and a change of
+ * language brings back the voice last chosen for the new one. Without a
+ * remembered voice, read-back takes the language's default voice, and an
+ * explanation voice stays empty for the learner to choose by ear.
+ *
+ * @param before The settings before the change.
+ * @param next The settings with the change applied.
+ * @returns `next`, with voices and memories that agree with its languages.
+ */
+function withRememberedVoices(before: AppSettings, next: AppSettings): AppSettings {
+	const settings = { ...next };
+
+	if (settings.targetLanguage !== before.targetLanguage) {
+		const remembered = settings.targetVoiceByLanguage[settings.targetLanguage];
+		if (getVoice(settings.targetLanguage, remembered)) settings.ttsVoice = remembered;
+		else if (!getVoice(settings.targetLanguage, settings.ttsVoice)) {
+			settings.ttsVoice = getLanguage(settings.targetLanguage)?.defaultVoice ?? settings.ttsVoice;
+		}
+	}
+	if (settings.instructionLanguage !== before.instructionLanguage) {
+		const remembered = settings.explanationVoiceByLanguage[settings.instructionLanguage];
+		if (getExplanationVoice(settings.instructionLanguage, remembered)) settings.explanationVoice = remembered;
+		else if (!getExplanationVoice(settings.instructionLanguage, settings.explanationVoice)) settings.explanationVoice = '';
+	}
+
+	if (getVoice(settings.targetLanguage, settings.ttsVoice) && settings.targetVoiceByLanguage[settings.targetLanguage] !== settings.ttsVoice) {
+		settings.targetVoiceByLanguage = { ...settings.targetVoiceByLanguage, [settings.targetLanguage]: settings.ttsVoice };
+	}
+	const explanationVoice = getExplanationVoice(settings.instructionLanguage, settings.explanationVoice);
+	if (explanationVoice && settings.explanationVoiceByLanguage[settings.instructionLanguage] !== settings.explanationVoice) {
+		settings.explanationVoiceByLanguage = { ...settings.explanationVoiceByLanguage, [settings.instructionLanguage]: settings.explanationVoice };
+	}
+	return settings;
+}
+
+/**
+ * A stored voice memory, keeping only voices that still speak their language.
+ *
+ * @param value The stored value (any shape).
+ * @param find Looks a voice up for a language: `getVoice` or `getExplanationVoice`.
+ */
+function rememberedVoices(value: unknown, find: (languageId: string, voiceId: string) => unknown): Record<string, string> {
+	if (!value || typeof value !== 'object') return {};
+	return Object.fromEntries(
+		Object.entries(value as Record<string, unknown>).filter(
+			(entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(find(entry[0], entry[1]))
+		)
+	);
+}
+
+/** Per-voice tuning values are clamped to the UI's ±12 dB range. */
+function sanitizeTunings(value: unknown): Record<string, VoiceTuning> {
+	if (!value || typeof value !== 'object') return {};
+	const out: Record<string, VoiceTuning> = {};
+	for (const [voiceId, raw] of Object.entries(value as Record<string, unknown>)) {
+		if (!raw || typeof raw !== 'object') continue;
+		const entry = raw as Record<string, unknown>;
+		const clamp = (value: unknown): number =>
+			typeof value === 'number' && Number.isFinite(value) ? Math.max(-12, Math.min(12, value)) : 0;
+		out[voiceId] = {
+			volumeDb: clamp(entry.volumeDb),
+			bassDb: clamp(entry.bassDb),
+			bodyDb: clamp(entry.bodyDb),
+			presenceDb: clamp(entry.presenceDb),
+			trebleDb: clamp(entry.trebleDb)
+		};
+	}
+	return out;
+}
+
+export function voiceTuning(settings: AppSettings, voiceId: string): VoiceTuning {
+	return settings.voiceTunings[voiceId] ?? NEUTRAL_TUNING;
+}
+
+export function setVoiceTuning(voiceId: string, patch: Partial<VoiceTuning>): void {
+	store.update((current) => ({
+		...current,
+		voiceTunings: {
+			...current.voiceTunings,
+			[voiceId]: { ...NEUTRAL_TUNING, ...current.voiceTunings[voiceId], ...patch }
+		}
+	}));
+}
+
+/** Drops the voice's adjustments, restoring the approved sound. */
+export function resetVoiceTuning(voiceId: string): void {
+	store.update((current) => {
+		const next = { ...current.voiceTunings };
+		delete next[voiceId];
+		return { ...current, voiceTunings: next };
+	});
+}

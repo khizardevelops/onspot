@@ -277,10 +277,19 @@ fn every_practice_port_is_object_safe() {
     let written = block_on(prompt.write(
         &PromptRequest {
             target_language_id: String::from("fr"),
+            target_language: String::from("French"),
             instruction_language_id: String::from("en"),
+            instruction_language: String::from("English"),
+            instruction_scripts: vec![String::from("Latin")],
             level: String::from("b1"),
             mode: String::from("exam"),
             avoid_topics: Vec::new(),
+            endpoint: onspot_domain::LlmEndpoint {
+                base_url: String::from("http://localhost:1234/v1"),
+                provider: String::from("custom"),
+                model: String::from("stub"),
+                fallback_models: Vec::new(),
+            },
         },
         &token,
     ))

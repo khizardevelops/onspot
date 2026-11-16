@@ -18,7 +18,6 @@ declare global {
 		/** Shared prompt database endpoint (see `server/prompt-submissions`); empty disables contributions. */
 		readonly VITE_PROMPT_SUBMISSIONS_URL?: string;
 		/** Which implementation runs the app while the Rust core is built up; unset means `legacy`. */
-		readonly VITE_CORE_BACKEND?: 'legacy' | 'core';
 	}
 
 	/**

@@ -3,12 +3,9 @@
 import { derived, get, writable } from 'svelte/store';
 import {
 	getDatabaseAdapter,
-	type Attempt,
 	type Correction,
-	type Prompt,
 	type RunMode,
 	type FollowUp,
-	type Session,
 	type TextGlosses,
 	type TranslationSet,
 	type WordGlosses,
@@ -16,31 +13,14 @@ import {
 	TRANSLATION_SET_VERSION
 } from '#lib/adapters/db/index.js';
 import { appSettings, setSetting, settingsReady, type AppSettings } from './settings';
-import { groqApiKey } from './secrets';
 import { ttsApiOptions } from './ttsConfig';
 import { llmConfigured, resolveLlmEndpoint } from './llm';
 import { firstMissingRequirement, processingReady } from './processing';
-import { playTrack, primeAudioPlayback, setAudioLoading, stopAudio, type AudioKind } from './audio';
+import { playTrack, primeAudioPlayback, setAudioLoading, type AudioKind } from './audio';
 import { languageData, refreshLanguageData } from './languageData';
 import { pronounceableWords, wordSpeechOptions } from './pronunciation';
 import { recordPracticeActivity } from './reminders';
-import { VoiceRecorder, type Recording } from '#lib/utils/recorder.js';
-import { transcribeSpeech } from '#lib/speech/stt/service.js';
-import {
-	evaluateAttempt,
-	generateTranslations,
-	generateSectionGlosses,
-	glossSectionOf,
-	glossWords,
-	hasMeaningAt,
-	hasPartOfSpeechAt,
-	phraseContext,
-	translatePhrase,
-	generatePromptTopic,
-	separateFollowUp,
-	speakableExplanation,
-	type EvaluationResult
-} from '#lib/adapters/llm/index.js';
+import { separateFollowUp, speakableExplanation } from '#lib/adapters/llm/index.js';
 import {
 	preloadLocalVoice,
 	isStoppedClip,
@@ -50,14 +30,9 @@ import {
 	type SpeechResult,
 	type SynthesizeOptions
 } from '#lib/speech/tts/service.js';
-import { base64ToBlob, blobToBase64 } from '#lib/utils/base64.js';
-import { ensureEnglishPromptsSeeded, ensurePromptsSeeded, pickRandomPrompt } from '#lib/practice/prompts.js';
-import {
-	flushPromptSubmissions,
-	queuePromptSubmission,
-	startPromptSubmissionSync
-} from '#lib/practice/promptSubmissions.js';
-import { englishPromptTextByTitle } from '#lib/practice/promptCatalogue.js';
+import { base64ToBlob } from '#lib/utils/base64.js';
+import { ensureEnglishPromptsSeeded, ensurePromptsSeeded } from '#lib/practice/prompts.js';
+import { startPromptSubmissionSync } from '#lib/practice/promptSubmissions.js';
 import {
 	inferSessionSetup,
 	parseSessionSetup,
@@ -75,8 +50,7 @@ import {
 	requireLanguage,
 	type LanguageDefinition
 } from '#lib/languages/index.js';
-import { MAX_RECORDING_SEC, capWords, countWords } from '#lib/config.js';
-import { useCore } from '#lib/core-client/backend.js';
+import { MAX_RECORDING_SEC } from '#lib/config.js';
 import { getCoreClient, getCoreHost } from '#lib/core-client/client.js';
 import type { CoreHost } from '#lib/core-client/coreHost.js';
 import { practiceApi, type PracticeApi } from '#lib/core-client/practice.js';
@@ -166,21 +140,9 @@ if (typeof document !== 'undefined') {
 }
 
 let db: IDatabaseAdapter | null = null;
-let recorder: VoiceRecorder | null = null;
-let timer: ReturnType<typeof setInterval> | null = null;
-const translationJobs = new Map<string, Promise<TranslationSet>>();
 const glossJobs = new Map<string, Promise<void>>();
 const phraseJobs = new Map<string, Promise<string>>();
 let initialization: Promise<void> | null = null;
-/** True while the microphone permission prompt / device start is pending. */
-let starting = false;
-/**
- * Identifies the current take's pipeline. Switching session, language or
- * cancelling bumps it, so a transcription or evaluation that finishes later
- * cannot write into the wrong session or reset a phase it no longer owns.
- */
-let run = 0;
-let analysis: AbortController | null = null;
 /** Latest read-back request; an older synthesis that finishes later must not play over it. */
 let speechRequest = 0;
 /** Latest prompt request; a slow model answer must not replace a newer prompt. */
@@ -243,20 +205,11 @@ export function translationsCurrent(translations: TranslationSet | null | undefi
 	return translations?.version === TRANSLATION_SET_VERSION && language === instructionLanguage;
 }
 
-function newId(prefix: string): string {
-	return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-		? crypto.randomUUID()
-		: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function update(patch: Partial<PracticeState>): void {
 	store.update((state) => ({ ...state, ...patch }));
 }
 
 /* ------------------------------------------------------- Core practice --- */
-
-/** True when the practice screen runs on the Rust state machine. */
-const corePracticeEnabled = useCore('practice');
 
 let coreApi: PracticeApi | null = null;
 let coreHost: CoreHost | null = null;
@@ -299,6 +252,7 @@ function coreConfig(): PracticeConfig {
 		explanationVoice: settings.explanationVoice,
 		pace: settings.targetSpeechPace,
 		explanationAudioAvailable: get(explanationAudioAvailable),
+		llmConfigured: get(llmConfigured),
 		llmEndpoint: (() => {
 			const endpoint = resolveLlmEndpoint(settings);
 			const host = (() => {
@@ -370,7 +324,6 @@ function applyCoreSnapshot(snapshot: CorePracticeSnapshot): void {
 
 /** The bridge timer ticks at the legacy 250 ms cadence; the core enforces 60 s. */
 function syncCoreTimer(): void {
-	if (!corePracticeEnabled) return;
 	if (get(store).phase === 'recording') {
 		coreTimer ??= setInterval(() => {
 			void tickCore();
@@ -463,7 +416,6 @@ async function handleCoreEvent(event: UiEvent): Promise<void> {
 
 /** Boots the bridge once and installs the practice host before any command. */
 async function ensureCore(): Promise<void> {
-	if (!corePracticeEnabled) throw new Error('The core practice backend is off.');
 	coreReady ??= (async () => {
 		const client = await getCoreClient();
 		coreHost = await getCoreHost();
@@ -516,7 +468,7 @@ async function hydrateLatestSessionCore(): Promise<boolean> {
 	const settings = get(appSettings);
 	const setup =
 		parseSessionSetup(newest.setup) ??
-		inferSessionSetup(await database.listAttempts(newest.id), settings);
+		(await inferSessionSetup(await database.listAttempts(newest.id), settings));
 	const sameLanguages =
 		setup.targetLanguage === settings.targetLanguage &&
 		setup.instructionLanguage === settings.instructionLanguage;
@@ -618,7 +570,7 @@ async function openSessionCore(
 	openSessionSetup = null;
 	const recorded = parseSessionSetup(session?.setup);
 	const setup = restoreSetup
-		? usableSetup(recorded ?? inferSessionSetup(attempts, get(appSettings)))
+		? usableSetup(recorded ?? (await inferSessionSetup(attempts, get(appSettings))))
 		: setupFromSettings(get(appSettings));
 	if (restoreSetup) await adoptSessionSetup(setup);
 	if (session && (!recorded || !sameSetup(recorded, setup))) {
@@ -649,8 +601,7 @@ async function deleteSessionCore(id: string): Promise<void> {
  * presenting an empty draft while History still contains the learner's work.
  */
 export function initPractice(): Promise<void> {
-	const hydrate = corePracticeEnabled ? hydrateCorePractice : hydratePractice;
-	initialization ??= hydrate().catch((error) => {
+	initialization ??= hydrateCorePractice().catch((error) => {
 		// Permit a later retry after a transient database startup failure and make
 		// the failure visible in Practice instead of leaving an empty-looking app.
 		initialization = null;
@@ -663,23 +614,6 @@ export function initPractice(): Promise<void> {
 	return initialization;
 }
 
-async function hydratePractice(): Promise<void> {
-	db = await getDatabaseAdapter();
-	// Drains prompts generated in an earlier session; a no-op while sharing is off.
-	startPromptSubmissionSync();
-	const state = get(store);
-	if (!state.sessionId && state.attempts.length === 0) {
-		if (await hydrateLatestSession()) return;
-	}
-	// The mode guides generation, so it is in place before the first prompt is asked for.
-	if (!state.sessionId) {
-		update({ mode: get(appSettings).mode });
-	}
-	if (!state.prompt.id) {
-		await requestPrompt();
-	}
-}
-
 /**
  * Re-reads the newest session after startup or an in-app backup restore, when
  * it was practised in the languages Settings has now: starting the app never
@@ -687,33 +621,7 @@ async function hydratePractice(): Promise<void> {
  * History, and opening it from there brings its setup back).
  */
 export async function hydrateLatestSession(): Promise<boolean> {
-	if (corePracticeEnabled) return hydrateLatestSessionCore();
-	if (!db) db = await getDatabaseAdapter();
-	const [newest] = await db.listSessions();
-	if (!newest) return false;
-
-	const settings = get(appSettings);
-	const setup = parseSessionSetup(newest.setup) ?? inferSessionSetup(await db.listAttempts(newest.id), settings);
-	const sameLanguages =
-		setup.targetLanguage === settings.targetLanguage && setup.instructionLanguage === settings.instructionLanguage;
-	if (!sameLanguages) return false;
-
-	await openSession(newest.id, { restoreSetup: false });
-	return true;
-}
-
-/**
- * Abandons whatever the current take is doing (recording, transcribing or
- * evaluating) so the view can switch session safely.
- */
-function abandonTake(): void {
-	run++;
-	analysis?.abort();
-	analysis = null;
-	if (timer) clearInterval(timer);
-	timer = null;
-	recorder?.cancel();
-	recorder = null;
+	return hydrateLatestSessionCore();
 }
 
 /**
@@ -731,28 +639,12 @@ export async function setTargetLanguage(languageId: string): Promise<void> {
 	if (get(appSettings).instructionLanguage === language.id) {
 		setSetting('instructionLanguage', defaultInstructionLanguageFor(language.id));
 	}
-	abandonTake();
-	update({
-		sessionId: null,
-		attempts: [],
-		activeAttemptId: null,
-		phase: 'idle',
-		error: null,
-		elapsed: 0,
-		level: 0,
-		prompt: { id: '', title: '', text: '' },
-		promptEnglishFallback: false
-	});
-	if (corePracticeEnabled) {
-		void (async () => {
-			await ensureCore();
-			await configureCore();
-			applyCoreSnapshot((await coreApi!.newSession()).snapshot);
+	void (async () => {
+		await ensureCore();
+		await configureCore();
+		applyCoreSnapshot((await coreApi!.newSession()).snapshot);
 		await requestPromptCore();
-		})();
-	} else {
-		nextPrompt();
-	}
+	})();
 	void refreshLanguageData(language.id);
 }
 
@@ -764,48 +656,17 @@ export function setSessionMode(mode: RunMode): void {
 	if (get(store).sessionId) return;
 	update({ mode });
 	setSetting('mode', mode);
-	if (corePracticeEnabled) void configureCore();
+	void configureCore();
 }
 
 /** Starts a fresh session (draft): clears attempts and unlocks the mode. */
 export function newSession(): void {
-	if (corePracticeEnabled) {
-		abandonTake();
-		openSessionSetup = null;
-		void (async () => {
-			await ensureCore();
-			applyCoreSnapshot((await coreApi!.newSession()).snapshot);
-		await requestPromptCore();
-		})();
-		return;
-	}
-	abandonTake();
-	// The next take starts a session with the setup Settings have then.
 	openSessionSetup = null;
-	update({
-		sessionId: null,
-		attempts: [],
-		activeAttemptId: null,
-		phase: 'idle',
-		error: null,
-		elapsed: 0,
-		level: 0
-	});
-	nextPrompt();
-}
-
-/**
- * Shows a prompt. `englishFallback` marks an English catalogue entry shown
- * because nothing could be written in the learner's language of instruction.
- */
-function showPrompt(prompt: PracticeState['prompt'], englishFallback: boolean): void {
-	update({ prompt, promptEnglishFallback: englishFallback });
-}
-
-/** Whether the view is between takes, so a prompt arriving now cannot change the one being answered. */
-function promptCanChange(): boolean {
-	const { phase } = get(store);
-	return phase === 'idle' || phase === 'error';
+	void (async () => {
+		await ensureCore();
+		applyCoreSnapshot((await coreApi!.newSession()).snapshot);
+		await requestPromptCore();
+	})();
 }
 
 /**
@@ -817,98 +678,7 @@ function promptCanChange(): boolean {
  * English catalogue is the last resort and the UI says it is in English.
  */
 export async function requestPrompt(): Promise<void> {
-	if (corePracticeEnabled) {
-		await requestPromptCore();
-		return;
-	}
-	const request = ++promptRequest;
-	if (!db) db = await getDatabaseAdapter();
-	if (request !== promptRequest) return;
-
-	const settings = get(appSettings);
-	const targetLanguageId = settings.targetLanguage;
-	const instructionLanguageId = settings.instructionLanguage ?? DEFAULT_INSTRUCTION_LANGUAGE_ID;
-	const instructionLanguage = getInstructionLanguage(instructionLanguageId);
-
-	const stored = await ensurePromptsSeeded(db, targetLanguageId, instructionLanguageId);
-	if (request !== promptRequest) return;
-
-	const currentId = get(store).prompt.id;
-
-	if (get(llmConfigured)) {
-		const generation = new AbortController();
-		promptGeneration?.abort();
-		promptGeneration = generation;
-		try {
-			const generated = await generatePromptTopic({
-				endpoint: resolveLlmEndpoint(settings),
-				instructionLanguage: instructionLanguage.name,
-				instructionLanguageId: instructionLanguage.id,
-				targetLanguage: requireLanguage(targetLanguageId).name,
-				level: settings.level,
-				mode: get(store).mode,
-				avoidTopics: stored.map((prompt) => prompt.title),
-				signal: generation.signal
-			});
-			if (request !== promptRequest) return;
-
-			const prompt = await storeGeneratedPrompt(generated, targetLanguageId, instructionLanguage.id);
-			if (request !== promptRequest) return;
-
-			if (promptCanChange()) {
-				showPrompt({ id: prompt.id, title: prompt.title, text: prompt.text }, false);
-			}
-			return;
-		} catch (error) {
-			// Offline, out of quota, an aborted superseded request, or an unusable answer:
-			// the stored prompts are next. When this request is still the current one,
-			// say why instead of leaving the learner to wonder why the prompt is English.
-			if (request === promptRequest) {
-				const reason = error instanceof Error ? error.message : 'The model did not answer.';
-				toast(`Could not write a prompt in ${instructionLanguage.name}: ${reason}`, 5200);
-			}
-		} finally {
-			if (promptGeneration === generation) promptGeneration = null;
-		}
-		if (request !== promptRequest) return;
-	}
-
-	if (stored.length > 0) {
-		if (!promptCanChange()) return;
-		const prompt = pickRandomPrompt(stored, currentId);
-		showPrompt({ id: prompt.id, title: prompt.title, text: prompt.text }, false);
-		return;
-	}
-
-	const english = await ensureEnglishPromptsSeeded(db, targetLanguageId);
-	if (request !== promptRequest) return;
-
-	if (english.length > 0 && promptCanChange()) {
-		const prompt = pickRandomPrompt(english, currentId);
-		showPrompt({ id: prompt.id, title: prompt.title, text: prompt.text }, true);
-	}
-}
-
-/** Stores a generated prompt so it can be shown again without another model call. */
-async function storeGeneratedPrompt(
-	generated: { title: string; text: string },
-	targetLanguageId: string,
-	instructionLanguageId: string
-): Promise<Prompt> {
-	const prompt: Prompt = {
-		id: newId('prompt'),
-		title: generated.title,
-		text: generated.text,
-		category: 'generated',
-		language: targetLanguageId,
-		instructionLanguage: instructionLanguageId,
-		createdAt: new Date().toISOString()
-	};
-	await db!.putPrompt(prompt);
-	// Opt-out: queued locally first, then sent now or when the device is online.
-	await queuePromptSubmission(prompt, get(appSettings));
-	void flushPromptSubmissions();
-	return prompt;
+	await requestPromptCore();
 }
 
 /** Shows a new prompt; the model call runs in the background. */
@@ -925,7 +695,7 @@ export function setInstructionLanguage(languageId: string): void {
 	setSetting('instructionLanguage', languageId);
 	const state = get(store);
 	if (state.sessionId || state.attempts.length > 0) return;
-	if (corePracticeEnabled) void configureCore();
+	void configureCore();
 	void requestPrompt();
 }
 
@@ -935,436 +705,24 @@ function speechApiOptions(settings: AppSettings) {
 }
 
 export async function startRecording(): Promise<void> {
-	if (corePracticeEnabled) {
-		await startRecordingCore();
-		return;
-	}
-	const state = get(store);
-	// `starting` covers the permission prompt, during which the phase is still idle
-	// and a second click would open a second microphone stream.
-	if (starting || (state.phase !== 'idle' && state.phase !== 'error')) return;
-	// Every take needs transcription, correction and read-back. If any chosen
-	// path is missing, the take could only fail after they have spoken, so
-	// refuse before the microphone opens.
-	if (!get(processingReady)) {
-		const missing = get(firstMissingRequirement);
-		update({
-			phase: 'error',
-			error: missing
-				? `${missing.detail} Finish setup in Settings before you start speaking.`
-				: 'Finish setup in Settings before you start speaking.'
-		});
-		return;
-	}
-	starting = true;
-	const token = run;
-	// Inside the learner's tap: lets the explanation play by itself after this take.
-	primeAudioPlayback();
-
-	const next = new VoiceRecorder();
-	next.onLevel = (level) => update({ level });
-
-	try {
-		await next.start();
-	} catch (error) {
-		starting = false;
-		update({
-			phase: 'error',
-			error:
-				error instanceof Error
-					? `Microphone unavailable: ${error.message}`
-					: 'Microphone unavailable.'
-		});
-		return;
-	}
-	starting = false;
-	// The session changed while the permission prompt was open.
-	if (token !== run) {
-		next.cancel();
-		return;
-	}
-	recorder = next;
-	// The read-back would otherwise play into the microphone.
-	stopAudio();
-	warmLocalVoices();
-
-	update({ phase: 'recording', elapsed: 0, level: 0, error: null, statusText: 'Recording…' });
-	const startedAt = performance.now();
-	timer = setInterval(() => {
-		const elapsed = (performance.now() - startedAt) / 1000;
-		update({ elapsed });
-		if (elapsed >= MAX_RECORDING_SEC) void stopAndAnalyze();
-	}, 250);
-}
-
-/**
- * Loads the on-device voices while the learner speaks, so the reply does not
- * wait for them: loading one takes seconds, and idle voices are released
- * after a while. Only voices already on the device (never a download).
- */
-function warmLocalVoices(): void {
-	const settings = get(appSettings);
-	const data = get(languageData);
-	if (settings.ttsMode !== 'local' || !data.installed.voice) return;
-
-	void preloadLocalVoice(settings.ttsVoice).catch(() => {});
-	if (getExplanationVoice(settings.instructionLanguage, settings.explanationVoice) && data.installed.explanationVoice) {
-		void preloadLocalVoice(settings.explanationVoice).catch(() => {});
-	}
+	await startRecordingCore();
 }
 
 /** Discards the take in progress: stops the microphone, or abandons its analysis. */
 export function cancelRecording(): void {
-	if (corePracticeEnabled) {
-		void cancelRecordingCore();
-		return;
-	}
-	abandonTake();
-	update({ phase: 'idle', elapsed: 0, level: 0, statusText: '', progress: null });
-}
-
-/**
- * Whisper invents text for silence, so a take with no audible signal is
- * rejected before transcription. Loudest 100ms window below about -46 dBFS
- * RMS is treated as silence.
- */
-function isSilent(pcm: Float32Array, sampleRate = 16000): boolean {
-	const window = Math.round(sampleRate / 10);
-	for (let start = 0; start < pcm.length; start += window) {
-		const end = Math.min(pcm.length, start + window);
-		let sum = 0;
-		for (let i = start; i < end; i++) sum += pcm[i] * pcm[i];
-		if (Math.sqrt(sum / Math.max(1, end - start)) > 0.005) return false;
-	}
-	return true;
+	void cancelRecordingCore();
 }
 
 export async function stopAndAnalyze(): Promise<void> {
-	if (corePracticeEnabled) {
-		await stopAndAnalyzeCore();
-		return;
-	}
-	const state = get(store);
-	const active = recorder;
-	if (state.phase !== 'recording' || !active) return;
-	// Claimed synchronously: a double-click (or the 60s timer firing during a
-	// click) must not stop the same recorder twice.
-	recorder = null;
-	// Still inside the Stop tap (the 60s timer has none, but Start already primed).
-	primeAudioPlayback();
-	if (timer) clearInterval(timer);
-	timer = null;
-	const token = run;
-
-	let recording: Recording;
-	try {
-		recording = await active.stop();
-	} catch (error) {
-		if (token === run) update({ phase: 'error', level: 0, error: 'Could not finish the recording.' });
-		return;
-	}
-	if (token !== run) {
-		URL.revokeObjectURL(recording.url);
-		return;
-	}
-	if (isSilent(recording.pcm)) {
-		URL.revokeObjectURL(recording.url);
-		update({
-			phase: 'error',
-			level: 0,
-			elapsed: 0,
-			statusText: '',
-			error: 'No speech was heard in that take. Check that the right microphone is selected and unmuted, then try again.'
-		});
-		return;
-	}
-	update({ level: 0, phase: 'transcribing', statusText: 'Transcribing…', progress: null });
-
-	const settings = get(appSettings);
-	const language = requireLanguage(settings.targetLanguage);
-	// What this take answered, captured now: the view may move on before it finishes.
-	const { prompt, mode, sessionId } = get(store);
-	const controller = new AbortController();
-	analysis = controller;
-
-	try {
-		const heard = await transcribeSpeech({
-			audio16kMono: recording.pcm,
-			recording: recording.blob,
-			mode: settings.sttMode,
-			languageId: language.id,
-			groqApiKey: get(groqApiKey) || undefined,
-			onProgress: (progress) => {
-				if (token !== run) return;
-				// "Model ready / 100%" arrives before the transcription itself; keep saying what is happening.
-				if (progress.progress >= 100) update({ progress: null, statusText: 'Transcribing…' });
-				else update({ progress, statusText: progress.status });
-			}
-		});
-		if (token !== run) return;
-
-		update({ phase: 'evaluating', statusText: `Analyzing your ${language.name}…`, progress: null });
-
-		// 60s of fast speech is ~240 words; cap there so a runaway transcript
-		// cannot blow the LLM output budget.
-		const transcript = capWords(heard);
-
-		const evaluation = await evaluateAttempt({
-			transcript,
-			prompt: prompt.text,
-			mode,
-			level: settings.level,
-			...teachingLanguages(settings),
-			// Translations shown under every take come with the evaluation; otherwise only when asked for.
-			endpoint: resolveLlmEndpoint(settings),
-			signal: controller.signal
-		});
-		if (token !== run) return;
-
-		const view = await persistAttempt(recording, transcript, evaluation, mode, prompt, sessionId);
-		update({
-			phase: 'idle',
-			statusText: '',
-			error: null,
-			elapsed: 0,
-			attempts: [...get(store).attempts, view],
-			activeAttemptId: view.id
-		});
-
-		// The coach answers first; without explanation audio, the correct version plays instead.
-		const canExplain = get(explanationAudioAvailable) && Boolean(view.explanation);
-		void playAttemptTrack(view.id, canExplain ? 'explanation' : 'corrected');
-		prepareTakeAudio(view.id, { first: true });
-	} catch (error) {
-		if (token !== run) return;
-		update({
-			phase: 'error',
-			statusText: '',
-			progress: null,
-			error: error instanceof Error ? error.message : 'Something went wrong.'
-		});
-	} finally {
-		if (analysis === controller) analysis = null;
-		URL.revokeObjectURL(recording.url);
-	}
-}
-
-async function persistAttempt(
-	recording: Recording,
-	transcript: string,
-	evaluation: EvaluationResult,
-	mode: RunMode,
-	prompt: PracticeState['prompt'],
-	existingSessionId: string | null
-): Promise<AttemptView> {
-	if (!db) db = await getDatabaseAdapter();
-	const database = db;
-	const now = new Date().toISOString();
-
-	let sessionId = existingSessionId;
-	if (!sessionId) {
-		sessionId = newId('session');
-		await database.putSession({
-			id: sessionId,
-			title: prompt.title,
-			mode,
-			startedAt: now,
-			endedAt: null,
-			createdAt: now,
-			updatedAt: now,
-			setup: setupFromSettings(get(appSettings))
-		});
-		openSessionSetup = { sessionId, setup: setupFromSettings(get(appSettings)) };
-		update({ sessionId });
-	}
-
-	const attemptId = newId('attempt');
-	const audioKey = `attempt:${attemptId}`;
-	const attempt: Attempt = {
-		id: attemptId,
-		sessionId,
-		promptId: prompt.id || null,
-		promptText: prompt.text,
-		transcript,
-		correctedText: evaluation.correctedText,
-		// Translated only when the learner asks for it (the card's translation menu).
-		translation: null,
-		translations: null,
-		ttsVoice: get(appSettings).ttsVoice,
-		explanation: evaluation.explanation,
-		followUp: evaluation.followUp,
-		wordGlosses: null,
-		durationSec: Math.round(recording.durationSec * 100) / 100,
-		wordCount: countWords(transcript),
-		audioKey,
-		createdAt: now,
-		updatedAt: now
-	};
-	await database.putAttempt(attempt);
-	// The take is safely stored; a reminder from before it should not linger.
-	recordPracticeActivity(new Date(now));
-
-	const corrections = buildCorrections(attemptId, transcript, evaluation, now);
-	await database.replaceCorrections(attemptId, corrections);
-
-	try {
-		await database.putAudio({
-			key: audioKey,
-			attemptId,
-			mime: recording.blob.type || 'audio/webm',
-			dataBase64: await blobToBase64(recording.blob),
-			createdAt: now
-		});
-	} catch (error) {
-		// Audio is a convenience; failing to persist it must not lose the analysis.
-		console.error('[practice] could not store audio', error);
-	}
-
-	return {
-		id: attemptId,
-		transcript,
-		correctedText: evaluation.correctedText,
-		translation: '',
-		translations: null,
-		explanation: evaluation.explanation,
-		followUp: evaluation.followUp,
-		wordGlosses: {},
-		corrections,
-		durationSec: attempt.durationSec,
-		wordCount: attempt.wordCount,
-		createdAt: now,
-		audioUrl: null,
-		ttsVoice: attempt.ttsVoice
-	};
-}
-
-/**
- * Flattens the LLM result into correction rows.
- *
- * The schema and the prototype's insight columns only know four categories, so
- * vocabulary upgrades become `style` suggestions and connector advice becomes
- * `register` suggestions rather than introducing new categories.
- */
-function buildCorrections(
-	attemptId: string,
-	transcript: string,
-	evaluation: EvaluationResult,
-	createdAt: string
-): Correction[] {
-	const rows: Correction[] = [];
-	let order = 0;
-
-	for (const correction of evaluation.corrections) {
-		rows.push({
-			id: newId('corr'),
-			attemptId,
-			category: correction.category,
-			severity: correction.severity,
-			label: correction.label,
-			original: correction.original,
-			replacement: correction.replacement,
-			replacementTranslation: correction.replacementTranslation ?? null,
-			start: null,
-			end: null,
-			explanation: correction.explanation,
-			speakText: correction.speakText ?? null,
-			examStatus: correction.examStatus ?? null,
-			formalAlternatives: correction.formalAlternatives ?? [],
-			sortOrder: order++,
-			createdAt
-		});
-	}
-
-	for (const vocab of evaluation.vocabulary) {
-		rows.push({
-			id: newId('corr'),
-			attemptId,
-			category: 'style',
-			severity: 'suggestion',
-			label: 'Vocabulary',
-			original: vocab.original,
-			replacement: vocab.suggestion,
-			replacementTranslation: null,
-			start: null,
-			end: null,
-			explanation: vocab.why,
-			speakText: null,
-			examStatus: null,
-			formalAlternatives: [],
-			sortOrder: order++,
-			createdAt
-		});
-	}
-
-	for (const connector of evaluation.connectors) {
-		rows.push({
-			id: newId('corr'),
-			attemptId,
-			category: 'register',
-			severity: 'suggestion',
-			label: 'Connector',
-			original: connector.insteadOf ?? '',
-			replacement: connector.connector,
-			replacementTranslation: null,
-			start: null,
-			end: null,
-			explanation: connector.why,
-			speakText: null,
-			examStatus: null,
-			formalAlternatives: [],
-			sortOrder: order++,
-			createdAt
-		});
-	}
-
-	// Resolve each `original` to a character range in the transcript, claiming
-	// distinct occurrences so a repeated phrase is not marked twice and overlaps
-	// are avoided. Falls back to null when the text is not found verbatim
-	// (e.g. filler sounds the recogniser dropped).
-	const used: Array<[number, number]> = [];
-	for (const row of rows) {
-		if (!row.original) continue;
-		let from = 0;
-		let chosen: [number, number] | null = null;
-		for (;;) {
-			const at = transcript.indexOf(row.original, from);
-			if (at === -1) break;
-			const range: [number, number] = [at, at + row.original.length];
-			const overlaps = used.some(([start, end]) => range[0] < end && range[1] > start);
-			if (!overlaps) {
-				chosen = range;
-				break;
-			}
-			from = at + row.original.length;
-		}
-		if (chosen) {
-			row.start = chosen[0];
-			row.end = chosen[1];
-			used.push(chosen);
-		}
-	}
-
-	return rows;
+	await stopAndAnalyzeCore();
 }
 
 export function setActiveAttempt(id: string | null): void {
-	if (corePracticeEnabled) {
-		void setActiveAttemptCore(id);
-		return;
-	}
-	update({ activeAttemptId: id });
-	// The take being read is prepared before the rest.
-	if (id) prepareTakeAudio(id, { first: true });
+	void setActiveAttemptCore(id);
 }
 
 export function clearError(): void {
-	if (corePracticeEnabled) {
-		void clearErrorCore();
-		return;
-	}
-	// A read-back error can arrive while a new take is recording; dismissing it
-	// must not reset that phase.
-	store.update((state) => ({ ...state, error: null, phase: state.phase === 'error' ? 'idle' : state.phase }));
+	void clearErrorCore();
 }
 
 /**
@@ -1387,47 +745,14 @@ export function ensureAttemptTranslations(
 		return Promise.resolve(attempt.translations);
 	}
 
-	if (corePracticeEnabled) {
-		return (async () => {
-			await ensureCore();
-			const client = await getCoreClient();
-			const response = await client.command<{ translations: TranslationSet }>(
-				'translations.ensure',
-				{ attemptId }
-			);
-			const translations = response.translations;
-			update({
-				attempts: get(store).attempts.map((item) =>
-					item.id === attemptId
-						? { ...item, translation: translations.idiomatic, translations }
-						: item
-				)
-			});
-			return translations;
-		})();
-	}
-
-	const running = translationJobs.get(attemptId);
-	if (running) return running;
-
-	const job = (async () => {
-		if (!db) db = await getDatabaseAdapter();
-		// The correct version, not the transcript: what the learner meant, which is the transcript when it had no mistakes.
-		const settings = get(appSettings);
-		const generated = await generateTranslations(
-			attempt.correctedText?.trim() || attempt.transcript,
-			resolveLlmEndpoint(settings),
-			teachingLanguages(settings)
+	return (async () => {
+		await ensureCore();
+		const client = await getCoreClient();
+		const response = await client.command<{ translations: TranslationSet }>(
+			'translations.ensure',
+			{ attemptId }
 		);
-		const translations = { ...generated, instructionLanguage: settings.instructionLanguage };
-		const row = await db.getAttempt(attemptId);
-		if (!row) throw new Error('Attempt not found.');
-		await db.putAttempt({
-			...row,
-			translation: translations.idiomatic,
-			translations,
-			updatedAt: new Date().toISOString()
-		});
+		const translations = response.translations;
 		update({
 			attempts: get(store).attempts.map((item) =>
 				item.id === attemptId
@@ -1436,10 +761,7 @@ export function ensureAttemptTranslations(
 			)
 		});
 		return translations;
-	})().finally(() => translationJobs.delete(attemptId));
-
-	translationJobs.set(attemptId, job);
-	return job;
+	})();
 }
 
 /**
@@ -1477,17 +799,6 @@ function glossKey(text: string, instructionLanguage = get(appSettings).instructi
 	return `${GLOSS_KEY_PREFIX}:${textKey}`;
 }
 
-/** Saves an attempt's hover translations in the view and the database. */
-async function saveWordGlosses(attemptId: string, wordGlosses: WordGlosses): Promise<void> {
-	update({
-		attempts: get(store).attempts.map((item) => (item.id === attemptId ? { ...item, wordGlosses } : item))
-	});
-
-	if (!db) db = await getDatabaseAdapter();
-	const row = await db.getAttempt(attemptId);
-	if (row) await db.putAttempt({ ...row, wordGlosses, updatedAt: new Date().toISOString() });
-}
-
 /** Word-meaning requests in flight, one per text of an attempt. */
 function glossJobKey(attemptId: string, text: string): string {
 	return `${attemptId}:${glossKey(text)}`;
@@ -1515,72 +826,41 @@ export function ensurePhraseMeaning(
 	end: number,
 	phrase: string
 ): Promise<string> {
-	if (corePracticeEnabled) {
-		const jobKey = `${attemptId}:${glossKey(text)}:${start}-${end}`;
-		const running = phraseJobs.get(jobKey);
-		if (running) return running;
-		const job = (async () => {
-			await ensureCore();
-			const client = await getCoreClient();
-			const response = await client.command<{ meaning: string }>('phrases.ensure', {
-				attemptId,
-				text,
-				start,
-				end,
-				phrase
-			});
-			const key = glossKey(text);
-			update({
-				attempts: get(store).attempts.map((item) => {
-					if (item.id !== attemptId) return item;
-					const current = item.wordGlosses[key] ?? { words: [], phrases: [] };
-					return {
-						...item,
-						wordGlosses: {
-							...item.wordGlosses,
-							[key]: {
-								...current,
-								phrases: [
-									...current.phrases,
-									{ start, end, meaning: response.meaning, origin: 'selection' as const }
-								]
-							}
-						}
-					};
-				})
-			});
-			return response.meaning;
-		})();
-	}
 	const jobKey = `${attemptId}:${glossKey(text)}:${start}-${end}`;
 	const running = phraseJobs.get(jobKey);
 	if (running) return running;
-
 	const job = (async () => {
-		const findSaved = () => {
-			const attempt = get(store).attempts.find((item) => item.id === attemptId);
-			const glosses = attempt ? wordGlossesFor(attempt, text) : null;
-			return glosses?.phrases.find(
-				(saved) => saved.origin === 'selection' && saved.start === start && saved.end === end
-			)?.meaning;
-		};
-		const saved = findSaved();
-		if (saved) return saved;
-
-		const settings = get(appSettings);
-		const context = phraseContext(text, start, end);
-		const meaning = await translatePhrase(phrase, context, resolveLlmEndpoint(settings), teachingLanguages(settings));
-
-		const attempt = get(store).attempts.find((item) => item.id === attemptId);
-		if (attempt) {
-			const key = glossKey(text);
-			const current = attempt.wordGlosses[key] ?? { words: [], phrases: [] };
-			const phrases = [...current.phrases, { start, end, meaning, origin: 'selection' as const }];
-			await saveWordGlosses(attemptId, { ...attempt.wordGlosses, [key]: { ...current, phrases } });
-		}
-		return meaning;
+		await ensureCore();
+		const client = await getCoreClient();
+		const response = await client.command<{ meaning: string }>('phrases.ensure', {
+			attemptId,
+			text,
+			start,
+			end,
+			phrase
+		});
+		const key = glossKey(text);
+		update({
+			attempts: get(store).attempts.map((item) => {
+				if (item.id !== attemptId) return item;
+				const current = item.wordGlosses[key] ?? { words: [], phrases: [] };
+				return {
+					...item,
+					wordGlosses: {
+						...item.wordGlosses,
+						[key]: {
+							...current,
+							phrases: [
+								...current.phrases,
+								{ start, end, meaning: response.meaning, origin: 'selection' as const }
+							]
+						}
+					}
+				};
+			})
+		});
+		return response.meaning;
 	})().finally(() => phraseJobs.delete(jobKey));
-
 	phraseJobs.set(jobKey, job);
 	return job;
 }
@@ -1603,90 +883,31 @@ export function ensureWordGlosses(attemptId: string, text: string, wordIndex: nu
 	const attempt = get(store).attempts.find((item) => item.id === attemptId);
 	if (!attempt) return Promise.reject(new Error('Attempt not found.'));
 
-	if (corePracticeEnabled) {
-		const key = glossJobKey(attemptId, text);
-		const running = glossJobs.get(key);
-		if (running) return running;
-		const job = (async () => {
-			await ensureCore();
-			const client = await getCoreClient();
-			const response = await client.command<{
-				key: string;
-				glosses: TextGlosses;
-			}>('glosses.ensure', { attemptId, text, wordIndex, withPos: get(appSettings).showWordPos });
-			update({
-				attempts: get(store).attempts.map((item) =>
-					item.id === attemptId
-						? {
-								...item,
-								wordGlosses: {
-									...item.wordGlosses,
-									[response.key]: response.glosses as unknown as TextGlosses
-								}
-							}
-						: item
-				)
-			});
-		})().finally(() => glossJobs.delete(key));
-		glossJobs.set(key, job);
-		return job;
-	}
-
-	const settings = get(appSettings);
-	const existing = wordGlossesFor(attempt, text);
-	const needsPos = settings.showWordPos && !hasPartOfSpeechAt(existing, wordIndex);
-	const section = glossSectionOf(text, wordIndex);
-	if (!section || (hasMeaningAt(existing, wordIndex) && !needsPos)) return Promise.resolve();
-
-	const jobKey = `${glossJobKey(attemptId, text)}:${section.start}`;
-	const running = glossJobs.get(jobKey);
+	const key = glossJobKey(attemptId, text);
+	const running = glossJobs.get(key);
 	if (running) return running;
-
 	const job = (async () => {
-		const fetched = await generateSectionGlosses(text, section, resolveLlmEndpoint(settings), teachingLanguages(settings), {
-			withPos: settings.showWordPos,
-			signal: undefined
+		await ensureCore();
+		const client = await getCoreClient();
+		const response = await client.command<{
+			key: string;
+			glosses: TextGlosses;
+		}>('glosses.ensure', { attemptId, text, wordIndex, withPos: get(appSettings).showWordPos });
+		update({
+			attempts: get(store).attempts.map((item) =>
+				item.id === attemptId
+					? {
+							...item,
+							wordGlosses: {
+								...item.wordGlosses,
+								[response.key]: response.glosses as unknown as TextGlosses
+							}
+						}
+					: item
+			)
 		});
-
-		// Merged into what is saved now: other sections and selections may have arrived meanwhile.
-		const key = glossKey(text);
-		const current = get(store).attempts.find((item) => item.id === attemptId);
-		const saved = current?.wordGlosses[key];
-		const wordCount = glossWords(text).length;
-		const words = Array.from({ length: wordCount }, (_, index) =>
-			index >= section.start && index <= section.end ? fetched.words[index - section.start] : (saved?.words[index] ?? '')
-		);
-		// Merge POS in the same way as words, keeping any already-saved values.
-		const pos = fetched.pos !== undefined
-			? Array.from({ length: wordCount }, (_, index) =>
-					index >= section.start && index <= section.end ? (fetched.pos![index - section.start] ?? '') : (saved?.pos?.[index] ?? '')
-			  )
-			: saved?.pos;
-		// A section asked for POS is remembered even when the model left labels
-		// blank, so a word without one does not trigger another paid request.
-		const posSections = fetched.pos !== undefined
-			? [...(saved?.posSections ?? []).filter((range) => range.start !== section.start || range.end !== section.end), section]
-			: saved?.posSections;
-		// Re-requesting a section replaces its expressions but keeps selections.
-		const phrases = [
-			...(saved?.phrases ?? []).filter(
-				(phrase) => phrase.origin === 'selection' || phrase.end < section.start || phrase.start > section.end
-			),
-			...fetched.phrases
-		];
-		const merged = {
-			words,
-			phrases,
-			...(saved?.sections
-				? { sections: [...saved.sections.filter((range) => range.start !== section.start || range.end !== section.end), section] }
-				: {}),
-			...(pos ? { pos } : {}),
-			...(posSections ? { posSections } : {})
-		};
-		await saveWordGlosses(attemptId, { ...(current?.wordGlosses ?? {}), [key]: merged });
-	})().finally(() => glossJobs.delete(jobKey));
-
-	glossJobs.set(jobKey, job);
+	})().finally(() => glossJobs.delete(key));
+	glossJobs.set(key, job);
 	return job;
 }
 
@@ -2008,40 +1229,8 @@ async function playAttemptSpeech(
  * remembers the choice. Audio is cached per voice, so switching back is instant.
  */
 export async function setAttemptVoice(attemptId: string, voice: string): Promise<void> {
-	if (corePracticeEnabled) {
-		await ensureCore();
-		applyCoreSnapshot((await coreApi!.setAttemptVoice(attemptId, voice)).snapshot);
-	}
-	if (!db) db = await getDatabaseAdapter();
-	const attempt = get(store).attempts.find((a) => a.id === attemptId);
-	if (!attempt) return;
-	const text = trackText(attempt, 'corrected');
-	const request = ++speechRequest;
-	const settings = get(appSettings);
-	try {
-		const speech = await synthesizeSpeech({
-			text,
-			mode: settings.ttsMode,
-			languageId: settings.targetLanguage,
-			voice,
-			...speechApiOptions(settings),
-			attemptId,
-			force: true
-		});
-		const row = await db.getAttempt(attemptId);
-		if (row) {
-			await db.putAttempt({ ...row, ttsVoice: voice, updatedAt: new Date().toISOString() });
-		}
-		update({
-			attempts: get(store).attempts.map((a) =>
-				a.id === attemptId ? { ...a, ttsVoice: voice } : a
-			)
-		});
-		if (request === speechRequest) playTrack({ attemptId, kind: 'corrected', label: TRACK_LABEL.corrected, url: speech.url });
-		else URL.revokeObjectURL(speech.url);
-	} catch (error) {
-		toast(error instanceof Error ? error.message : 'Could not re-render audio.');
-	}
+	await ensureCore();
+	applyCoreSnapshot((await coreApi!.setAttemptVoice(attemptId, voice)).snapshot);
 }
 
 /** Synthesizes and plays arbitrary target-language text (used for correction read-back). */
@@ -2093,17 +1282,7 @@ export async function playStoredAudio(attemptId: string): Promise<void> {
 
 /** Renames a session. */
 export async function renameSession(id: string, title: string): Promise<void> {
-	if (corePracticeEnabled) {
-		await renameSessionCore(id, title);
-		return;
-	}
-	if (!db) db = await getDatabaseAdapter();
-	const session = await db.getSession(id);
-	if (!session) return;
-	await db.putSession({ ...session, title, updatedAt: new Date().toISOString() });
-	if (get(store).sessionId === id) {
-		update({ prompt: { ...get(store).prompt, title } });
-	}
+	await renameSessionCore(id, title);
 }
 
 /**
@@ -2114,25 +1293,7 @@ export async function renameSession(id: string, title: string): Promise<void> {
  * different pooled connection where `PRAGMA foreign_keys` was not set.
  */
 export async function deleteSession(id: string): Promise<void> {
-	if (corePracticeEnabled) {
-		await deleteSessionCore(id);
-		return;
-	}
-	if (!db) db = await getDatabaseAdapter();
-	const database = db;
-	const attempts = await database.listAttempts(id);
-	for (const attempt of attempts) {
-		await database.deleteAudio(`attempt:${attempt.id}`);
-		await database.deleteAttemptAudio(attempt.id);
-		await database.replaceCorrections(attempt.id, []);
-		await database.deleteAttempt(attempt.id);
-	}
-	await database.deleteSession(id);
-	if (get(store).sessionId === id) {
-		abandonTake();
-		openSessionSetup = null;
-		update({ sessionId: null, attempts: [], activeAttemptId: null, phase: 'idle', elapsed: 0, level: 0 });
-	}
+	await deleteSessionCore(id);
 }
 
 /**
@@ -2145,75 +1306,7 @@ export async function deleteSession(id: string): Promise<void> {
  *   session in the same languages).
  */
 export async function openSession(sessionId: string, { restoreSetup = true } = {}): Promise<void> {
-	if (corePracticeEnabled) {
-		await openSessionCore(sessionId, { restoreSetup });
-		return;
-	}
-	// A prompt still being written for the previous view must not land on this session.
-	promptRequest++;
-	promptGeneration?.abort();
-	if (!db) db = await getDatabaseAdapter();
-	const [session, attempts] = await Promise.all([
-		db.getSession(sessionId),
-		db.listAttempts(sessionId)
-	]);
-
-	// Settings change below: the session being left must not take them on.
-	openSessionSetup = null;
-	const recorded = parseSessionSetup(session?.setup);
-	const setup = restoreSetup
-		? usableSetup(recorded ?? inferSessionSetup(attempts, get(appSettings)))
-		: setupFromSettings(get(appSettings));
-	if (restoreSetup) await adoptSessionSetup(setup);
-	if (session && (!recorded || !sameSetup(recorded, setup))) {
-		await db.putSession({ ...session, setup });
-	}
-
-	const correctionLists = await Promise.all(
-		attempts.map((attempt) => db!.listCorrections(attempt.id))
-	);
-	const views: AttemptView[] = attempts.map((attempt, index) => {
-		return {
-			id: attempt.id,
-			transcript: attempt.transcript,
-			correctedText: attempt.correctedText ?? '',
-			translation: attempt.translation ?? '',
-			translations: attempt.translations,
-			explanation: attempt.explanation ?? '',
-			followUp: attempt.followUp,
-			wordGlosses: attempt.wordGlosses ?? {},
-			corrections: correctionLists[index],
-			durationSec: attempt.durationSec,
-			wordCount: attempt.wordCount,
-			createdAt: attempt.createdAt,
-			audioUrl: null,
-			ttsVoice: attempt.ttsVoice
-		};
-	});
-
-	const latest = views.at(-1)?.id ?? null;
-	const prompt = session
-		? await sessionPrompt(db, session, attempts.find((attempt) => attempt.promptId)?.promptId ?? null)
-		: get(store).prompt;
-	// A take still recording or being analysed belongs to the previous view.
-	abandonTake();
-	update({
-		sessionId,
-		attempts: views,
-		activeAttemptId: latest,
-		mode: session?.mode ?? get(store).mode,
-		phase: 'idle',
-		error: null,
-		elapsed: 0,
-		level: 0,
-		statusText: '',
-		progress: null,
-		prompt,
-		promptEnglishFallback: false
-	});
-	openSessionSetup = { sessionId, setup };
-	// After the view holds the takes: preparing reads them from it.
-	prepareSessionAudio(views);
+	await openSessionCore(sessionId, { restoreSetup });
 }
 
 // ---------------------------------------------------------- Session setup ---
@@ -2285,21 +1378,3 @@ async function saveSessionSetup(sessionId: string, setup: SessionSetup): Promise
 }
 
 appSettings.subscribe(keepOpenSessionSetupCurrent);
-
-/**
- * The prompt a reopened session was answering. Previously only the title was
- * restored, so "Your prompt" came back empty. Uses the stored prompt when an
- * attempt links one, else the language's prompt with the same title (older
- * sessions and renamed-back titles), else the title itself.
- */
-async function sessionPrompt(
-	db: IDatabaseAdapter,
-	session: Session,
-	promptId: string | null
-): Promise<{ id: string; title: string; text: string }> {
-	const stored = promptId ? await db.getPrompt(promptId).catch(() => null) : null;
-	if (stored) return { id: stored.id, title: session.title, text: stored.text };
-	// Sessions from before prompts were stored keep only their title.
-	const text = englishPromptTextByTitle(session.title);
-	return { id: '', title: session.title, text: text ?? session.title };
-}

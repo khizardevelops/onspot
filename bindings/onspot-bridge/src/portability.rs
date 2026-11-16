@@ -18,7 +18,8 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use onspot_app::{
-    backup_date, Core, ExportDatabase, HostRpc, PickRestore, RestoreDatabase, StagedRestore,
+    backup_date, import_legacy_json, Core, ExportDatabase, HostRpc, LegacyImportError,
+    LegacyImportResult, PickRestore, RestoreDatabase, StagedRestore,
 };
 use onspot_ports::{CoreError, DatabaseFile, FileSystemSink, PickedFile, RestoreCounts};
 
@@ -29,6 +30,7 @@ pub const EXPORT_DATABASE: &str = "export.database";
 pub const RESTORE_PICK: &str = "restore.pick";
 pub const RESTORE_CONFIRM: &str = "restore.confirm";
 pub const RESTORE_CANCEL: &str = "restore.cancel";
+pub const RESTORE_LEGACY_JSON: &str = "restore.legacy_json";
 
 const BASE64: base64::engine::general_purpose::GeneralPurpose =
     base64::engine::general_purpose::STANDARD;
@@ -77,12 +79,13 @@ pub struct RestoreCancelResponse {
 pub async fn dispatch(
     core: &Core,
     command: &str,
-    _payload: Value,
+    payload: Value,
 ) -> Option<Result<Value, BridgeError>> {
     let result = match command {
         EXPORT_DATABASE => export_database(core).await.and_then(serialize),
         RESTORE_PICK => restore_pick(core).await.and_then(serialize),
         RESTORE_CONFIRM => restore_confirm(core).await.and_then(serialize),
+        RESTORE_LEGACY_JSON => restore_legacy(core, payload).await.and_then(serialize),
         RESTORE_CANCEL => {
             core.clear_staged_restore();
             serialize(RestoreCancelResponse { cancelled: true })
@@ -113,6 +116,37 @@ async fn export_database(core: &Core) -> Result<ExportDatabaseResponse, BridgeEr
         saved: result.saved,
         file_name: result.file_name,
     })
+}
+
+#[derive(Debug, Deserialize)]
+struct LegacyJsonRequest {
+    json: String,
+    /// RFC 3339 time the driver read the file, so the core stays clock-free.
+    now: String,
+}
+
+async fn restore_legacy(core: &Core, payload: Value) -> Result<LegacyImportResult, BridgeError> {
+    let request: LegacyJsonRequest = serde_json::from_value(payload)
+        .map_err(|error| BridgeError::invalid_payload(RESTORE_LEGACY_JSON, error))?;
+    let history = core
+        .hosts()
+        .history
+        .as_deref()
+        .ok_or_else(|| BridgeError::unavailable("history"))?;
+    let records = core
+        .hosts()
+        .records
+        .as_deref()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let settings = core.hosts().settings.as_deref();
+    import_legacy_json(&request.json, history, records, settings, &request.now)
+        .await
+        .map_err(|error| match error {
+            LegacyImportError::NotJson | LegacyImportError::WrongFormat => {
+                BridgeError::new("restore.invalid_backup", error.to_string())
+            }
+            LegacyImportError::Store(_) => BridgeError::new("restore.failed", error.to_string()),
+        })
 }
 
 async fn restore_pick(core: &Core) -> Result<RestorePickResponse, BridgeError> {

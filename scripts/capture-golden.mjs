@@ -43,11 +43,11 @@ plugin({
 	}
 });
 
-const { buildEvaluationMessages } = await import('../src/lib/adapters/llm/prompt.ts');
-const { normalizeEvaluation, extractJson } = await import('../src/lib/adapters/llm/evaluate.ts');
+const { buildEvaluationMessages } = await import('../deprecated/src/lib/adapters/llm/prompt.ts');
+const { normalizeEvaluation, extractJson } = await import('../deprecated/src/lib/adapters/llm/evaluate.ts');
 const { stripThinking } = await import('../src/lib/adapters/llm/client.ts');
-const { computeInsights } = await import('../src/lib/insights.ts');
-const { translationRules } = await import('../src/lib/adapters/llm/translationPrompt.ts');
+const { computeInsights } = await import('../deprecated/src/lib/insights.ts');
+const { translationRules } = await import('../deprecated/src/lib/adapters/llm/translationPrompt.ts');
 const { parseDuration, parseRefusal } = await import('../src/lib/usage/rateLimits.ts');
 const { GROQ_PUBLISHED_MODELS, groqPublishedLimits, groqKnownLimits } = await import('../src/lib/usage/publishedLimits.ts');
 const usageFormat = await import('../src/lib/usage/format.ts');
@@ -92,7 +92,7 @@ function readPrivateFunction(relativePath, name) {
 	return new Function(`return (${javascript});`)();
 }
 
-const isSilent = readPrivateFunction('src/lib/stores/practice.ts', 'isSilent');
+const isSilent = readPrivateFunction('deprecated/src/lib/stores/practice.ts', 'isSilent');
 
 /** A sine tone, rounded so the fixture stays small and byte-stable across runs. */
 function tone({ samples, amplitude, sampleRate, frequency = 440 }) {
@@ -183,7 +183,7 @@ const captures = [
 	{
 		crate: 'crates/onspot-dsp',
 		module: 'isSilent',
-		source: 'src/lib/stores/practice.ts',
+		source: 'deprecated/src/lib/stores/practice.ts',
 		fn: 'isSilent',
 		cases: [
 			{ name: 'digital silence', input: { pcm: new Array(160).fill(0), sampleRate: 16000 } },
@@ -224,7 +224,7 @@ const captures = [
 	{
 		crate: 'crates/adapters/llm-openai',
 		module: 'evaluationPrompt',
-		source: 'src/lib/adapters/llm/prompt.ts',
+		source: 'deprecated/src/lib/adapters/llm/prompt.ts',
 		fn: 'buildEvaluationMessages',
 		cases: [
 			...['exam', 'casual', 'freeflow'].flatMap((mode) =>
@@ -252,7 +252,7 @@ const captures = [
 	{
 		crate: 'crates/adapters/llm-openai',
 		module: 'evaluationParse',
-		source: 'src/lib/adapters/llm/evaluate.ts',
+		source: 'deprecated/src/lib/adapters/llm/evaluate.ts',
 		fn: 'normalizeEvaluation',
 		cases: [
 			{
@@ -405,7 +405,7 @@ const captures = [
 	{
 		crate: 'crates/adapters/llm-openai',
 		module: 'jsonExtract',
-		source: 'src/lib/adapters/llm/evaluate.ts / client.ts',
+		source: 'deprecated/src/lib/adapters/llm/evaluate.ts / src/lib/adapters/llm/client.ts',
 		fn: 'extractJson / stripThinking',
 		cases: [
 			{ name: 'thinking block is removed', input: { text: '<think>secret {curly}</think>{"a":1}' } },
@@ -527,7 +527,7 @@ const captures = [
 	{
 		crate: 'crates/adapters/llm-openai',
 		module: 'translationPrompt',
-		source: 'src/lib/adapters/llm/translationPrompt.ts',
+		source: 'deprecated/src/lib/adapters/llm/translationPrompt.ts',
 		fn: 'translationRules',
 		cases: ['French', 'Japanese', 'Persian'].flatMap((language) =>
 			['English', 'Spanish'].map((translationTarget) => ({
@@ -540,7 +540,7 @@ const captures = [
 	{
 		crate: 'crates/onspot-app',
 		module: 'insights',
-		source: 'src/lib/insights.ts',
+		source: 'deprecated/src/lib/insights.ts',
 		fn: 'computeInsights',
 		cases: [
 			{

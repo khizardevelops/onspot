@@ -35,6 +35,10 @@ pub struct PracticeConfig {
     pub explanation_voice: String,
     /// The LLM endpoint chosen in Settings (no API key).
     pub llm_endpoint: LlmEndpoint,
+    /// Whether Settings has a usable key for that endpoint. The key itself
+    /// stays in the driver; this only stops the core making a doomed request.
+    #[serde(default)]
+    pub llm_configured: bool,
     /// Playback pace, `1.0` being normal.
     pub pace: f32,
     /// Whether the explanation track can be spoken with the current voices.

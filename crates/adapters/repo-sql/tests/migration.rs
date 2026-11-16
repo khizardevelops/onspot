@@ -6,7 +6,7 @@
 //! must open, migrate to schema 12, keep every row, and pass SQLite's own
 //! integrity and foreign-key checks.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -16,10 +16,12 @@ use onspot_adapter_repo_sql::{
 };
 use onspot_ports::{HistoryStore, SettingsStore, SqlDriver, SqlValue};
 
+include!("fixtures/ensure.rs");
+
 static NEXT_FIXTURE: AtomicU32 = AtomicU32::new(0);
 
 fn fixture_copy() -> PathBuf {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/onspot-v0.2.4.sqlite");
+    let source = ensure_v024_fixture();
     let directory = std::env::temp_dir().join(format!("onspot-repo-sql-{}", std::process::id()));
     std::fs::create_dir_all(&directory).expect("temp directory");
     let destination = directory.join(format!(

@@ -62,9 +62,13 @@ pub const EXPORT_SESSION_MARKDOWN: &str = "export.session_markdown";
 pub const SYNC_DECIDE: &str = "sync.decide";
 pub const REMINDERS_STATE: &str = "reminders.state";
 pub const PROMPTS_CATALOGUE: &str = "prompts.catalogue";
+pub const PROMPTS_FLUSH_SUBMISSIONS: &str = "prompts.flush_submissions";
 pub const ONBOARDING_DECIDE: &str = "onboarding.decide";
 pub const LANGUAGE_PLAN: &str = "language.plan";
 pub const LANGUAGE_CATALOG: &str = "language.catalog";
+pub const SESSIONS_PARSE_SETUP: &str = "sessions.parse_setup";
+pub const SESSIONS_USABLE_SETUP: &str = "sessions.usable_setup";
+pub const SESSIONS_INFER_SETUP: &str = "sessions.infer_setup";
 
 /// `practice.configure` arguments.
 #[derive(Debug, Clone, Deserialize)]
@@ -261,9 +265,15 @@ pub async fn dispatch(
         SYNC_DECIDE => decide_sync_command(payload).and_then(serialize),
         REMINDERS_STATE => reminder_state_command(payload).and_then(serialize),
         PROMPTS_CATALOGUE => prompts_catalogue_command(payload).and_then(serialize),
+        PROMPTS_FLUSH_SUBMISSIONS => flush_submissions_command(core, payload)
+            .await
+            .and_then(serialize),
         ONBOARDING_DECIDE => onboarding_decide_command(payload).and_then(serialize),
         LANGUAGE_PLAN => language_plan_command(payload).and_then(serialize),
         LANGUAGE_CATALOG => serialize_catalog(),
+        SESSIONS_PARSE_SETUP => parse_setup_command(payload).and_then(serialize),
+        SESSIONS_USABLE_SETUP => usable_setup_command(payload).and_then(serialize),
+        SESSIONS_INFER_SETUP => infer_setup_command(payload).and_then(serialize),
         _ => return None,
     };
     Some(result)
@@ -296,6 +306,7 @@ fn configure(core: &Core, payload: Value) -> Result<PracticeResponse, BridgeErro
                 .history
                 .clone()
                 .ok_or_else(|| BridgeError::unavailable("storage"))?;
+            let prompts: Arc<dyn PromptSource>;
             let ports = PracticePorts {
                 events: core.event_sink(),
                 history,
@@ -305,10 +316,12 @@ fn configure(core: &Core, payload: Value) -> Result<PracticeResponse, BridgeErro
                 tts: Arc::new(RpcTts(core.host_rpc().clone())),
                 playback: Arc::new(RpcPlayback),
                 clock: Arc::new(SystemClock),
-                evaluation: Arc::new(onspot_app::EvaluatorPort::new(rust_evaluator(
-                    core.host_rpc().clone(),
-                ))),
-                prompts: Arc::new(RpcPrompts(core.host_rpc().clone())),
+                evaluation: Arc::new(onspot_app::EvaluatorPort::new({
+                    let evaluator = rust_evaluator(core.host_rpc().clone());
+                    prompts = Arc::new(LlmPrompts(evaluator.clone()));
+                    evaluator
+                })),
+                prompts,
                 ids: Arc::new(BridgeIds::default()),
             };
             core.install_practice(Arc::new(RunPracticeSession::new(ports, request.config)))
@@ -675,6 +688,97 @@ fn prompts_catalogue_command(payload: Value) -> Result<PromptsResponse, BridgeEr
             &request.target_language,
         ),
     })
+}
+
+/// `prompts.flush_submissions` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlushSubmissionsRequest {
+    /// Shared prompt-database endpoint; empty means this build does not share.
+    pub endpoint: String,
+    /// Retry even a batch still inside its backoff (the device came online).
+    #[serde(default)]
+    pub force: bool,
+    /// Whether the driver reports a connection now.
+    #[serde(default)]
+    pub online: bool,
+}
+
+async fn flush_submissions_command(
+    core: &Core,
+    payload: Value,
+) -> Result<onspot_app::SubmissionFlushResult, BridgeError> {
+    let request: FlushSubmissionsRequest = parse(PROMPTS_FLUSH_SUBMISSIONS, payload)?;
+    let records = core
+        .hosts()
+        .records
+        .clone()
+        .ok_or_else(|| BridgeError::unavailable("storage"))?;
+    let http = RpcHttp(core.host_rpc().clone());
+    onspot_app::flush(
+        records.as_ref(),
+        &http,
+        &SystemClock,
+        &onspot_app::FlushRequest {
+            endpoint: &request.endpoint,
+            force: request.force,
+            online: request.online,
+        },
+    )
+    .await
+    .map_err(core_error)
+}
+
+/// `sessions.parse_setup` arguments: the stored JSON, or its text.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParseSetupRequest {
+    #[serde(default)]
+    pub setup: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../../src/lib/core-client/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct SetupResponse {
+    pub setup: Option<onspot_domain::SessionSetup>,
+}
+
+fn parse_setup_command(payload: Value) -> Result<SetupResponse, BridgeError> {
+    let request: ParseSetupRequest = parse(SESSIONS_PARSE_SETUP, payload)?;
+    Ok(SetupResponse {
+        setup: onspot_app::parse_session_setup(request.setup.as_ref()),
+    })
+}
+
+/// `sessions.usable_setup` and `sessions.setup_from_settings` arguments.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupRequest {
+    pub setup: onspot_domain::SessionSetup,
+}
+
+fn usable_setup_command(payload: Value) -> Result<onspot_domain::SessionSetup, BridgeError> {
+    let request: SetupRequest = parse(SESSIONS_USABLE_SETUP, payload)?;
+    Ok(onspot_app::usable_setup(&request.setup))
+}
+
+/// `sessions.infer_setup` arguments: a session's takes, oldest first, and the
+/// current settings (the setup fields the inference reads).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferSetupRequest {
+    #[serde(default)]
+    pub attempts: Vec<onspot_app::SetupAttempt>,
+    pub settings: onspot_app::AppSettings,
+}
+
+fn infer_setup_command(payload: Value) -> Result<onspot_domain::SessionSetup, BridgeError> {
+    let request: InferSetupRequest = parse(SESSIONS_INFER_SETUP, payload)?;
+    Ok(onspot_app::infer_session_setup(
+        &request.attempts,
+        &request.settings,
+    ))
 }
 
 /// `onboarding.decide` arguments.
@@ -1183,17 +1287,30 @@ fn rust_evaluator(rpc: Arc<onspot_app::HostRpc>) -> Arc<dyn LlmProvider> {
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-impl PromptSource for RpcPrompts {
+impl PromptSource for LlmPrompts {
     async fn write(
         &self,
         request: &PromptRequest,
-        _token: &CancelToken,
+        token: &CancelToken,
     ) -> Result<Option<GeneratedPrompt>, CoreError> {
-        call(&self.0, "prompt.write", json!(request)).await
+        let request = onspot_ports::PromptTopicRequest {
+            endpoint: request.endpoint.clone(),
+            instruction_language: request.instruction_language.clone(),
+            instruction_language_id: request.instruction_language_id.clone(),
+            instruction_scripts: request.instruction_scripts.clone(),
+            target_language: request.target_language.clone(),
+            level: request.level.clone(),
+            mode: request.mode.clone(),
+            avoid_topics: request.avoid_topics.clone(),
+        };
+        match self.0.write_prompt(&request, token).await {
+            Ok(prompt) => Ok(Some(prompt)),
+            Err(_) => Ok(None),
+        }
     }
 }
 
-struct RpcPrompts(Arc<onspot_app::HostRpc>);
+struct LlmPrompts(Arc<dyn LlmProvider>);
 
 struct SystemClock;
 

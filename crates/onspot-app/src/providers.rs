@@ -15,6 +15,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use crate::language::{language, resource_level};
+
 /// A provider preset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -179,6 +181,137 @@ pub fn automatic_models(provider: &str, level: &str) -> Vec<&'static str> {
         .unwrap_or_default()
 }
 
+/// The endpoint and key the LLM client should use for one request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedEndpoint {
+    pub base_url: String,
+    pub provider: String,
+    pub model: String,
+    pub fallback_models: Vec<String>,
+    /// The key the driver found in its secret store; never persisted here.
+    pub api_key: String,
+}
+
+/// The settings the endpoint resolution reads.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EndpointSettings<'a> {
+    pub correction_mode: &'a str,
+    pub local_llm_url: &'a str,
+    pub local_llm_model: &'a str,
+    pub llm_provider: &'a str,
+    pub llm_model: &'a str,
+    pub custom_base_url: &'a str,
+    pub custom_model: &'a str,
+    /// The language being studied; the LLM reads it.
+    pub target_language: &'a str,
+    /// The language of instruction; the LLM writes it intro.
+    pub instruction_language: &'a str,
+    /// The key from the driver's secret store, or empty.
+    pub api_key: &'a str,
+}
+
+/// The resource level a request needs: the model reads the studied language and
+/// writes the language of instruction, so the less-resourced of the two decides.
+fn language_level(target_language: &str, instruction_language: &str) -> &'static str {
+    let studied =
+        language(target_language).map_or(f64::INFINITY, |language| language.web_text_percent);
+    let instruction = crate::language::catalog()
+        .instruction_languages
+        .iter()
+        .find(|language| language.id == instruction_language)
+        .map_or(f64::INFINITY, |language| language.web_text_percent);
+    resource_level(studied.min(instruction))
+}
+
+/// The provider id implied by an endpoint URL.
+pub fn provider_id_for(base_url: &str) -> String {
+    match host(base_url).to_ascii_lowercase().as_str() {
+        "api.groq.com" => String::from("groq"),
+        "api.deepseek.com" => String::from("deepseek"),
+        _ => String::from("custom"),
+    }
+}
+
+/// Resolves the model Automatic should use: the chosen one, or the first model
+/// trusted with the languages in use, else the provider default.
+pub fn models_for(provider_id: &str, chosen: &str, language_level: &str) -> Vec<String> {
+    if provider_id == "custom" {
+        return vec![chosen.to_owned()];
+    }
+    if !chosen.is_empty() && chosen != automatic_model() {
+        return vec![chosen.to_owned()];
+    }
+    let automatic = automatic_models(provider_id, language_level);
+    if automatic.is_empty() {
+        vec![provider(provider_id).default_model.clone()]
+    } else {
+        automatic.into_iter().map(str::to_owned).collect()
+    }
+}
+
+/// Builds the endpoint the LLM client needs from settings and a secret.
+pub fn resolve_endpoint(settings: &EndpointSettings<'_>) -> ResolvedEndpoint {
+    if settings.correction_mode == "local" {
+        return ResolvedEndpoint {
+            base_url: settings.local_llm_url.to_owned(),
+            provider: String::from("custom"),
+            model: settings.local_llm_model.to_owned(),
+            fallback_models: Vec::new(),
+            api_key: settings.api_key.to_owned(),
+        };
+    }
+
+    let id = if settings.llm_provider == "custom" {
+        "custom"
+    } else {
+        settings.llm_provider
+    };
+    let provider = provider(id);
+    let base_url = if id == "custom" {
+        settings.custom_base_url
+    } else {
+        provider.base_url.as_str()
+    };
+    let base_url = if base_url.trim().is_empty() {
+        provider.base_url.clone()
+    } else {
+        base_url.to_owned()
+    };
+    let chosen = if id == "custom" {
+        settings.custom_model
+    } else {
+        settings.llm_model
+    };
+    let level = language_level(settings.target_language, settings.instruction_language);
+    let models = models_for(id, chosen, level);
+    let mut models = models.into_iter();
+    let model = models.next().unwrap_or_default();
+    let provider_id = provider_id_for(&base_url);
+    ResolvedEndpoint {
+        base_url,
+        provider: provider_id,
+        model,
+        fallback_models: models.collect(),
+        api_key: settings.api_key.to_owned(),
+    }
+}
+
+/// Whether evaluation can run at all: a cloud provider needs a key; a custom
+/// endpoint (often local) needs a URL and model, and its key is optional.
+pub fn is_configured(settings: &EndpointSettings<'_>) -> bool {
+    if settings.correction_mode == "local" {
+        return !settings.local_llm_url.trim().is_empty()
+            && !settings.local_llm_model.trim().is_empty();
+    }
+    match settings.llm_provider {
+        "groq" | "deepseek" => !settings.api_key.trim().is_empty(),
+        _ => {
+            !settings.custom_base_url.trim().is_empty() && !settings.custom_model.trim().is_empty()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,5 +371,71 @@ mod tests {
         assert!(!is_chat_model("openai/gpt-oss-safeguard-20b"));
         assert!(!is_chat_model("text-embedding-3-small"));
         assert!(!is_chat_model("Whisper-Large-V3"));
+    }
+
+    fn settings<'a>(api_key: &'a str) -> EndpointSettings<'a> {
+        EndpointSettings {
+            correction_mode: "cloud",
+            local_llm_url: "",
+            local_llm_model: "",
+            llm_provider: "groq",
+            llm_model: automatic_model(),
+            custom_base_url: "",
+            custom_model: "",
+            target_language: "fr",
+            instruction_language: "en",
+            api_key,
+        }
+    }
+
+    #[test]
+    fn a_configured_provider_resolves_automatic_models() {
+        let resolved = resolve_endpoint(&settings("sk-live"));
+        assert_eq!(resolved.provider, "groq");
+        assert_eq!(resolved.api_key, "sk-live");
+        assert!(!resolved.base_url.is_empty());
+
+        assert!(!resolved.model.is_empty());
+        assert_eq!(provider_id_for("https://api.deepseek.com/v1"), "deepseek");
+        assert_eq!(provider_id_for("http://localhost:1234/v1"), "custom");
+    }
+
+    #[test]
+    fn language_level_takes_the_less_resourced_of_the_pair() {
+        // Both fr and en are high-resource, so Automatic may choose between them.
+        assert_eq!(language_level("fr", "en"), "high");
+        // The studied and instruction languages both count: a low-resource
+        // instruction language must not be hidden by a high-resource target.
+        assert_eq!(language_level("fr", "fa"), "medium");
+        assert_eq!(language_level("fr", "ur"), "low");
+    }
+
+    #[test]
+    fn configuration_needs_a_key_except_for_a_custom_endpoint() {
+        assert!(is_configured(&settings("sk-live")));
+        assert!(!is_configured(&settings("")));
+
+        let mut custom = settings("");
+        custom.llm_provider = "custom";
+        custom.custom_base_url = "http://localhost:1234/v1";
+        custom.custom_model = "local";
+        assert!(is_configured(&custom));
+        assert_eq!(
+            models_for("custom", "local", "low"),
+            vec![String::from("local")]
+        );
+        assert_eq!(resolve_endpoint(&custom).model, "local");
+
+        let mut local = settings("");
+        local.correction_mode = "local";
+        local.local_llm_url = "http://127.0.0.1:4330/v1";
+        local.local_llm_model = "stub";
+        let resolved = resolve_endpoint(&local);
+        assert_eq!(resolved.provider, "custom");
+        assert_eq!(resolved.base_url, "http://127.0.0.1:4330/v1");
+        assert!(is_configured(&local));
+        let mut blank = settings("");
+        blank.correction_mode = "local";
+        assert!(!is_configured(&blank));
     }
 }

@@ -1,0 +1,139 @@
+{
+	"cases": [
+		{
+			"name": "groq automatic, fr/en",
+			"settings": {
+				"correctionMode": "cloud",
+				"localLlmUrl": "",
+				"localLlmModel": "",
+				"llmProvider": "groq",
+				"llmModel": "auto",
+				"customBaseUrl": "",
+				"customModel": "",
+				"targetLanguage": "fr",
+				"instructionLanguage": "en"
+			},
+			"apiKey": "sk-test"
+		},
+		{
+			"name": "groq automatic, fa instruction",
+			"settings": {
+				"correctionMode": "cloud",
+				"localLlmUrl": "",
+				"localLlmModel": "",
+				"llmProvider": "groq",
+				"llmModel": "auto",
+				"customBaseUrl": "",
+				"customModel": "",
+				"targetLanguage": "fr",
+				"instructionLanguage": "fa"
+			},
+			"apiKey": "sk-test"
+		},
+		{
+			"name": "groq pinned model",
+			"settings": {
+				"correctionMode": "cloud",
+				"localLlmUrl": "",
+				"localLlmModel": "",
+				"llmProvider": "groq",
+				"llmModel": "openai/gpt-oss-20b",
+				"customBaseUrl": "",
+				"customModel": "",
+				"targetLanguage": "fr",
+				"instructionLanguage": "en"
+			},
+			"apiKey": "sk-test"
+		},
+		{
+			"name": "deepseek automatic",
+			"settings": {
+				"correctionMode": "cloud",
+				"localLlmUrl": "",
+				"localLlmModel": "",
+				"llmProvider": "deepseek",
+				"llmModel": "auto",
+				"customBaseUrl": "",
+				"customModel": "",
+				"targetLanguage": "fr",
+				"instructionLanguage": "en"
+			},
+			"apiKey": "sk-test"
+		},
+		{
+			"name": "custom provider",
+			"settings": {
+				"correctionMode": "cloud",
+				"localLlmUrl": "",
+				"localLlmModel": "",
+				"llmProvider": "custom",
+				"llmModel": "auto",
+				"customBaseUrl": "http://127.0.0.1:1234/v1",
+				"customModel": "local-model",
+				"targetLanguage": "fr",
+				"instructionLanguage": "en"
+			},
+			"apiKey": "sk-test"
+		},
+		{
+			"name": "local server mode",
+			"settings": {
+				"correctionMode": "local",
+				"localLlmUrl": "http://127.0.0.1:4330/v1",
+				"localLlmModel": "stub",
+				"llmProvider": "groq",
+				"llmModel": "auto",
+				"customBaseUrl": "",
+				"customModel": "",
+				"targetLanguage": "fr",
+				"instructionLanguage": "en"
+			},
+			"apiKey": "sk-test"
+		}
+	],
+	"expected": [
+		{
+			"baseUrl": "https://api.groq.com/openai/v1",
+			"provider": "groq",
+			"model": "openai/gpt-oss-120b",
+			"fallbackModels": [
+				"qwen/qwen3.8-27b",
+				"openai/gpt-oss-20b"
+			]
+		},
+		{
+			"baseUrl": "https://api.groq.com/openai/v1",
+			"provider": "groq",
+			"model": "openai/gpt-oss-120b",
+			"fallbackModels": [
+				"qwen/qwen3.8-27b"
+			]
+		},
+		{
+			"baseUrl": "https://api.groq.com/openai/v1",
+			"provider": "groq",
+			"model": "openai/gpt-oss-20b",
+			"fallbackModels": []
+		},
+		{
+			"baseUrl": "https://api.deepseek.com",
+			"provider": "deepseek",
+			"model": "deepseek-flash",
+			"fallbackModels": [
+				"deepseek-v4-pro"
+			]
+		},
+		{
+			"baseUrl": "http://127.0.0.1:1234/v1",
+			"provider": "custom",
+			"model": "local-model",
+			"fallbackModels": []
+		},
+		{
+			"baseUrl": "http://127.0.0.1:4330/v1",
+			"provider": "custom",
+			"model": "stub",
+			"fallbackModels": []
+		}
+	]
+}

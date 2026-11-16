@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { LanguageResourceLevel } from '#lib/languages/index.js';
-import type { LlmModelOption, LlmProviderConfig, LlmProviderId } from './types';
+import type { LlmEndpoint, LlmModelOption, LlmProviderConfig, LlmProviderId } from './types';
 
 /**
  * The view catalog for the Settings screen and the synchronous client helpers.
@@ -171,4 +171,54 @@ export function providerNameFor(baseUrl: string): string {
 	};
 	const known = Object.values(LLM_PROVIDERS).find((provider) => provider.baseUrl && host(provider.baseUrl) === host(baseUrl));
 	return known?.name ?? host(baseUrl);
+}
+
+/** What the endpoint resolver reads from Settings; the driver adds the key. */
+export interface EndpointSettings {
+	correctionMode: 'cloud' | 'local';
+	localLlmUrl: string;
+	localLlmModel: string;
+	llmProvider: LlmProviderId;
+	llmModel: string;
+	customBaseUrl: string;
+	customModel: string;
+	/** Resource level of the least-resourced language in use. */
+	languageLevel: LanguageResourceLevel;
+}
+
+/**
+ * The endpoint to call, given Settings and the language level. The driver adds
+ * the key: this function is the one policy the Rust core mirrors
+ * (`providers::resolve_endpoint`), and `request-endpoints.json` pins them.
+ */
+export function resolveLlmEndpointPolicy(settings: EndpointSettings): LlmEndpoint {
+	if (settings.correctionMode === 'local') {
+		return {
+			baseUrl: settings.localLlmUrl,
+			apiKey: '',
+			model: settings.localLlmModel
+		};
+	}
+	const provider = getProvider(settings.llmProvider);
+	const baseUrl =
+		settings.llmProvider === 'custom' ? settings.customBaseUrl : provider.baseUrl;
+	const chosen = settings.llmProvider === 'custom' ? settings.customModel : settings.llmModel;
+	const [model, ...fallbackModels] = modelsFor(settings.llmProvider, chosen, settings.languageLevel);
+	return {
+		baseUrl: baseUrl || provider.baseUrl,
+		apiKey: '',
+		model: model ?? provider.defaultModel,
+		fallbackModels
+	};
+}
+
+function modelsFor(
+	provider: LlmProviderId,
+	chosen: string,
+	level: LanguageResourceLevel
+): string[] {
+	if (provider === 'custom') return [chosen];
+	if (chosen && chosen !== AUTOMATIC_MODEL) return [chosen];
+	const automatic = automaticModels(provider, level);
+	return automatic.length > 0 ? automatic : [getProvider(provider).defaultModel];
 }

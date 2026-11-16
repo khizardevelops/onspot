@@ -333,7 +333,7 @@ const server = spawn(
 	'bun',
 	['run', 'dev', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
 	{
-		env: { ...process.env, VITE_CORE_BACKEND: 'core' },
+		env: { ...process.env },
 		stdio: ['ignore', 'pipe', 'pipe']
 	}
 );

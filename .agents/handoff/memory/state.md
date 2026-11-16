@@ -1,5 +1,92 @@
 # State
 
+## Hexagonal migration: P8 acceptance gates closed (2026-11-16, uncommitted)
+
+- **CLI driver done:** `drivers/cli` implements `settings get/set`, `sessions list/show`, `evaluate`,
+  `insights`, `export session --format md` and `export database --out` over `onspot-app`; manual
+  parser (no network for `clap`), SIGINT → `CancelToken`, env/keyfile secrets, blocking rustls HTTP,
+  and 7 integration tests including stub-HTTP evaluate and Ctrl-C.
+- **Toggle removed:** `VITE_CORE_BACKEND`, `backend.ts`, `useCore(...)`, `coreBackend` and the
+  test-script env are gone. `backend.ts` and the old stores are archived under `deprecated/`.
+- **Practice store collapsed:** `src/lib/stores/practice.ts` (2,304 → ~1,380 lines) now always boots
+  the core; the legacy recorder/transcriber/evaluator/prompt/persistence bodies and their imports
+  are gone. Driver-side code left is the core host wiring, P5 view updates for translations/glosses/
+  phrases, audio playback/queueing, and session setup restore/save.
+- **Settings store collapsed:** `stores/settings.ts` no longer has `coreStorageBroken` or the
+  legacy row-reader/writer, defaults/merge/normalisation, Automatic migration or retired-voice
+  rewrite. `initSettings` is now one `settings.load`; writes are one `settings.patch`.
+- **Boundaries:** `scripts/check-boundaries.mjs` errors on (1) live imports of `deprecated/`,
+  (2) `svelte/store` outside view-state stores/host shims, and (3) `@tauri-apps/*`/`plugin:speech`
+  outside documented host shims. All rules are green.
+- **Archived after the collapse:** `adapters/llm/translate.ts`, `glossary.ts` (LLM gloss calls) and
+  `translationPrompt.ts` moved to `deprecated/`; the pure hover-intent checks moved to
+  `components/transcriptGlosses.ts`. `lib/insights.ts` (`computeInsights`) moved to `deprecated/`;
+  `/insights/` imports generated core types and keeps only `SEVERITY_RANK` (bigint counts handled).
+- **Host-shim cleanup:** `utils/sessionTranscript.ts` saves through the new
+  `platform/saveDocument.ts`; dead `exportDatabaseFile`/`importSqliteBackup`/`importSqliteBytes`
+  were removed from `utils/export.ts` and the pre-edit file is archived at
+  `deprecated/src/lib/utils/export.ts`. `service.ts`/`core-client/sync.ts` no longer carry
+  `decideSync`; `adapters/sync/webdav.ts` and `google/drive.ts` are account/connect/disconnect
+  providers only (whole-database transfer is Rust `sync.now`). `sync/http.ts` remains for
+  `google/oauth.ts`.
+- **Prompt-topic moved:** `promptTopic.ts` is archived; `llm-openai::prompt_topic` renders the
+  same system/user messages, parses/validates title/text/word caps, checks scripts from the
+  exported language catalog, and rejects recent topics. The bridge uses an LLM-backed
+  `PromptSource`; host `prompt.write` and the unused host `evaluation.evaluate` case are gone.
+  `PracticeConfig.llmConfigured` lets the core skip a doomed request and pick a catalogue prompt.
+- **Legacy JSON import moved:** `onspot-app::legacy_import` merges format-1 backups through the
+  Rust repositories (sessions, prompts, attempts, corrections, recordings, `onspot.setting.*`)
+  without clearing unrelated rows; bridge `restore.legacy_json`; the TS function now reads the
+  file and asks the core, then reloads settings only when a setting was imported.
+- **Dead LLM TS archived:** `adapters/llm/evaluate.ts`, `prompt.ts`, `languageGuidance.ts` and
+  `promptTopic.ts` moved under mirrored `deprecated/`; `capture-golden.mjs` imports the archived
+  copies so fixture regeneration survives. Live `client.ts` still uses `jsonRepair`/`pacing`
+  for model listing/connection tests, so those stay.
+- **Still live by design:** `adapters/db` CRUD used by export/reminders/prompt submissions/audio
+  read-back, and `usage/ledger` + `usage/coreMonitor` host-side meter/account probes. Porting them
+  is product work, not P8 deletion; the unused adapter methods stay until that port.
+- **Verified 2026-11-15:** `bun run check` 0 errors/9 warnings; production build;
+  `test:storage`, `test:practice`, `test:sync`, `test:portability`; boundaries 0 violations; SPDX
+  416; catalogs/providers checks; coupling regenerated and `--check` current (306 files, 81 Svelte,
+  17 Tauri, 217 browser globals, 0 cross-layer); `cargo fmt --check`,
+  `cargo clippy --workspace --all-targets --offline -D warnings`, `cargo test --workspace --offline`
+  green; bridge types regenerated (52 types).
+- **Environment (2026-11-15):** cargo network access works again (`cargo search` succeeds; crates.io
+  downloads return 200). `--offline` remains in local gate commands only as a deterministic choice.
+
+### P8 acceptance gates (2026-11-16)
+
+- **Cross-driver golden test:** `drivers/cli/tests/cross_driver_endpoint.rs` proves the GUI practice
+  endpoint and `onspot_cli::evaluation::build_request` agree for groq Automatic, custom local and
+  ja/fa (less-resourced language decides), and pins the wire keys. The CLI now delegates to
+  `providers::resolve_endpoint`; `EndpointSettings` takes language ids, not a precomputed level.
+- **Fresh-clone bug fixed:** the v0.2.4 SQLite fixture was gitignored but hard-required by
+  `repo-sql` tests, so `git clone && cargo test` failed. `tests/fixtures/ensure.rs` rebuilds it from
+  the tracked `v9.sql` (lock file + atomic rename, parallel-safe); `scripts/make-fixture.sh` is the
+  manual path. Rebuilt `.dump` matches `sqlite3 < v9.sql`; a clean clone with no `.sqlite`
+  passes all repo-sql binaries.
+- **Android:** rustup + aarch64/x86_64 targets installed locally; JDK 21, NDK 28.2. x86_64 **debug
+  APK built and installed on the `dev_api36` emulator**; activity resumed, WebView devtools showed
+  `http://tauri.localhost/welcome/` ("Set up onspot") with 16 stylesheets / 9 buttons — the real
+  Svelte UI. arm64 release APK left to CI (no local arm64 device).
+- **Desktop:** release build produced `.deb` and `.rpm` (32 MB each) plus a 42 MB binary; binary
+  launches under Xvfb and keeps running (benign GTK titlebar warning only). **AppImage fails
+  locally** (`linuxdeploy` on CachyOS/Arch); release.yml builds it on Ubuntu — host limitation, not
+  a regression.
+- **Fresh clone:** `bun install --frozen-lockfile` and `bun run build` pass. Full `cargo test
+  --workspace` in the clone compiled every crate then hit the 112 GB filesystem limit at the final
+  link; the repo-tree run is green at **281 passed / 0 failed**.
+- **Version:** left at **0.2.4** — the maintainer bumps it by hand. `docs/releases/v0.2.5.md` was
+  drafted and then removed on request; no tag was pushed.
+- **Remaining:** wire `stores/llm.ts` to the Rust resolver (needs the BYOK key synchronously, so it is
+  a permanent `SecretStore` adapter today; the cross-driver test pins its rule), the direct
+  `adapters/db` view shims and usage-ledger *persistence*, the P8 commit, and the unavailable
+  smokes (live keys, real Drive, Windows/macOS, real arm64 device, AppImage locally).
+
+- **Still open:** the P8 commit (the maintainer did not ask for one). Android arm64 / live-key /
+  real Drive / large-download / physical-device smokes remain blocked here. The direct
+  `adapters/db` view shims and device-local usage ledger remain intentionally driver-side.
+
 ## Hexagonal migration: P7 closeout ports landed (2026-11-14, uncommitted)
 
 - **Typed settings moved to the core.** `crates/onspot-app/src/settings.rs` now owns `AppSettings`

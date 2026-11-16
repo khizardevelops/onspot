@@ -25,6 +25,7 @@ pub use files::{DatabaseFile, FileSystemSink, PickedFile, RestoreCounts};
 pub use language_data::{DownloadProgressSink, LanguageDataInstaller};
 pub use llm::{
     HttpBytesRequest, HttpBytesResponse, HttpClient, HttpRequest, HttpResponse, LlmProvider,
+    PromptTopicRequest,
 };
 pub use practice::{
     AudioCapture, AudioClip, AudioFrame, AudioLevelSink, AudioPlayback, BlobHandle, CaptureOptions,

@@ -25,7 +25,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "wasm
 once_cell = "1"
 regex = "1"
 async-trait = "0.1"
-time = { version = "0.3", features = ["formatting"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [dev-dependencies]
 onspot-adapter-repo-sql = { path = "../adapters/repo-sql" }

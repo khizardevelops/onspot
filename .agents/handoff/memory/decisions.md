@@ -1,5 +1,25 @@
 # Decisions
 
+## P8 follow-up: prompt generation and legacy import live in Rust (2026-11-15)
+
+- **Prompt-topic generation moved, not the fallback.** `llm-openai::prompt_topic` owns the
+  system/user prompt, JSON parse, title/text/word caps, script check and recent-topic check.
+  The bridge supplies it through an LLM-backed `PromptSource`; the host `prompt.write` RPC and
+  the unused `evaluation.evaluate` RPC are removed. Catalogue candidates still cross the
+  boundary as data. `PracticeConfig.llmConfigured` is driver-computed because only the driver
+  knows whether a key is present; the core uses it to skip a request that would return 401.
+- **Language scripts are exported data.** `scripts` was added to the TypeScript language
+  registry and flows into `assets/languages.json`, so `couldBeWrittenIn` is a Rust function over
+  the catalogue (`onspot-dsp::text_language`) instead of a second TS copy.
+- **Legacy JSON import is a core use case.** `onspot-app::legacy_import`, exposed as
+  `restore.legacy_json`, parses and merges format-1 backups through the repositories. The driver
+  only reads the file and supplies `now`; settings are reloaded driver-side when the result says
+  any were imported.
+- **Historic capture exception.** The archived `evaluate.ts`/`prompt.ts` under `deprecated/` now
+  import live modules through `#lib/...`, so `scripts/capture-golden.mjs` can still reproduce the
+  P0 fixtures. This is the one place an archived module points at live code; the live tree still
+  has zero `deprecated/` imports.
+
 ## P8 cutover: legacy TypeScript is archived, not deleted (2026-11-14)
 
 - **User directive:** when P8 removes the legacy paths, move the TypeScript modules into the
@@ -14,6 +34,19 @@
 - **Archival is not a fallback.** `VITE_CORE_BACKEND` and the legacy branches still go away, so
   the archived code is frozen reference material; delete it only after a later release proves the
   cutover. The empty `deprecated/` folder already exists at the repo root.
+
+## P8 boundaries: explicit host-shim allowlists (2026-11-14)
+
+- `svelte/store` is allowed in `src/lib/stores/`, `core-client/`, `platform/`, `usage/`, the
+  prompt-submission store, the TTS service, `adapters/llm/pacing.ts`, `adapters/sync/`, components
+  and routes. These are view-state holders or host shims that read them; domain modules still get
+  data as arguments and the rule fails a new import anywhere else.
+- `@tauri-apps/*` and `plugin:speech` are allowed only in the core-client transport, platform
+  shims, the Tauri SQL adapter/schema/types, the HTTP LLM client, sync transports, the native STT
+  engine, export/save utilities and the title bar. This is narrower than "anywhere in adapters"
+  and catches a stray plugin import in new domain code.
+- `deprecated/` imports are always errors in live code; the archive is outside `src/` and is not
+  compiled by Vite, svelte-check or tsconfig.
 
 
 ## P7 driver host: one install with the core client (2026-11-14)
@@ -1907,3 +1940,24 @@ JSON-field patch: `settings.patch` applies changes to the normalised document, w
 differ, returns the normalised document, and the driver adopts that document as its `written` map
 so defaults and stale values are never written back. The Svelte store remains the optimistic view;
 it no longer owns the rules.
+
+
+## P8: archive legacy TypeScript, never delete it (2026-11-14)
+
+When the cutover removes a legacy module, move it with `git mv` to the mirrored path under
+top-level `deprecated/` and keep its SPDX header. Live code must not import `deprecated/`; the
+boundary check enforces that. This preserves the reference implementation the Rust ports were
+verified against instead of losing it in the cutover.
+
+## P8 follow-up: endpoint resolution has two drivers, one rule (2026-11-15)
+
+- **Rust owns the rule.** `providers::resolve_endpoint` / `models_for` / `is_configured` /
+  `provider_id_for` compute base URL, catalog provider id, Automatic-model choice, fallback models
+  and the cloud-key gate. `drivers/cli/tests/cross_driver_endpoint.rs` feeds the GUI and CLI paths
+  the same settings and fails if the endpoints differ.
+- **The TypeScript copy stays only because of `SecretStore`.** `stores/llm.ts` must read the
+  BYOK key synchronously from browser storage (a permanent host adapter, §6 of the master
+  prompt) before a request can be built. Converting it to an async core command would ripple
+  through derived stores and the layout, which I9 forbids for no behavioural gain. Its model
+  policy still calls the same generated provider catalog, and the cross-driver test pins the
+  two against drift.

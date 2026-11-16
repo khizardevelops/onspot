@@ -5,13 +5,19 @@
 use std::collections::BTreeMap;
 
 use onspot_domain::{EvaluationRequest, EvaluationResult, LlmEndpoint};
-use onspot_ports::{CancelToken, Clock, CoreError, HttpClient, HttpRequest, LlmProvider};
+use onspot_ports::{
+    CancelToken, Clock, CoreError, GeneratedPrompt, HttpClient, HttpRequest, LlmProvider,
+    PromptTopicRequest,
+};
 use serde_json::{json, Value};
 
 use crate::json_repair::repair_json;
 use crate::pacing::{Pacing, DEFAULT_TOKENS_PER_MINUTE};
 use crate::parse::{extract_json, normalize_evaluation, strip_thinking};
 use crate::prompt::{build_evaluation_messages, ChatMessage};
+use crate::prompt_topic::{
+    build_prompt_messages, parse_prompt_topic, validate_prompt_topic, PROMPT_TOPIC_TOKENS,
+};
 
 const DEFAULT_TEMPERATURE: f32 = 0.2;
 const MAX_ERROR_CHARS: usize = 2000;
@@ -193,6 +199,34 @@ impl LlmProvider for OpenAiEvaluator {
             &request.transcript,
             Some(&request.language),
         ))
+    }
+
+    async fn write_prompt(
+        &self,
+        request: &PromptTopicRequest,
+        token: &CancelToken,
+    ) -> Result<GeneratedPrompt, CoreError> {
+        let messages = build_prompt_messages(request);
+        let raw = self
+            .complete(
+                &request.endpoint,
+                &messages,
+                PROMPT_TOPIC_TOKENS,
+                true,
+                0.9,
+                token,
+            )
+            .await?;
+        let generated = parse_prompt_topic(&raw)
+            .and_then(|prompt| {
+                validate_prompt_topic(&prompt, request)?;
+                Ok(prompt)
+            })
+            .map_err(|message| CoreError::new("llm.invalid_prompt", message))?;
+        Ok(GeneratedPrompt {
+            title: generated.title,
+            text: generated.text,
+        })
     }
 
     async fn translate(

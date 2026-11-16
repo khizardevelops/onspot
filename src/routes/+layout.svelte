@@ -20,7 +20,6 @@
 	import '#lib/stores/textSize.svelte.js';
 	import '#lib/stores/zoom.svelte.js';
 	import { toast } from '#lib/stores/toast.js';
-	import { coreBackend } from '#lib/core-client/backend.js';
 	import { getCoreClient } from '#lib/core-client/client.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
@@ -118,7 +117,7 @@
 		// driver host (sync, export, language downloads, OAuth) is answering
 		// before the learner opens the screen that needs it. The browser build
 		// still boots lazily, when a core feature first asks.
-		if (coreBackend === 'core' && isTauri()) {
+		if (isTauri()) {
 			void getCoreClient().catch((error) => {
 				console.error('[startup] the core bridge could not start', error);
 			});

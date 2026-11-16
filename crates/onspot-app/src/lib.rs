@@ -16,12 +16,15 @@ pub mod hosts;
 pub mod insights;
 pub mod language;
 pub mod language_download;
+pub mod legacy_import;
 pub mod onboarding;
 pub mod portability;
 pub mod practice;
+pub mod prompt_submissions;
 pub mod prompts;
 pub mod providers;
 pub mod reminders;
+pub mod session_setup;
 pub mod settings;
 pub mod sync;
 pub mod sync_policy;
@@ -46,6 +49,7 @@ pub use language::{
     LanguagePlanInput, PendingBytes, Voice,
 };
 pub use language_download::{LanguageDownloadSnapshot, RunLanguageDownload};
+pub use legacy_import::{import_legacy_json, LegacyImportError, LegacyImportResult};
 pub use onboarding::{parse_onboarding_status, should_offer_onboarding, OnboardingStatus};
 pub use portability::{
     backup_date, backup_file_name, ExportDatabase, ExportDatabaseResult, PickRestore,
@@ -55,11 +59,22 @@ pub use practice::{
     AttemptView, PracticeConfig, PracticePhase, PracticePorts, PracticeSnapshot, PromptView,
     RunPracticeSession,
 };
+pub use prompt_submissions::{
+    due_batch, flush, is_due, wire_body, wire_format, FlushRequest, SubmissionFlushResult,
+};
 pub use prompts::{
     catalogue_prompts_for, english_prompt_text_by_title, prompt_catalogue, CataloguePrompt,
 };
+pub use providers::{
+    is_configured, models_for, provider_id_for, resolve_endpoint, EndpointSettings,
+    ResolvedEndpoint,
+};
 pub use reminders::{
     is_reminder_due, reminder_state, ReminderFrequency, ReminderInput, ReminderState,
+};
+pub use session_setup::{
+    infer_session_setup, parse_session_setup, same_setup, setup_from_settings, usable_setup,
+    SetupAttempt,
 };
 pub use settings::{AppSettings, LoadedSettings, PatchedSettings, SettingsService, VoiceTuning};
 pub use sync::{run_sync, SyncOutcome, SyncRequest};

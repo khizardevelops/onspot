@@ -17,7 +17,7 @@ import { fetchElevenLabsSubscription } from '#lib/speech/tts/cloud/elevenLabsAcc
 import { fetchDeepSeekBalance } from '#lib/adapters/llm/deepseekBalance.js';
 import { getCoreClient } from '#lib/core-client/client.js';
 import { keyIdOf, usageLedger } from './ledger.js';
-import type { ServiceUsage, UsageWarning } from './monitor.js';
+import type { ServiceUsage, UsageWarning } from './types.js';
 
 interface AccountReading<T> {
 	keyId: string;

@@ -10,4 +10,5 @@
 
 pub mod search;
 pub mod speech;
+pub mod text_language;
 pub mod words;

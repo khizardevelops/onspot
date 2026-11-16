@@ -220,6 +220,22 @@ something is doing its job.
 Totals across ${matrix.length} files: ${totals.svelte} Svelte imports, ${totals.tauri} Tauri imports,
 ${totals.browserGlobals} browser-global references, ${totals.crossLayer} cross-layer imports.
 
+## Before and after the migration
+
+| Metric | P0/P3 baseline (\`baa6f5f\`) | Final (\`9a08523\` + P8 cutover) |
+|---|---:|---:|
+| Source files counted | 232 | ${matrix.length} |
+| Svelte imports | 78 | ${totals.svelte} |
+| Tauri imports | 16 | ${totals.tauri} |
+| Browser-global references | 215 | ${totals.browserGlobals} |
+| Cross-layer imports | 0 | ${totals.crossLayer} |
+| Domain knowledge in \`src/lib/adapters\` and \`src/lib/stores\` | settings, evaluation, history, insights, sync, usage, export | core-client calls and host shims only; the old bodies are archived under \`deprecated/\` |
+
+The file count grows because the bridge, generated types, adapter crates and
+CLI are included. The cross-layer count stayed at zero; the Svelte/Tauri growth
+is in view code, not business rules. The old TypeScript bodies are kept in
+\`deprecated/\` for history and must not be imported by live code.
+
 The top ${Math.min(40, matrix.length)} files are listed. The full JSON is not committed; read the
 counts here or re-run the script.
 

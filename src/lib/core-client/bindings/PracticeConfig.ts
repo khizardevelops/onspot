@@ -39,6 +39,11 @@ sttMode: EngineMode, ttsVoice: string, explanationVoice: string,
  */
 llmEndpoint: LlmEndpoint, 
 /**
+ * Whether Settings has a usable key for that endpoint. The key itself
+ * stays in the driver; this only stops the core making a doomed request.
+ */
+llmConfigured: boolean, 
+/**
  * Playback pace, `1.0` being normal.
  */
 pace: number, 

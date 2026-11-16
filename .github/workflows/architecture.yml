@@ -50,6 +50,9 @@ jobs:
           bun run catalog:check
           bun run providers:check
 
+      - name: Endpoint policy matches the checked-in fixture
+        run: bun run endpoint:check
+
       - name: Golden fixtures regenerate without changes
         run: |
           bun run golden:capture

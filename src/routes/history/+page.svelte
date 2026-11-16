@@ -6,8 +6,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import AppHeader from '#lib/components/AppHeader.svelte';
-	import { getDatabaseAdapter, type Attempt, type Session } from '#lib/adapters/db/index.js';
-	import { useCore } from '#lib/core-client/backend.js';
+	import type { Attempt, Session } from '#lib/adapters/db/index.js';
 	import { getCoreClient } from '#lib/core-client/client.js';
 	import type {
 		AttemptPreviewView,
@@ -19,11 +18,9 @@
 	import { compileMatcher } from '#lib/utils/historySearch.js';
 	import RestoreDatabaseButton from '#lib/components/RestoreDatabaseButton.svelte';
 	import {
-		deleteSession,
 		hydrateLatestSession,
 		openSession,
-		playStoredAudio,
-		renameSession
+		playStoredAudio
 	} from '#lib/stores/practice.js';
 	import { toast } from '#lib/stores/toast.js';
 	import { NeoButton } from '@dvcol/neo-svelte/buttons';
@@ -158,24 +155,14 @@
 		loading = true;
 		loadError = '';
 		try {
-			if (useCore('history')) {
-				const client = await getCoreClient();
-				const response = await client.command<HistoryResponse>('history.list');
-				sessions = response.sessions.map((entry) => coreSession(entry.session));
-				attemptsBySession = groupAttempts(
-					response.sessions.flatMap((entry) =>
-						entry.attempts.map((attempt) => coreAttempt(attempt, entry.session.id))
-					)
-				);
-			} else {
-				const db = await getDatabaseAdapter();
-				const [sessionRows, attemptRows] = await Promise.all([
-					db.listSessions(),
-					db.listAllAttempts()
-				]);
-				sessions = sessionRows;
-				attemptsBySession = groupAttempts(attemptRows);
-			}
+			const client = await getCoreClient();
+			const response = await client.command<HistoryResponse>('history.list');
+			sessions = response.sessions.map((entry) => coreSession(entry.session));
+			attemptsBySession = groupAttempts(
+				response.sessions.flatMap((entry) =>
+					entry.attempts.map((attempt) => coreAttempt(attempt, entry.session.id))
+				)
+			);
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'The local database could not be opened.';
 		} finally {
@@ -352,12 +339,8 @@
 		// Cancel, an empty name or an unchanged one leaves the session as it is.
 		if (!title || title === session.title) return;
 		try {
-			if (useCore('history')) {
-				const client = await getCoreClient();
-				await client.command('history.rename', { sessionId: session.id, title });
-			} else {
-				await renameSession(session.id, title);
-			}
+			const client = await getCoreClient();
+			await client.command('history.rename', { sessionId: session.id, title });
 			await load();
 			toast('Session renamed');
 		} catch (error) {
@@ -371,12 +354,8 @@
 		);
 		if (!ok) return;
 		try {
-			if (useCore('history')) {
-				const client = await getCoreClient();
-				await client.command('history.delete', { sessionId: session.id });
-			} else {
-				await deleteSession(session.id);
-			}
+			const client = await getCoreClient();
+			await client.command('history.delete', { sessionId: session.id });
 			toast('Session deleted');
 		} catch (error) {
 			failed('Delete', error);

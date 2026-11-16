@@ -30,3 +30,5 @@ async-trait = "0.1"
 [dev-dependencies]
 # Drains the async port in tests without pulling a runtime into the adapter.
 futures = "0.3"
+# Rebuilds the binary fixture from its tracked SQL source when it is missing.
+rusqlite = { version = "0.32", features = ["bundled"] }

@@ -4,7 +4,6 @@
 //! a core export restores into a fresh database without losing rows.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -15,10 +14,12 @@ use onspot_domain::{
 };
 use onspot_ports::{DatabaseFile, HistoryStore, RecordsStore, SqlDriver, SqlValue};
 
+include!("fixtures/ensure.rs");
+
 static NEXT_FIXTURE: AtomicU32 = AtomicU32::new(0);
 
 fn fixture_copy() -> std::path::PathBuf {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/onspot-v0.2.4.sqlite");
+    let source = ensure_v024_fixture();
     let directory =
         std::env::temp_dir().join(format!("onspot-repo-snapshot-{}", std::process::id()));
     std::fs::create_dir_all(&directory).expect("temp directory");

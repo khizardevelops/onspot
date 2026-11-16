@@ -3,7 +3,7 @@
 import { get, writable } from 'svelte/store';
 import { keyIdOf, scopeKey, totalsWithin, usageLedger, type LedgerState, type UsageScope } from '#lib/usage/ledger.js';
 import { formatReset } from '#lib/usage/format.js';
-import { GROQ_HOST, groqKnownLimits, groqPlanOf, type ModelLimits } from '#lib/usage/publishedLimits.js';
+import { GROQ_HOST, groqKnownLimits, groqPlanOf, type ModelLimits } from '../../usage/publishedLimits';
 import { hashText } from '#lib/utils/hash.js';
 import { parseRateLimitHeaders, parseRefusal } from '#lib/usage/rateLimits.js';
 import { modelLabel, providerNameFor } from './providers';

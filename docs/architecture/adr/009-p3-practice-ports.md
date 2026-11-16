@@ -63,6 +63,12 @@ Two boundaries needed a decision:
 - Two ports (`EvaluationPort`, `PromptSource`) exist before their Rust
   adapters; their P3 bodies are host shims. P4 replaces `EvaluationPort` and
   the generated-prompt half of `PromptSource`.
+- **Status (P8 follow-up):** the P3 host shims are fully retired.
+  `EvaluationPort` uses `llm-openai`, and prompt-topic generation is
+  `llm-openai::prompt_topic` behind an LLM-backed `PromptSource`; the host no
+  longer answers `prompt.write` or `evaluation.evaluate`. `PracticeConfig`
+  carries `llmConfigured` so the core skips the model and uses catalogue
+  prompts when no key exists.
 - The timer is driven by the driver through `practice.tick`, preserving the
   rule that core crates name no async runtime.
 - Host requests can be large only for the captured frame; the driver caches it

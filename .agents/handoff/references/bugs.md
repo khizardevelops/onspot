@@ -2,6 +2,35 @@
 
 Active defects that can be fixed within the current foundational technology.
 
+## Active (found by the 2026-11-16 migration review, unfixed)
+
+### Rust LLM client ignores the temperature it is given
+- `crates/adapters/llm-openai/src/client.rs` `complete()` does `let _ = temperature;` and
+  `request_body` always sends `DEFAULT_TEMPERATURE` (0.2). Translations and glosses passed 0.1 in
+  TS (`deprecated/.../translate.ts:95`, `glossary.ts:292`), so model-facing behaviour drifted (I5).
+- Fix: thread `temperature` into `request_body`; add a test that pins the body per caller.
+
+### LLM calls made by the core never reach the usage ledger
+- The Usage screen reads the TS `usageLedger` (`usage/coreMonitor.ts` → `usage.snapshot`). Its only
+  writers are TS `recordCall`/`recordRefusal` (cloud STT/TTS adapters, `adapters/llm/client.ts`).
+  Evaluation, prompt topics, translations and glosses now run in `llm-openai` and record nothing,
+  so LLM requests/tokens are under-counted. Not yet confirmed in the running UI.
+
+### Rust LLM pacing is a simplified copy of the TS pacer
+- `llm-openai/src/pacing.rs` uses a fixed 8,000 TPM bucket and a fixed 2 s wait on 429. The TS
+  pacer (`adapters/llm/pacing.ts`) learned stated limits from headers, parsed retry-after from
+  refusals, settled real token usage and retried one invalid-JSON reply. Expect more 429 failures
+  on low-limit keys (Groq free tier).
+
+### Desktop opens `onspot.db` through two SQLite stacks
+- `src-tauri/src/lib.rs` still registers `tauri_plugin_sql` (TS `SqlDatabaseAdapter`, own
+  migration runner) next to the core's `RusqliteDriver` on the same file. ADR-005 said "until P8";
+  P8 did not remove it. `busy_timeout` 5 s is the only guard.
+
+### `native-stt` adapter is unused
+- `crates/adapters/native-stt` (`WhisperCppStt`) has no dependents; desktop STT still goes
+  TS `speech/stt/native/nativeEngine.ts` → `plugin:speech`.
+
 ## Fixed
 
 ### Dark mode read as one fogged surface with no depth (2026-11-06)
